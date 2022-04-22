@@ -4,57 +4,13 @@
 package main
 
 import (
-	"fmt"
 	"go/build"
 	"os"
 	"os/exec"
 	"path/filepath"
 )
 
-var Default = Proto
-
-// regenerate protobuf
-func Proto() error {
-	twirpProtoFiles := []string{
-		"ingress.proto",
-	}
-
-	fmt.Println("generating protobuf")
-	target := "pkg/proto"
-	if err := os.MkdirAll(target, 0755); err != nil {
-		return err
-	}
-
-	protoc, err := getToolPath("protoc")
-	if err != nil {
-		return err
-	}
-	protocGoPath, err := getToolPath("protoc-gen-go")
-	if err != nil {
-		return err
-	}
-	twirpPath, err := getToolPath("protoc-gen-twirp")
-	if err != nil {
-		return err
-	}
-	fmt.Println("generating twirp protobuf")
-	args := append([]string{
-		"--go_out", target,
-		"--twirp_out", target,
-		"--go_opt=paths=source_relative",
-		"--twirp_opt=paths=source_relative",
-		"--plugin=go=" + protocGoPath,
-		"--plugin=twirp=" + twirpPath,
-		"-I=../protocol",
-		"-I=.",
-	}, twirpProtoFiles...)
-	cmd := exec.Command(protoc, args...)
-	connectStd(cmd)
-	if err := cmd.Run(); err != nil {
-		return err
-	}
-	return nil
-}
+var Default = Test
 
 // run tests
 func Test() error {

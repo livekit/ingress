@@ -10,13 +10,6 @@ import (
 	"github.com/tinyzimmer/go-gst/gst/app"
 )
 
-type StreamKind string
-
-const (
-	Audio StreamKind = "audio"
-	Video StreamKind = "video"
-)
-
 // Input creates gstreamer elements that converts input bytes into
 // decoded audio/video outputs.
 type Input struct {

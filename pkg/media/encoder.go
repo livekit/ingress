@@ -2,10 +2,12 @@ package media
 
 import (
 	"fmt"
+	"io"
 
-	ingress "github.com/livekit/livekit-ingress/pkg/proto"
-	"github.com/livekit/protocol/livekit"
 	"github.com/tinyzimmer/go-gst/gst"
+	"github.com/tinyzimmer/go-gst/gst/app"
+
+	"github.com/livekit/protocol/livekit"
 )
 
 // Encoder manages GStreamer elements that converts & encodes video to the specification that's
@@ -13,10 +15,16 @@ import (
 type Encoder struct {
 	bin      *gst.Bin
 	elements []*gst.Element
+	sink     *app.Sink
+	reader   *io.PipeReader
+	writer   *io.PipeWriter
 }
 
 func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, error) {
-	e := &Encoder{}
+	e, err := newEncoder()
+	if err != nil {
+		return nil, err
+	}
 
 	videoConvert, err := gst.NewElement("videoconvert")
 	if err != nil {
@@ -91,20 +99,18 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 		return nil, ErrUnsupportedEncodeFormat
 	}
 
-	if err = gst.ElementLinkMany(e.elements...); err != nil {
-		return nil, err
-	}
-	e.bin = gst.NewBin("encoder")
-
-	if err = e.createBin(); err != nil {
+	if err = e.linkElements(); err != nil {
 		return nil, err
 	}
 
 	return nil, nil
 }
 
-func NewAudioEncoder(options *ingress.IngressAudioOptions) (*Encoder, error) {
-	e := &Encoder{}
+func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
+	e, err := newEncoder()
+	if err != nil {
+		return nil, err
+	}
 
 	audioConvert, err := gst.NewElement("audioconvert")
 	if err != nil {
@@ -147,18 +153,51 @@ func NewAudioEncoder(options *ingress.IngressAudioOptions) (*Encoder, error) {
 	e.elements = []*gst.Element{
 		audioConvert, capsFilter, enc,
 	}
-	if err = gst.ElementLinkMany(e.elements...); err != nil {
-		return nil, err
-	}
 
-	if err = e.createBin(); err != nil {
+	if err = e.linkElements(); err != nil {
 		return nil, err
 	}
 
 	return e, nil
 }
 
-func (e *Encoder) createBin() error {
+func (e *Encoder) Bin() *gst.Bin {
+	return e.bin
+}
+
+func (e *Encoder) Reader() io.Reader {
+	return e.reader
+}
+
+func newEncoder() (*Encoder, error) {
+	sink, err := app.NewAppSink()
+	if err != nil {
+		return nil, err
+	}
+
+	e := &Encoder{
+		sink: sink,
+	}
+	sink.SetCallbacks(&app.SinkCallbacks{
+		EOSFunc:        e.handleEOS,
+		NewPrerollFunc: nil,
+		NewSampleFunc:  e.handleSample,
+	})
+	e.reader, e.writer = io.Pipe()
+	return e, nil
+}
+
+func (e *Encoder) linkElements() error {
+	if e.bin != nil {
+		// already linked
+		return nil
+	}
+
+	// app sink as the last element
+	e.elements = append(e.elements, e.sink.Element)
+	if err := gst.ElementLinkMany(e.elements...); err != nil {
+		return err
+	}
 	e.bin = gst.NewBin("encoder")
 	if err := e.bin.AddMany(e.elements...); err != nil {
 		return err
@@ -171,6 +210,26 @@ func (e *Encoder) createBin() error {
 	return nil
 }
 
-func (e *Encoder) Bin() *gst.Bin {
-	return e.bin
+func (e *Encoder) handleEOS(_ *app.Sink) {
+	_ = e.writer.Close()
+}
+
+func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
+	// Pull the sample that triggered this callback
+	sample := sink.PullSample()
+	if sample == nil {
+		return gst.FlowEOS
+	}
+
+	// Retrieve the buffer from the sample
+	buffer := sample.GetBuffer()
+	if buffer == nil {
+		return gst.FlowError
+	}
+
+	if _, err := e.writer.Write(buffer.Bytes()); err != nil {
+		_ = e.writer.CloseWithError(err)
+		return gst.FlowError
+	}
+	return gst.FlowOK
 }
