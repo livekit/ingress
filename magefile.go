@@ -34,13 +34,17 @@ func Bootstrap() error {
 	}
 
 	if _, err := os.Stat("bin/rtsp-simple-server"); err != nil {
+		if _, err := os.Stat("bin"); err != nil {
+			os.Mkdir("bin", 0755)
+		}
+
 		filename := fmt.Sprintf("rtsp-simple-server_%s_darwin_amd64.tar.gz", rtspServerVersion)
 		err = run(
 			fmt.Sprintf("wget https://github.com/aler9/rtsp-simple-server/releases/download/%s/%s", rtspServerVersion, filename),
 			fmt.Sprintf("tar -zxvf %s", filename),
 			fmt.Sprintf("rm %s", filename),
-			"mv rtsp-simple-server bin",
-			"mv rtsp-simple-server.yml bin",
+			"mv rtsp-simple-server bin/",
+			"mv rtsp-simple-server.yml bin/",
 		)
 		if err != nil {
 			return err
