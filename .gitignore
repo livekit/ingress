@@ -1,1 +1,4 @@
 .idea/
+bin/
+
+test/config.yaml

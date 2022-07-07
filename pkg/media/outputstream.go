@@ -3,6 +3,7 @@ package media
 import (
 	"sort"
 
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
 )
 
@@ -55,11 +56,11 @@ func NewVideoOutputStream(options *livekit.IngressVideoOptions, inputLayer *live
 
 func computeSimulcastLayers(inputLayer *livekit.VideoLayer, outputLayers []*livekit.VideoLayer) ([]*livekit.VideoLayer, error) {
 	if inputLayer.Width == 0 || inputLayer.Height == 0 {
-		return nil, ErrInvalidInputDimensions
+		return nil, errors.ErrInvalidInputDimensions
 	}
-	if inputLayer.Fps == 0 {
-		return nil, ErrInvalidInputFPS
-	}
+	// if inputLayer.Fps == 0 {
+	// 	return nil, errors.ErrInvalidInputFPS
+	// }
 
 	var publishWidth, publishHeight uint32
 	// when they are not explicitly given, we'll fill in up to 3 layers
@@ -83,7 +84,7 @@ func computeSimulcastLayers(inputLayer *livekit.VideoLayer, outputLayers []*live
 	} else {
 		for _, l := range outputLayers {
 			if l.Width == 0 || l.Height == 0 {
-				return nil, ErrInvalidOutputDimensions
+				return nil, errors.ErrInvalidOutputDimensions
 			}
 		}
 		// sort by resolution (high to low) and only keep first 3 layers
@@ -99,11 +100,11 @@ func computeSimulcastLayers(inputLayer *livekit.VideoLayer, outputLayers []*live
 
 	scale := uint32(1) // drops by 1/2 each time
 	// designed for 30/60 fps source: drops to 2/3, 1/3
-	fpsScales := []float32{
-		1,
-		1.5,
-		3,
-	}
+	// fpsScales := []float32{
+	// 	1,
+	// 	1.5,
+	// 	3,
+	// }
 
 	numLayers := len(outputLayers)
 	for i, layer := range outputLayers {
@@ -112,9 +113,9 @@ func computeSimulcastLayers(inputLayer *livekit.VideoLayer, outputLayers []*live
 			layer.Width = publishWidth / scale
 			layer.Height = publishHeight / scale
 		}
-		if layer.Fps == 0 {
-			layer.Fps = inputLayer.Fps / fpsScales[i]
-		}
+		// if layer.Fps == 0 {
+		// 	layer.Fps = inputLayer.Fps / fpsScales[i]
+		// }
 		scale = scale * 2
 	}
 	return outputLayers, nil

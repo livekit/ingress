@@ -7,17 +7,19 @@ import (
 	"github.com/tinyzimmer/go-gst/gst"
 	"github.com/tinyzimmer/go-gst/gst/app"
 
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
 )
 
 // Encoder manages GStreamer elements that converts & encodes video to the specification that's
 // suitable for WebRTC
 type Encoder struct {
-	bin      *gst.Bin
+	bin *gst.Bin
+
 	elements []*gst.Element
 	sink     *app.Sink
-	reader   *io.PipeReader
 	writer   *io.PipeWriter
+	reader   *io.PipeReader
 }
 
 func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, error) {
@@ -96,7 +98,7 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 		}
 		e.elements = append(e.elements, enc)
 	default:
-		return nil, ErrUnsupportedEncodeFormat
+		return nil, errors.ErrUnsupportedEncodeFormat
 	}
 
 	if err = e.linkElements(); err != nil {
@@ -147,7 +149,7 @@ func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
 			return nil, err
 		}
 	default:
-		return nil, ErrUnsupportedEncodeFormat
+		return nil, errors.ErrUnsupportedEncodeFormat
 	}
 
 	e.elements = []*gst.Element{
@@ -159,14 +161,6 @@ func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
 	}
 
 	return e, nil
-}
-
-func (e *Encoder) Bin() *gst.Bin {
-	return e.bin
-}
-
-func (e *Encoder) Reader() io.Reader {
-	return e.reader
 }
 
 func newEncoder() (*Encoder, error) {
@@ -185,29 +179,6 @@ func newEncoder() (*Encoder, error) {
 	})
 	e.reader, e.writer = io.Pipe()
 	return e, nil
-}
-
-func (e *Encoder) linkElements() error {
-	if e.bin != nil {
-		// already linked
-		return nil
-	}
-
-	// app sink as the last element
-	e.elements = append(e.elements, e.sink.Element)
-	if err := gst.ElementLinkMany(e.elements...); err != nil {
-		return err
-	}
-	e.bin = gst.NewBin("encoder")
-	if err := e.bin.AddMany(e.elements...); err != nil {
-		return err
-	}
-	binSink := gst.NewGhostPad("sink", e.elements[0].GetStaticPad("sink"))
-	binSrc := gst.NewGhostPad("src", e.elements[len(e.elements)-1].GetStaticPad("src"))
-	if !e.bin.AddPad(binSink.Pad) || !e.bin.AddPad(binSrc.Pad) {
-		return ErrUnableToAddPad
-	}
-	return nil
 }
 
 func (e *Encoder) handleEOS(_ *app.Sink) {
@@ -232,4 +203,39 @@ func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
 		return gst.FlowError
 	}
 	return gst.FlowOK
+}
+
+func (e *Encoder) linkElements() error {
+	if e.bin != nil {
+		// already linked
+		return nil
+	}
+
+	// app sink as the last element
+	e.elements = append(e.elements, e.sink.Element)
+	if err := gst.ElementLinkMany(e.elements...); err != nil {
+		return err
+	}
+	e.bin = gst.NewBin("encoder")
+	if err := e.bin.AddMany(e.elements...); err != nil {
+		return err
+	}
+	binSink := gst.NewGhostPad("sink", e.elements[0].GetStaticPad("sink"))
+	binSrc := gst.NewGhostPad("src", e.elements[len(e.elements)-1].GetStaticPad("src"))
+	if !e.bin.AddPad(binSink.Pad) || !e.bin.AddPad(binSrc.Pad) {
+		return errors.ErrUnableToAddPad
+	}
+	return nil
+}
+
+func (e *Encoder) Bin() *gst.Bin {
+	return e.bin
+}
+
+func (e *Encoder) Read(p []byte) (n int, err error) {
+	return e.reader.Read(p)
+}
+
+func (e *Encoder) Close() error {
+	return e.writer.Close()
 }
