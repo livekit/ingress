@@ -27,11 +27,17 @@ type Params struct {
 
 func Validate(ctx context.Context, conf *config.Config, req *livekit.StartIngressRequest) (*livekit.IngressInfo, error) {
 	p, err := getParams(ctx, conf, req)
+	p.Url = rtmp.NewUrl()
 	return p.IngressInfo, err
 }
 
-func GetParams(ctx context.Context, conf *config.Config, req *livekit.StartIngressRequest) (*Params, error) {
-	return getParams(ctx, conf, req)
+func GetParams(ctx context.Context, conf *config.Config, req *livekit.StartIngressRequest, url string) (*Params, error) {
+	p, err := getParams(ctx, conf, req)
+	if err != nil {
+		return nil, err
+	}
+	p.Url = url
+	return p, nil
 }
 
 func getParams(ctx context.Context, conf *config.Config, req *livekit.StartIngressRequest) (p *Params, err error) {
@@ -45,17 +51,16 @@ func getParams(ctx context.Context, conf *config.Config, req *livekit.StartIngre
 			Room:                req.Request.RoomName,
 			ParticipantIdentity: req.Request.ParticipantIdentity,
 			ParticipantName:     req.Request.ParticipantName,
-			Url:                 conf.Url,
+			Url:                 "",
 			Tracks:              nil,
 		},
 		Logger:       logger.Logger(logger.GetLogger().WithValues("ingressID", req.IngressId)),
 		AudioOptions: req.Request.Audio,
 		VideoOptions: req.Request.Video,
+		WsUrl:        conf.WsUrl,
+		ApiKey:       conf.ApiKey,
+		ApiSecret:    conf.ApiSecret,
 		GstReady:     make(chan struct{}),
-	}
-
-	if p.Url == "" {
-		p.Url = rtmp.NewUrl()
 	}
 
 	return

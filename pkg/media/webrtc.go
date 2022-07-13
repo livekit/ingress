@@ -48,7 +48,7 @@ func NewWebRTCSink(ctx context.Context, conf *config.Config, p *Params) (*WebRTC
 	}, nil
 }
 
-func (s *WebRTCSink) AddTrack(input *Input, pad *gst.Pad, kind StreamKind) {
+func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 	var mimeType string
 	var encoder *Encoder
 	var opts *lksdk.TrackPublicationOptions
@@ -61,7 +61,7 @@ func (s *WebRTCSink) AddTrack(input *Input, pad *gst.Pad, kind StreamKind) {
 		opts = &lksdk.TrackPublicationOptions{
 			Name:       s.audioOptions.Name,
 			Source:     s.audioOptions.Source,
-			DisableDTX: s.audioOptions.Dtx,
+			DisableDTX: !s.audioOptions.Dtx, // TODO: change to DisableDtx
 		}
 
 	case Video:
@@ -78,19 +78,19 @@ func (s *WebRTCSink) AddTrack(input *Input, pad *gst.Pad, kind StreamKind) {
 
 	if err != nil {
 		s.logger.Errorw("could not create encoder", err)
-		return
+		return nil, err
 	}
 
 	track, err := lksdk.NewLocalReaderTrack(encoder, mimeType)
 	if err != nil {
 		s.logger.Errorw("could not create track", err)
-		return
+		return nil, err
 	}
 
 	pub, err := s.room.LocalParticipant.PublishTrack(track, opts)
 	if err != nil {
 		s.logger.Errorw("could not publish track", err)
-		return
+		return nil, err
 	}
 
 	switch kind {
@@ -99,4 +99,6 @@ func (s *WebRTCSink) AddTrack(input *Input, pad *gst.Pad, kind StreamKind) {
 	case Video:
 		s.videoPub = pub
 	}
+
+	return encoder.bin, nil
 }

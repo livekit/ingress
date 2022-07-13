@@ -18,3 +18,19 @@ func Launch() error {
 func NewUrl() string {
 	return fmt.Sprintf("rtmp://localhost:1935/live/%s", uuid.NewString())
 }
+
+func Wait(url string) {
+	for {
+		cmd := exec.Command("ffprobe",
+			"-v", "quiet",
+			"-hide_banner",
+			"-show_format",
+			"-show_streams",
+			"-print_format", "json",
+		)
+		_, err := cmd.Output()
+		if err == nil {
+			return
+		}
+	}
+}

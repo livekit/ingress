@@ -7,7 +7,7 @@ require (
 	github.com/go-logr/zapr v1.2.3
 	github.com/google/uuid v1.3.0
 	github.com/livekit/protocol v0.13.5-0.20220706183450-cad53a318595
-	github.com/livekit/server-sdk-go v0.10.3
+	github.com/livekit/server-sdk-go v0.10.4
 	github.com/mackerelio/go-osstat v0.2.2
 	github.com/prometheus/client_golang v1.11.0
 	github.com/stretchr/testify v1.7.1

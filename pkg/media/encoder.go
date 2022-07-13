@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst"
 	"github.com/tinyzimmer/go-gst/gst/app"
 
@@ -57,7 +58,7 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 
 	var enc *gst.Element
 	switch mimeType {
-	case "video/h264":
+	case webrtc.MimeTypeH264:
 		enc, err = gst.NewElement("x264enc")
 		if err != nil {
 			return nil, err
@@ -69,6 +70,9 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 		if err = enc.SetProperty("key-int-max", uint(100)); err != nil {
 			return nil, err
 		}
+		if err = enc.SetProperty("byte-stream", true); err != nil {
+			return nil, err
+		}
 		enc.SetArg("speed-preset", "veryfast")
 		enc.SetArg("tune", "zerolatency")
 		profileCaps, err := gst.NewElement("capsfilter")
@@ -76,18 +80,16 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 			return nil, err
 		}
 		err = profileCaps.SetProperty("caps", gst.NewCapsFromString(
-			fmt.Sprintf("video/x-h264,profile=baseline"),
+			fmt.Sprintf("video/x-h264,stream-format=byte-stream,profile=baseline"),
 		))
 		if err != nil {
 			return nil, err
 		}
 		e.elements = append(e.elements, enc, profileCaps)
-	case "video/vp8":
+
+	case webrtc.MimeTypeVP8:
 		enc, err = gst.NewElement("vp8enc")
 		if err != nil {
-			return nil, err
-		}
-		if err = enc.SetProperty("target-bitrate", int(layer.Bitrate)); err != nil {
 			return nil, err
 		}
 		if err = enc.SetProperty("target-bitrate", int(layer.Bitrate)); err != nil {
@@ -97,15 +99,18 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 			return nil, err
 		}
 		e.elements = append(e.elements, enc)
+
 	default:
 		return nil, errors.ErrUnsupportedEncodeFormat
 	}
+
+	e.elements = append(e.elements, e.sink.Element)
 
 	if err = e.linkElements(); err != nil {
 		return nil, err
 	}
 
-	return nil, nil
+	return e, nil
 }
 
 func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
@@ -137,7 +142,7 @@ func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
 
 	var enc *gst.Element
 	switch options.MimeType {
-	case "audio/opus":
+	case webrtc.MimeTypeOpus:
 		enc, err = gst.NewElement("opusenc")
 		if err != nil {
 			return nil, err
@@ -148,12 +153,13 @@ func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
 		if err = enc.SetProperty("dtx", options.Dtx); err != nil {
 			return nil, err
 		}
+
 	default:
 		return nil, errors.ErrUnsupportedEncodeFormat
 	}
 
 	e.elements = []*gst.Element{
-		audioConvert, capsFilter, enc,
+		audioConvert, capsFilter, enc, e.sink.Element,
 	}
 
 	if err = e.linkElements(); err != nil {
@@ -202,6 +208,7 @@ func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
 		_ = e.writer.CloseWithError(err)
 		return gst.FlowError
 	}
+
 	return gst.FlowOK
 }
 
@@ -211,18 +218,17 @@ func (e *Encoder) linkElements() error {
 		return nil
 	}
 
-	// app sink as the last element
-	e.elements = append(e.elements, e.sink.Element)
-	if err := gst.ElementLinkMany(e.elements...); err != nil {
-		return err
-	}
 	e.bin = gst.NewBin("encoder")
+
 	if err := e.bin.AddMany(e.elements...); err != nil {
 		return err
 	}
+	if err := gst.ElementLinkMany(e.elements...); err != nil {
+		return err
+	}
+
 	binSink := gst.NewGhostPad("sink", e.elements[0].GetStaticPad("sink"))
-	binSrc := gst.NewGhostPad("src", e.elements[len(e.elements)-1].GetStaticPad("src"))
-	if !e.bin.AddPad(binSink.Pad) || !e.bin.AddPad(binSrc.Pad) {
+	if !e.bin.AddPad(binSink.Pad) {
 		return errors.ErrUnableToAddPad
 	}
 	return nil
@@ -232,7 +238,7 @@ func (e *Encoder) Bin() *gst.Bin {
 	return e.bin
 }
 
-func (e *Encoder) Read(p []byte) (n int, err error) {
+func (e *Encoder) Read(p []byte) (int, error) {
 	return e.reader.Read(p)
 }
 

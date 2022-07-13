@@ -39,6 +39,9 @@ func main() {
 						Name: "request",
 					},
 					&cli.StringFlag{
+						Name: "url",
+					},
+					&cli.StringFlag{
 						Name: "config-body",
 					},
 				},
@@ -167,7 +170,12 @@ func runHandler(c *cli.Context) error {
 		handler.Kill()
 	}()
 
-	handler.HandleRequest(ctx, req)
+	url := c.String("url")
+	if url == "" {
+		return errors.New("url missing")
+	}
+
+	handler.HandleRequest(ctx, req, url)
 	return nil
 }
 

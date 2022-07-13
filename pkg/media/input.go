@@ -21,7 +21,7 @@ type Input struct {
 	onOutputReady OutputReadyFunc
 }
 
-type OutputReadyFunc func(input *Input, pad *gst.Pad, kind StreamKind)
+type OutputReadyFunc func(pad *gst.Pad, kind StreamKind)
 
 func NewInput(p *Params) (*Input, error) {
 	rtmp2src, err := gst.NewElement("rtmp2src")
@@ -78,23 +78,32 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 	i.lock.Lock()
 	newPad := false
 	var kind StreamKind
+	var ghostPad *gst.GhostPad
 	if strings.HasPrefix(pad.GetName(), "audio") {
 		if i.audioOutput == nil {
 			newPad = true
 			kind = Audio
 			i.audioOutput = pad
+			ghostPad = gst.NewGhostPad("audio", pad)
 		}
 	} else if strings.HasPrefix(pad.GetName(), "video") {
 		if i.videoOutput == nil {
 			newPad = true
 			kind = Video
 			i.videoOutput = pad
+			ghostPad = gst.NewGhostPad("video", pad)
 		}
 	}
 	i.lock.Unlock()
 
 	// don't need this pad, link to fakesink
-	if !newPad {
+	if newPad {
+		if !i.bin.AddPad(ghostPad.Pad) {
+			logger.Errorw("failed to add ghost pad", nil)
+			return
+		}
+		pad = ghostPad.Pad
+	} else {
 		sink, err := gst.NewElement("fakesink")
 		if err != nil {
 			logger.Errorw("failed to create fakesink", err)
@@ -105,6 +114,6 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 	}
 
 	if i.onOutputReady != nil {
-		i.onOutputReady(i, pad, kind)
+		i.onOutputReady(pad, kind)
 	}
 }

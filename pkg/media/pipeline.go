@@ -24,14 +24,16 @@ type Pipeline struct {
 	closed         chan struct{}
 }
 
-func New(ctx context.Context, conf *config.Config, p *Params) (*Pipeline, error) {
+func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, error) {
 	ctx, span := tracer.Start(ctx, "Pipeline.New")
 	defer span.End()
 
 	// initialize gst
 	gst.Init(nil)
 
-	input, err := NewInput(p)
+	params.Logger.Debugw("listening", "url", params.Url)
+
+	input, err := NewInput(params)
 	if err != nil {
 		return nil, err
 	}
@@ -45,20 +47,47 @@ func New(ctx context.Context, conf *config.Config, p *Params) (*Pipeline, error)
 		return nil, err
 	}
 
-	sink, err := NewWebRTCSink(ctx, conf, p)
+	sink, err := NewWebRTCSink(ctx, conf, params)
 	if err != nil {
 		return nil, err
 	}
 
-	input.OnOutputReady(sink.AddTrack)
-
-	return &Pipeline{
+	p := &Pipeline{
+		Params:   params,
 		pipeline: pipeline,
-	}, nil
+		sink:     sink,
+	}
+
+	input.OnOutputReady(p.onOutputReady)
+
+	return p, nil
+}
+
+func (p *Pipeline) onOutputReady(pad *gst.Pad, kind StreamKind) {
+	bin, err := p.sink.AddTrack(kind)
+	if err != nil {
+		return
+	}
+
+	if err = p.pipeline.Add(bin.Element); err != nil {
+		p.Logger.Errorw("could not add bin", err)
+	}
+
+	pad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+		// link
+		if linkReturn := pad.Link(bin.GetStaticPad("sink")); linkReturn != gst.PadLinkOK {
+			p.Logger.Errorw("failed to link output bin", err)
+		}
+
+		// sync state
+		bin.SyncStateWithParent()
+
+		return gst.PadProbeRemove
+	})
 }
 
 func (p *Pipeline) GetInfo() *livekit.IngressInfo {
-	return nil
+	return p.Params.IngressInfo
 }
 
 func (p *Pipeline) OnStatusUpdate(f func(context.Context, *livekit.IngressInfo)) {
@@ -85,7 +114,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 	// run main loop
 	p.loop.Run()
 
-	return nil
+	return p.IngressInfo
 }
 
 func (p *Pipeline) messageWatch(msg *gst.Message) bool {

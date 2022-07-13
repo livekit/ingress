@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pion/webrtc/v3"
 	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 
@@ -70,7 +71,7 @@ func TestIngress(t *testing.T) {
 			Audio: &livekit.IngressAudioOptions{
 				Name:     "audio",
 				Source:   0,
-				MimeType: "audio/opus",
+				MimeType: webrtc.MimeTypeOpus,
 				Bitrate:  48000,
 				Dtx:      false,
 				Channels: 2,
@@ -78,12 +79,12 @@ func TestIngress(t *testing.T) {
 			Video: &livekit.IngressVideoOptions{
 				Name:     "video",
 				Source:   0,
-				MimeType: "video/h264",
+				MimeType: webrtc.MimeTypeH264,
 				Layers: []*livekit.VideoLayer{
 					{
 						Quality: livekit.VideoQuality_HIGH,
-						Width:   1920,
-						Height:  1080,
+						Width:   1280,
+						Height:  720,
 						Bitrate: 3000,
 					},
 				},
@@ -103,6 +104,6 @@ func TestIngress(t *testing.T) {
 	cmd := exec.Command(cmdString[0], cmdString[1:]...)
 	require.NoError(t, cmd.Start())
 
-	time.Sleep(time.Second * 15)
+	time.Sleep(time.Minute * 3)
 	t.FailNow()
 }

@@ -64,9 +64,9 @@ func Build() error {
 }
 
 func Test() error {
-	if err := Build(); err != nil {
-		return err
-	}
+	// if err := Build(); err != nil {
+	// 	return err
+	// }
 
 	cmd := exec.Command("go", "test", "-v", "-count=1", "./test/...")
 

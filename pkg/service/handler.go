@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"time"
 
 	"google.golang.org/protobuf/proto"
 
@@ -28,11 +29,11 @@ func NewHandler(conf *config.Config, rpcServer ingress.RPCServer) *Handler {
 	}
 }
 
-func (h *Handler) HandleRequest(ctx context.Context, req *livekit.StartIngressRequest) {
+func (h *Handler) HandleRequest(ctx context.Context, req *livekit.StartIngressRequest, url string) {
 	ctx, span := tracer.Start(ctx, "Handler.HandleRequest")
 	defer span.End()
 
-	p, err := h.buildPipeline(ctx, req)
+	p, err := h.buildPipeline(ctx, req, url)
 	if err != nil {
 		span.RecordError(err)
 		return
@@ -50,6 +51,8 @@ func (h *Handler) HandleRequest(ctx context.Context, req *livekit.StartIngressRe
 			logger.Errorw("failed to unsubscribe from request channel", err)
 		}
 	}()
+
+	time.Sleep(time.Second * 15)
 
 	// start ingress
 	result := make(chan *livekit.IngressInfo, 1)
@@ -84,13 +87,13 @@ func (h *Handler) HandleRequest(ctx context.Context, req *livekit.StartIngressRe
 	}
 }
 
-func (h *Handler) buildPipeline(ctx context.Context, req *livekit.StartIngressRequest) (*media.Pipeline, error) {
+func (h *Handler) buildPipeline(ctx context.Context, req *livekit.StartIngressRequest, url string) (*media.Pipeline, error) {
 	ctx, span := tracer.Start(ctx, "Handler.buildPipeline")
 	defer span.End()
 
 	// build/verify params
 	var p *media.Pipeline
-	params, err := media.GetParams(ctx, h.conf, req)
+	params, err := media.GetParams(ctx, h.conf, req, url)
 	if err == nil {
 		// create the pipeline
 		p, err = media.New(ctx, h.conf, params)
