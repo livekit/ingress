@@ -67,9 +67,9 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 			return nil, err
 		}
 		// temporary, only while during testing
-		if err = enc.SetProperty("key-int-max", uint(100)); err != nil {
-			return nil, err
-		}
+		// if err = enc.SetProperty("key-int-max", uint(100)); err != nil {
+		// 	return nil, err
+		// }
 		if err = enc.SetProperty("byte-stream", true); err != nil {
 			return nil, err
 		}
@@ -231,6 +231,15 @@ func (e *Encoder) linkElements() error {
 	if !e.bin.AddPad(binSink.Pad) {
 		return errors.ErrUnableToAddPad
 	}
+	return nil
+}
+
+func (e *Encoder) ForceKeyFrame() error {
+	keyFrame := gst.NewStructure("GstForceKeyUnit")
+	if err := keyFrame.SetValue("all-headers", true); err != nil {
+		return err
+	}
+	e.elements[len(e.elements)-2].SendEvent(gst.NewCustomEvent(gst.EventTypeCustomDownstream, keyFrame))
 	return nil
 }
 

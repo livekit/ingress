@@ -56,6 +56,7 @@ func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, e
 		Params:   params,
 		pipeline: pipeline,
 		sink:     sink,
+		closed:   make(chan struct{}),
 	}
 
 	input.OnOutputReady(p.onOutputReady)

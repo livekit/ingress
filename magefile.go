@@ -68,6 +68,10 @@ func Test() error {
 		return err
 	}
 
+	return Retest()
+}
+
+func Retest() error {
 	cmd := exec.Command("go", "test", "-v", "-count=1", "./test/...")
 
 	brewPrefix, err := getBrewPrefix()
@@ -85,7 +89,7 @@ func Test() error {
 		sb.WriteString(plugin)
 	}
 
-	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=3")
+	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=4")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

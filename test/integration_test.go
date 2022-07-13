@@ -104,6 +104,11 @@ func TestIngress(t *testing.T) {
 	cmd := exec.Command(cmdString[0], cmdString[1:]...)
 	require.NoError(t, cmd.Start())
 
-	time.Sleep(time.Minute * 3)
-	t.FailNow()
+	time.Sleep(time.Second * 45)
+
+	info, err = rpcClient.SendRequest(ctx, &livekit.IngressRequest{
+		IngressId: info.IngressId,
+		Stop:      &livekit.StopIngressRequest{IngressId: info.IngressId},
+	})
+	require.NoError(t, err)
 }
