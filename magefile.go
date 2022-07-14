@@ -89,7 +89,7 @@ func Retest() error {
 		sb.WriteString(plugin)
 	}
 
-	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=4")
+	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=3")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

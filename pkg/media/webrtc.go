@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 
+	"github.com/pion/rtcp"
 	"github.com/tinyzimmer/go-gst/gst"
 
 	"github.com/livekit/ingress/pkg/config"
@@ -81,7 +82,17 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 		return nil, err
 	}
 
-	track, err := lksdk.NewLocalReaderTrack(encoder, mimeType)
+	track, err := lksdk.NewLocalReaderTrack(encoder, mimeType, lksdk.ReaderTrackWithRTCPHandler(
+		func(pkt rtcp.Packet) {
+			switch pkt.(type) {
+			case *rtcp.PictureLossIndication:
+				s.logger.Debugw("PLI received")
+				if err := encoder.ForceKeyFrame(); err != nil {
+					s.logger.Errorw("could not force key frame", err)
+				}
+			}
+		},
+	))
 	if err != nil {
 		s.logger.Errorw("could not create track", err)
 		return nil, err
