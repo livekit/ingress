@@ -46,7 +46,7 @@ func getParams(ctx context.Context, conf *config.Config, req *livekit.StartIngre
 			IngressId:           req.IngressId,
 			Name:                req.Request.Name,
 			InputType:           0,
-			State:               0,
+			Status:              livekit.IngressInfo_ENDPOINT_WAITING,
 			InputStatus:         nil,
 			Room:                req.Request.RoomName,
 			ParticipantIdentity: req.Request.ParticipantIdentity,

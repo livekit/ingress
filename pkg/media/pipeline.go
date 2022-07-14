@@ -134,6 +134,9 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 		p.loop.Quit()
 		return false
 
+	case gst.MessageTag:
+		// ignore
+
 	default:
 		p.Logger.Debugw(msg.String())
 	}
