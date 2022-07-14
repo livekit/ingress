@@ -62,7 +62,7 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 		opts = &lksdk.TrackPublicationOptions{
 			Name:       s.audioOptions.Name,
 			Source:     s.audioOptions.Source,
-			DisableDTX: !s.audioOptions.Dtx, // TODO: change to DisableDtx
+			DisableDTX: s.audioOptions.DisableDtx,
 		}
 
 	case Video:

@@ -102,7 +102,7 @@ func (h *Handler) buildPipeline(ctx context.Context, req *livekit.StartIngressRe
 	if err != nil {
 		info := params.IngressInfo
 		info.InputStatus = &livekit.InputStatus{StatusDescription: err.Error()}
-		info.State = livekit.IngressInfo_ENDPOINT_ERROR
+		info.Status = livekit.IngressInfo_ENDPOINT_ERROR
 		h.sendUpdate(ctx, info)
 		return nil, err
 	}
@@ -112,7 +112,7 @@ func (h *Handler) buildPipeline(ctx context.Context, req *livekit.StartIngressRe
 }
 
 func (h *Handler) sendUpdate(ctx context.Context, info *livekit.IngressInfo) {
-	if info.State == livekit.IngressInfo_ENDPOINT_ERROR {
+	if info.Status == livekit.IngressInfo_ENDPOINT_ERROR {
 		logger.Errorw("ingress failed", errors.New(info.InputStatus.StatusDescription))
 	}
 

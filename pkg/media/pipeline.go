@@ -108,7 +108,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 		span.RecordError(err)
 		p.Logger.Errorw("failed to set pipeline state", err)
 		p.InputStatus = &livekit.InputStatus{StatusDescription: err.Error()}
-		p.State = livekit.IngressInfo_ENDPOINT_ERROR
+		p.Status = livekit.IngressInfo_ENDPOINT_ERROR
 		return p.IngressInfo
 	}
 
