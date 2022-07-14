@@ -69,12 +69,12 @@ func TestIngress(t *testing.T) {
 			ParticipantIdentity: "ingress-test",
 			ParticipantName:     "ingress-test",
 			Audio: &livekit.IngressAudioOptions{
-				Name:     "audio",
-				Source:   0,
-				MimeType: webrtc.MimeTypeOpus,
-				Bitrate:  48000,
-				Dtx:      false,
-				Channels: 2,
+				Name:       "audio",
+				Source:     0,
+				MimeType:   webrtc.MimeTypeOpus,
+				Bitrate:    48000,
+				DisableDtx: false,
+				Channels:   2,
 			},
 			Video: &livekit.IngressVideoOptions{
 				Name:     "video",

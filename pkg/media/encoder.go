@@ -150,7 +150,7 @@ func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
 		if err = enc.SetProperty("bitrate", int(options.Bitrate)); err != nil {
 			return nil, err
 		}
-		if err = enc.SetProperty("dtx", options.Dtx); err != nil {
+		if err = enc.SetProperty("dtx", !options.DisableDtx); err != nil {
 			return nil, err
 		}
 
