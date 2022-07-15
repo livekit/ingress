@@ -22,6 +22,7 @@ type Config struct {
 
 	HealthPort     int    `yaml:"health_port"`
 	PrometheusPort int    `yaml:"prometheus_port"`
+	RTMPPort       int    `yaml:"rtmp_port"`
 	LogLevel       string `yaml:"log_level"`
 
 	// internal
