@@ -18,6 +18,7 @@ type Encoder struct {
 	bin *gst.Bin
 
 	elements []*gst.Element
+	enc      *gst.Element
 	sink     *app.Sink
 	writer   *io.PipeWriter
 	reader   *io.PipeReader
@@ -56,25 +57,24 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 		videoConvert, videoScale, inputCaps,
 	}
 
-	var enc *gst.Element
 	switch mimeType {
 	case webrtc.MimeTypeH264:
-		enc, err = gst.NewElement("x264enc")
+		e.enc, err = gst.NewElement("x264enc")
 		if err != nil {
 			return nil, err
 		}
-		if err = enc.SetProperty("bitrate", uint(layer.Bitrate)); err != nil {
+		if err = e.enc.SetProperty("bitrate", uint(layer.Bitrate)); err != nil {
 			return nil, err
 		}
 		// temporary, only while during testing
-		if err = enc.SetProperty("key-int-max", uint(100)); err != nil {
+		// if err = enc.SetProperty("key-int-max", uint(100)); err != nil {
+		// 	return nil, err
+		// }
+		if err = e.enc.SetProperty("byte-stream", true); err != nil {
 			return nil, err
 		}
-		if err = enc.SetProperty("byte-stream", true); err != nil {
-			return nil, err
-		}
-		enc.SetArg("speed-preset", "veryfast")
-		enc.SetArg("tune", "zerolatency")
+		e.enc.SetArg("speed-preset", "veryfast")
+		e.enc.SetArg("tune", "zerolatency")
 		profileCaps, err := gst.NewElement("capsfilter")
 		if err != nil {
 			return nil, err
@@ -85,20 +85,20 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 		if err != nil {
 			return nil, err
 		}
-		e.elements = append(e.elements, enc, profileCaps)
+		e.elements = append(e.elements, e.enc, profileCaps)
 
 	case webrtc.MimeTypeVP8:
-		enc, err = gst.NewElement("vp8enc")
+		e.enc, err = gst.NewElement("vp8enc")
 		if err != nil {
 			return nil, err
 		}
-		if err = enc.SetProperty("target-bitrate", int(layer.Bitrate)); err != nil {
+		if err = e.enc.SetProperty("target-bitrate", int(layer.Bitrate)); err != nil {
 			return nil, err
 		}
-		if err = enc.SetProperty("keyframe-max-dist", 100); err != nil {
+		if err = e.enc.SetProperty("keyframe-max-dist", 100); err != nil {
 			return nil, err
 		}
-		e.elements = append(e.elements, enc)
+		e.elements = append(e.elements, e.enc)
 
 	default:
 		return nil, errors.ErrUnsupportedEncodeFormat
@@ -150,7 +150,7 @@ func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
 		if err = enc.SetProperty("bitrate", int(options.Bitrate)); err != nil {
 			return nil, err
 		}
-		if err = enc.SetProperty("dtx", options.Dtx); err != nil {
+		if err = enc.SetProperty("dtx", !options.DisableDtx); err != nil {
 			return nil, err
 		}
 
@@ -188,7 +188,7 @@ func newEncoder() (*Encoder, error) {
 }
 
 func (e *Encoder) handleEOS(_ *app.Sink) {
-	_ = e.writer.Close()
+	_ = e.Close()
 }
 
 func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
@@ -236,6 +236,15 @@ func (e *Encoder) linkElements() error {
 
 func (e *Encoder) Bin() *gst.Bin {
 	return e.bin
+}
+
+func (e *Encoder) ForceKeyFrame() error {
+	keyFrame := gst.NewStructure("GstForceKeyUnit")
+	if err := keyFrame.SetValue("all-headers", true); err != nil {
+		return err
+	}
+	e.enc.SendEvent(gst.NewCustomEvent(gst.EventTypeCustomDownstream, keyFrame))
+	return nil
 }
 
 func (e *Encoder) Read(p []byte) (int, error) {

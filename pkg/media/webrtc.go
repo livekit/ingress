@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 
+	"github.com/pion/rtcp"
 	"github.com/tinyzimmer/go-gst/gst"
 
 	"github.com/livekit/ingress/pkg/config"
@@ -15,9 +16,7 @@ import (
 type WebRTCSink struct {
 	logger logger.Logger
 
-	room     *lksdk.Room
-	audioPub *lksdk.LocalTrackPublication
-	videoPub *lksdk.LocalTrackPublication
+	room *lksdk.Room
 
 	audioOptions *livekit.IngressAudioOptions
 	videoOptions *livekit.IngressVideoOptions
@@ -27,15 +26,18 @@ func NewWebRTCSink(ctx context.Context, conf *config.Config, p *Params) (*WebRTC
 	ctx, span := tracer.Start(ctx, "media.NewWebRTCSink")
 	defer span.End()
 
-	callbacks := &lksdk.RoomCallback{}
-
-	room, err := lksdk.ConnectToRoom(p.WsUrl, lksdk.ConnectInfo{
-		APIKey:              p.ApiKey,
-		APISecret:           p.ApiSecret,
-		RoomName:            p.Room,
-		ParticipantName:     p.ParticipantName,
-		ParticipantIdentity: p.ParticipantIdentity,
-	}, callbacks)
+	room, err := lksdk.ConnectToRoom(
+		p.WsUrl,
+		lksdk.ConnectInfo{
+			APIKey:              p.ApiKey,
+			APISecret:           p.ApiSecret,
+			RoomName:            p.Room,
+			ParticipantName:     p.ParticipantName,
+			ParticipantIdentity: p.ParticipantIdentity,
+		},
+		lksdk.NewRoomCallback(),
+		lksdk.WithAutoSubscribe(false),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +63,7 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 		opts = &lksdk.TrackPublicationOptions{
 			Name:       s.audioOptions.Name,
 			Source:     s.audioOptions.Source,
-			DisableDTX: !s.audioOptions.Dtx, // TODO: change to DisableDtx
+			DisableDTX: s.audioOptions.DisableDtx,
 		}
 
 	case Video:
@@ -81,24 +83,44 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 		return nil, err
 	}
 
-	track, err := lksdk.NewLocalReaderTrack(encoder, mimeType)
+	var pub *lksdk.LocalTrackPublication
+	onComplete := func() {
+		s.logger.Debugw("write complete")
+		if pub != nil {
+			if err := s.room.LocalParticipant.UnpublishTrack(pub.SID()); err != nil {
+				s.logger.Errorw("could not unpublish track", err)
+			}
+		}
+	}
+	onRTCP := func(pkt rtcp.Packet) {
+		switch pkt.(type) {
+		case *rtcp.PictureLossIndication:
+			s.logger.Debugw("PLI received")
+			if err := encoder.ForceKeyFrame(); err != nil {
+				s.logger.Errorw("could not force key frame", err)
+			}
+		}
+	}
+
+	track, err := lksdk.NewLocalReaderTrack(encoder, mimeType,
+		lksdk.ReaderTrackWithRTCPHandler(onRTCP),
+		lksdk.ReaderTrackWithOnWriteComplete(onComplete),
+	)
 	if err != nil {
 		s.logger.Errorw("could not create track", err)
 		return nil, err
 	}
 
-	pub, err := s.room.LocalParticipant.PublishTrack(track, opts)
+	pub, err = s.room.LocalParticipant.PublishTrack(track, opts)
 	if err != nil {
 		s.logger.Errorw("could not publish track", err)
 		return nil, err
 	}
 
-	switch kind {
-	case Audio:
-		s.audioPub = pub
-	case Video:
-		s.videoPub = pub
-	}
-
 	return encoder.bin, nil
+}
+
+func (s *WebRTCSink) Close() {
+	s.logger.Debugw("disconnecting from room")
+	s.room.Disconnect()
 }

@@ -56,6 +56,7 @@ func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, e
 		Params:   params,
 		pipeline: pipeline,
 		sink:     sink,
+		closed:   make(chan struct{}),
 	}
 
 	input.OnOutputReady(p.onOutputReady)
@@ -107,13 +108,14 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 		span.RecordError(err)
 		p.Logger.Errorw("failed to set pipeline state", err)
 		p.InputStatus = &livekit.InputStatus{StatusDescription: err.Error()}
-		p.State = livekit.IngressInfo_ENDPOINT_ERROR
+		p.Status = livekit.IngressInfo_ENDPOINT_ERROR
 		return p.IngressInfo
 	}
 
 	// run main loop
 	p.loop.Run()
 
+	p.sink.Close()
 	return p.IngressInfo
 }
 
@@ -132,6 +134,9 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 		p.Logger.Errorw("pipeline failure", err)
 		p.loop.Quit()
 		return false
+
+	case gst.MessageTag, gst.MessageStateChanged:
+		// ignore
 
 	default:
 		p.Logger.Debugw(msg.String())

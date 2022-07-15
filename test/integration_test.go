@@ -12,6 +12,7 @@ import (
 
 	"github.com/pion/webrtc/v3"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 
 	"github.com/livekit/ingress/pkg/config"
@@ -61,6 +62,9 @@ func TestIngress(t *testing.T) {
 	t.Cleanup(func() { svc.Stop(true) })
 
 	ctx := context.Background()
+	updates, err := rpcClient.GetUpdateChannel(ctx)
+	require.NoError(t, err)
+
 	info, err := rpcClient.SendRequest(ctx, &livekit.StartIngressRequest{
 		Request: &livekit.CreateIngressRequest{
 			InputType:           livekit.IngressInput_RTMP_INPUT,
@@ -69,12 +73,12 @@ func TestIngress(t *testing.T) {
 			ParticipantIdentity: "ingress-test",
 			ParticipantName:     "ingress-test",
 			Audio: &livekit.IngressAudioOptions{
-				Name:     "audio",
-				Source:   0,
-				MimeType: webrtc.MimeTypeOpus,
-				Bitrate:  48000,
-				Dtx:      false,
-				Channels: 2,
+				Name:       "audio",
+				Source:     0,
+				MimeType:   webrtc.MimeTypeOpus,
+				Bitrate:    48000,
+				DisableDtx: false,
+				Channels:   2,
 			},
 			Video: &livekit.IngressVideoOptions{
 				Name:     "video",
@@ -98,12 +102,24 @@ func TestIngress(t *testing.T) {
 
 	cmdString := strings.Split(
 		fmt.Sprintf(
-			"gst-launch-1.0 -v videotestsrc pattern=ball ! video/x-raw,width=1280,height=720 ! x264enc ! flvmux ! rtmp2sink location=%s",
+			"gst-launch-1.0 -v videotestsrc pattern=smpte is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 tune=zerolatency ! flvmux ! rtmp2sink location=%s",
 			info.Url),
 		" ")
 	cmd := exec.Command(cmdString[0], cmdString[1:]...)
 	require.NoError(t, cmd.Start())
 
-	time.Sleep(time.Minute * 3)
-	t.FailNow()
+	time.Sleep(time.Second * 45)
+
+	info, err = rpcClient.SendRequest(ctx, &livekit.IngressRequest{
+		IngressId: info.IngressId,
+		Stop:      &livekit.StopIngressRequest{IngressId: info.IngressId},
+	})
+	require.NoError(t, err)
+
+	msg := <-updates.Channel()
+	b := updates.Payload(msg)
+
+	final := &livekit.IngressInfo{}
+	require.NoError(t, proto.Unmarshal(b, final))
+	require.NotEqual(t, final.Status, livekit.IngressInfo_ENDPOINT_ERROR)
 }

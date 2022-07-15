@@ -68,6 +68,10 @@ func Test() error {
 		return err
 	}
 
+	return Retest()
+}
+
+func Retest() error {
 	cmd := exec.Command("go", "test", "-v", "-count=1", "./test/...")
 
 	brewPrefix, err := getBrewPrefix()
@@ -99,7 +103,7 @@ func Publish() error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	return run("gst-launch-1.0 -v videotestsrc pattern=ball ! video/x-raw,width=1280,height=720 ! x264enc ! flvmux ! rtmp2sink location=rtmp://localhost:1935/live/stream1")
+	return run("gst-launch-1.0 -v videotestsrc pattern=ball is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 tune=zerolatency ! flvmux ! rtmp2sink location=rtmp://localhost:1935/live/stream1")
 }
 
 // helpers

@@ -32,6 +32,11 @@ func NewInput(p *Params) (*Input, error) {
 		return nil, err
 	}
 
+	// queue, err := gst.NewElement("queue")
+	// if err != nil {
+	// 	return nil, err
+	// }
+
 	decodeBin, err := gst.NewElement("decodebin3")
 	if err != nil {
 		return nil, err
