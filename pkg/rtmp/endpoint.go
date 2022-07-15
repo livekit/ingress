@@ -110,7 +110,7 @@ func (h *Handler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rtmpms
 
 	h.log.Infow("Received a new published stream", "ingressID", cmd.PublishingName)
 
-	w := &NoopWriter{}
+	w := &WrappingWriter{}
 	h.onPublish(h.ingressID, w)
 
 	enc, err := flv.NewEncoder(w, flv.FlagsAudio|flv.FlagsVideo)
@@ -179,6 +179,7 @@ func (h *Handler) OnVideo(timestamp uint32, payload io.Reader) error {
 	}
 	video.Data = flvBody
 
+	// Should we drop messages up to the 1st key frame, or will GST do so?
 	if err := h.flvEnc.Encode(&flvtag.FlvTag{
 		TagType:   flvtag.TagTypeVideo,
 		Timestamp: timestamp,
@@ -194,8 +195,25 @@ func (h *Handler) OnClose() {
 	h.log.Infow("closing ingress RTMP session")
 }
 
-type WrappingWriter struct{ w }
+type WrappingWriter struct {
+	w    io.Writer
+	lock sync.Mutex
+}
 
-func (w *NoopWriter) Write(b []byte) (int, error) {
-	return len(b), nil
+func (w *WrappingWriter) Write(b []byte) (int, error) {
+	w.lock.Lock()
+	w := w.w
+	w.lock.Unlock()
+
+	if w == nil {
+		return len(b), nil
+	}
+
+	return w.Write(b)
+}
+
+func (w *WrappingWriter) SetWriter(w io.Writer) {
+	w.lock.Lock()
+	w.w = w
+	w.lock.Unlock()
 }
