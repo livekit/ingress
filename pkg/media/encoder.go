@@ -188,7 +188,7 @@ func newEncoder() (*Encoder, error) {
 }
 
 func (e *Encoder) handleEOS(_ *app.Sink) {
-	_ = e.writer.Close()
+	_ = e.Close()
 }
 
 func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
@@ -234,6 +234,10 @@ func (e *Encoder) linkElements() error {
 	return nil
 }
 
+func (e *Encoder) Bin() *gst.Bin {
+	return e.bin
+}
+
 func (e *Encoder) ForceKeyFrame() error {
 	keyFrame := gst.NewStructure("GstForceKeyUnit")
 	if err := keyFrame.SetValue("all-headers", true); err != nil {
@@ -241,10 +245,6 @@ func (e *Encoder) ForceKeyFrame() error {
 	}
 	e.enc.SendEvent(gst.NewCustomEvent(gst.EventTypeCustomDownstream, keyFrame))
 	return nil
-}
-
-func (e *Encoder) Bin() *gst.Bin {
-	return e.bin
 }
 
 func (e *Encoder) Read(p []byte) (int, error) {

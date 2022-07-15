@@ -12,6 +12,7 @@ import (
 
 	"github.com/pion/webrtc/v3"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v3"
 
 	"github.com/livekit/ingress/pkg/config"
@@ -61,6 +62,9 @@ func TestIngress(t *testing.T) {
 	t.Cleanup(func() { svc.Stop(true) })
 
 	ctx := context.Background()
+	updates, err := rpcClient.GetUpdateChannel(ctx)
+	require.NoError(t, err)
+
 	info, err := rpcClient.SendRequest(ctx, &livekit.StartIngressRequest{
 		Request: &livekit.CreateIngressRequest{
 			InputType:           livekit.IngressInput_RTMP_INPUT,
@@ -98,7 +102,7 @@ func TestIngress(t *testing.T) {
 
 	cmdString := strings.Split(
 		fmt.Sprintf(
-			"gst-launch-1.0 -v videotestsrc pattern=ball ! video/x-raw,width=1280,height=720 ! x264enc ! flvmux ! rtmp2sink location=%s",
+			"gst-launch-1.0 -v videotestsrc pattern=smpte is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 tune=zerolatency ! flvmux ! rtmp2sink location=%s",
 			info.Url),
 		" ")
 	cmd := exec.Command(cmdString[0], cmdString[1:]...)
@@ -111,4 +115,11 @@ func TestIngress(t *testing.T) {
 		Stop:      &livekit.StopIngressRequest{IngressId: info.IngressId},
 	})
 	require.NoError(t, err)
+
+	msg := <-updates.Channel()
+	b := updates.Payload(msg)
+
+	final := &livekit.IngressInfo{}
+	require.NoError(t, proto.Unmarshal(b, final))
+	require.NotEqual(t, final.Status, livekit.IngressInfo_ENDPOINT_ERROR)
 }

@@ -115,6 +115,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 	// run main loop
 	p.loop.Run()
 
+	p.sink.Close()
 	return p.IngressInfo
 }
 
@@ -134,7 +135,7 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 		p.loop.Quit()
 		return false
 
-	case gst.MessageTag:
+	case gst.MessageTag, gst.MessageStateChanged:
 		// ignore
 
 	default:
