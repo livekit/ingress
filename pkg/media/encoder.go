@@ -24,6 +24,11 @@ type Encoder struct {
 	reader   *io.PipeReader
 }
 
+type encodingParam struct {
+	name  string
+	value interface{}
+}
+
 func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, error) {
 	e, err := newEncoder()
 	if err != nil {
@@ -63,28 +68,25 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 		if err != nil {
 			return nil, err
 		}
+
 		if err = e.enc.SetProperty("bitrate", uint(layer.Bitrate)); err != nil {
 			return nil, err
 		}
-		// temporary, only while during testing
-		// if err = enc.SetProperty("key-int-max", uint(100)); err != nil {
-		// 	return nil, err
-		// }
 		if err = e.enc.SetProperty("byte-stream", true); err != nil {
 			return nil, err
 		}
 		e.enc.SetArg("speed-preset", "veryfast")
-		e.enc.SetArg("tune", "zerolatency")
+
 		profileCaps, err := gst.NewElement("capsfilter")
 		if err != nil {
 			return nil, err
 		}
-		err = profileCaps.SetProperty("caps", gst.NewCapsFromString(
+		if err = profileCaps.SetProperty("caps", gst.NewCapsFromString(
 			fmt.Sprintf("video/x-h264,stream-format=byte-stream,profile=baseline"),
-		))
-		if err != nil {
+		)); err != nil {
 			return nil, err
 		}
+
 		e.elements = append(e.elements, e.enc, profileCaps)
 
 	case webrtc.MimeTypeVP8:

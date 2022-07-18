@@ -102,7 +102,7 @@ func TestIngress(t *testing.T) {
 
 	cmdString := strings.Split(
 		fmt.Sprintf(
-			"gst-launch-1.0 -v videotestsrc pattern=smpte is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 tune=zerolatency ! flvmux ! rtmp2sink location=%s",
+			"gst-launch-1.0 -v videotestsrc pattern=ball is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 tune=zerolatency ! flvmux ! rtmp2sink location=%s",
 			info.Url),
 		" ")
 	cmd := exec.Command(cmdString[0], cmdString[1:]...)
