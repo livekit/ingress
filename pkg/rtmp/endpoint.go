@@ -53,7 +53,7 @@ func (s *RTMPServer) Start(conf *config.Config) error {
 			// Should we find a way to use our own logger?
 			l := log.StandardLogger()
 
-			h := NewHandler(func(string ingressID, w io.Writer) {
+			h := NewHandler(func(ingressId string, w io.Writer) {
 				s.writers.Store(ingressId, w)
 			})
 
@@ -78,6 +78,20 @@ func (s *RTMPServer) Start(conf *config.Config) error {
 	return nil
 }
 
+func (s *RTMPServer) AssociatePipeline(ingestID string, p io.Writer) {
+	w, ok := s.writers.Load(ingestID)
+	if ok && w != nil {
+		w.(*WrappingWriter).SetWriter(p)
+	}
+}
+
+func (s *RTMPServer) DissociatePipeline(ingestID string) {
+	w, ok := s.writers.Load(ingestID)
+	if ok && w != nil {
+		w.(*WrappingWriter).SetWriter(nil)
+	}
+}
+
 func (s *RTMPServer) Stop() error {
 	return s.Stop()
 }
@@ -88,10 +102,10 @@ type Handler struct {
 	ingressId string
 	log       logger.Logger
 
-	onPublish func(string ingressID, w io.Writer)
+	onPublish func(ingressId string, w io.Writer)
 }
 
-func NewHandler(onPublish func(string ingressID, w io.Writer)) *Handler {
+func NewHandler(onPublish func(ingressId string, w io.Writer)) *Handler {
 	return &Handler{
 		onPublish: onPublish,
 	}
@@ -111,7 +125,7 @@ func (h *Handler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rtmpms
 	h.log.Infow("Received a new published stream", "ingressID", cmd.PublishingName)
 
 	w := &WrappingWriter{}
-	h.onPublish(h.ingressID, w)
+	h.onPublish(h.ingressId, w)
 
 	enc, err := flv.NewEncoder(w, flv.FlagsAudio|flv.FlagsVideo)
 	if err != nil {
@@ -202,18 +216,18 @@ type WrappingWriter struct {
 
 func (w *WrappingWriter) Write(b []byte) (int, error) {
 	w.lock.Lock()
-	w := w.w
+	wr := w.w
 	w.lock.Unlock()
 
-	if w == nil {
+	if wr == nil {
 		return len(b), nil
 	}
 
 	return w.Write(b)
 }
 
-func (w *WrappingWriter) SetWriter(w io.Writer) {
+func (w *WrappingWriter) SetWriter(wr io.Writer) {
 	w.lock.Lock()
-	w.w = w
+	w.w = wr
 	w.lock.Unlock()
 }
