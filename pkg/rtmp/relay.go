@@ -54,7 +54,6 @@ func NewRTMPRelayHandler(rtmpServer *RTMPServer) *RTMPRelayHandler {
 func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	defer func() {
-		fmt.Println("H", err)
 		switch err {
 		case errors.ErrIngressNotFound:
 			w.WriteHeader(http.StatusNotFound)

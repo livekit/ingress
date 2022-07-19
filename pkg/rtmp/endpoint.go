@@ -114,10 +114,13 @@ func (s *RTMPServer) Stop() error {
 
 type RTMPHandler struct {
 	rtmp.DefaultHandler
-	flvLock   sync.Mutex
-	flvEnc    *flv.Encoder
-	ingressId string
-	log       logger.Logger
+	flvLock       sync.Mutex
+	flvEnc        *flv.Encoder
+	ingressId     string
+	videoInit     *flvtag.VideoData
+	keyFrameFound bool
+
+	log logger.Logger
 
 	onPublish func(ingressId string)
 	onClose   func(ingressId string)
@@ -213,8 +216,8 @@ func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
 	h.flvLock.Lock()
 	defer h.flvLock.Unlock()
 
-	if h.flvEnc != nil {
-		var video flvtag.VideoData
+	var video flvtag.VideoData
+	if h.flvEnc != nil || h.videoInit == nil {
 		if err := flvtag.DecodeVideoData(payload, &video); err != nil {
 			return err
 		}
@@ -225,7 +228,21 @@ func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
 		}
 		video.Data = flvBody
 
-		// Should we drop messages up to the 1st key frame, or will GST do so?
+		if h.videoInit == nil {
+			h.videoInit = &video
+		}
+	}
+
+	if h.flvEnc != nil {
+		if !h.keyFrameFound {
+			if video.FrameType == flvtag.FrameTypeKeyFrame {
+				h.log.Infow("key frame found")
+				h.keyFrameFound = true
+			} else {
+				return nil
+			}
+		}
+
 		if err := h.flvEnc.Encode(&flvtag.FlvTag{
 			TagType:   flvtag.TagTypeVideo,
 			Timestamp: timestamp,
@@ -255,6 +272,17 @@ func (h *RTMPHandler) StartSerializer(w io.Writer) error {
 	}
 	h.flvEnc = enc
 
+	// Serialize video decoder initialization
+	if h.videoInit != nil {
+		if err := h.flvEnc.Encode(&flvtag.FlvTag{
+			TagType:   flvtag.TagTypeVideo,
+			Timestamp: 0,
+			Data:      h.videoInit,
+		}); err != nil {
+			h.log.Errorw("Failed to write video", err)
+		}
+	}
+
 	return nil
 }
 
@@ -263,4 +291,5 @@ func (h *RTMPHandler) StopSerializer() {
 	defer h.flvLock.Unlock()
 
 	h.flvEnc = nil
+	h.keyFrameFound = false
 }
