@@ -76,7 +76,7 @@ func TestIngress(t *testing.T) {
 				Name:       "audio",
 				Source:     0,
 				MimeType:   webrtc.MimeTypeOpus,
-				Bitrate:    48000,
+				Bitrate:    64000,
 				DisableDtx: false,
 				Channels:   2,
 			},
@@ -102,7 +102,9 @@ func TestIngress(t *testing.T) {
 
 	cmdString := strings.Split(
 		fmt.Sprintf(
-			"gst-launch-1.0 -v videotestsrc pattern=ball is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 tune=zerolatency ! flvmux ! rtmp2sink location=%s",
+			"gst-launch-1.0 -v flvmux name=mux ! rtmp2sink location=%s  "+
+				"audiotestsrc freq=200 ! faac ! mux.  "+
+				"videotestsrc pattern=ball is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 tune=zerolatency ! mux.",
 			info.Url),
 		" ")
 	cmd := exec.Command(cmdString[0], cmdString[1:]...)
