@@ -18,10 +18,6 @@ import (
 	"github.com/livekit/protocol/logger"
 )
 
-const (
-	defaultRTMPPort int = 1935
-)
-
 type RTMPServer struct {
 	server   *rtmp.Server
 	handlers sync.Map
@@ -33,9 +29,6 @@ func NewRTMPServer() *RTMPServer {
 
 func (s *RTMPServer) Start(conf *config.Config) error {
 	port := conf.RTMPPort
-	if port == 0 {
-		port = defaultRTMPPort
-	}
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", port))
 	if err != nil {

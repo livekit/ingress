@@ -1,6 +1,7 @@
 package media
 
 import (
+	"context"
 	"strings"
 	"sync"
 
@@ -12,8 +13,8 @@ import (
 type Input struct {
 	lock sync.Mutex
 
-	bin *gst.Bin
-	// source *app.Source TODO
+	bin    *gst.Bin
+	source *HTTPRelaySource
 
 	audioOutput *gst.Pad
 	videoOutput *gst.Pad
@@ -24,18 +25,11 @@ type Input struct {
 type OutputReadyFunc func(pad *gst.Pad, kind StreamKind)
 
 func NewInput(p *Params) (*Input, error) {
-	rtmp2src, err := gst.NewElement("rtmp2src")
+	src, err := NewHTTPRelaySource(context.Background(), p)
 	if err != nil {
 		return nil, err
 	}
-	if err = rtmp2src.SetProperty("location", p.Url); err != nil {
-		return nil, err
-	}
-
-	// queue, err := gst.NewElement("queue")
-	// if err != nil {
-	// 	return nil, err
-	// }
+	flvSrc := src.GetSource()
 
 	decodeBin, err := gst.NewElement("decodebin3")
 	if err != nil {
@@ -43,39 +37,36 @@ func NewInput(p *Params) (*Input, error) {
 	}
 
 	bin := gst.NewBin("input")
-	if err := bin.AddMany(rtmp2src, decodeBin); err != nil {
+	if err := bin.AddMany(flvSrc.Element, decodeBin); err != nil {
 		return nil, err
 	}
 
-	i := &Input{bin: bin}
+	i := &Input{
+		bin:    bin,
+		source: src,
+	}
 
 	if _, err = decodeBin.Connect("pad-added", i.onPadAdded); err != nil {
 		return nil, err
 	}
 
-	if err = rtmp2src.Link(decodeBin); err != nil {
+	if err = flvSrc.Link(decodeBin); err != nil {
 		return nil, err
 	}
 
 	return i, nil
 }
 
-// TODO: replace rtmp2src with appsrc
-// func (i *Input) Write(b []byte) error {
-// 	r := i.source.PushBuffer(gst.NewBufferFromBytes(b))
-// 	switch r {
-// 	case gst.FlowOK, gst.FlowFlushing:
-// 		// TODO: unsure if flushing should return error
-// 		return nil
-// 	case gst.FlowEOS:
-// 		return io.EOF
-// 	default:
-// 		return errors.New(r.String())
-// 	}
-// }
-
 func (i *Input) OnOutputReady(f OutputReadyFunc) {
 	i.onOutputReady = f
+}
+
+func (i *Input) Start(ctx context.Context) error {
+	return i.source.Start(ctx)
+}
+
+func (i *Input) Close() error {
+	return i.source.Close()
 }
 
 func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {

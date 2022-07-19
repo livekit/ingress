@@ -3,6 +3,8 @@ package errors
 import (
 	"errors"
 	"fmt"
+
+	"github.com/tinyzimmer/go-gst/gst"
 )
 
 var (
@@ -22,4 +24,8 @@ func New(err string) error {
 
 func ErrCouldNotParseConfig(err error) error {
 	return fmt.Errorf("could not parse config: %v", err)
+}
+
+func ErrFromGstFlowReturn(ret gst.FlowReturn) error {
+	return fmt.Errorf("GST Flow Error %d (%s)", ret, ret.String())
 }

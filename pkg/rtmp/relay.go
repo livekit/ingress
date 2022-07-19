@@ -12,10 +12,6 @@ import (
 	"github.com/livekit/protocol/logger"
 )
 
-const (
-	defaultHTTPRelayPort = 9090
-)
-
 type RTMPRelay struct {
 	rtmpServer *RTMPServer
 }
@@ -28,9 +24,6 @@ func NewRTMPRelay(rtmpServer *RTMPServer) *RTMPRelay {
 
 func (r *RTMPRelay) Start(conf *config.Config) error {
 	port := conf.HTTPRelayPort
-	if port == 0 {
-		port = defaultHTTPRelayPort
-	}
 
 	h := NewRTMPRelayHandler(r.rtmpServer)
 	err := http.ListenAndServe(fmt.Sprintf(":%d", port), h)

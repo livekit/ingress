@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/rtmp"
@@ -21,6 +22,9 @@ type Params struct {
 	WsUrl     string
 	ApiKey    string
 	ApiSecret string
+
+	// relay info
+	RelayUrl string
 
 	GstReady chan struct{}
 }
@@ -60,8 +64,13 @@ func getParams(ctx context.Context, conf *config.Config, req *livekit.StartIngre
 		WsUrl:        conf.WsUrl,
 		ApiKey:       conf.ApiKey,
 		ApiSecret:    conf.ApiSecret,
+		RelayUrl:     getRelayUrl(conf, req),
 		GstReady:     make(chan struct{}),
 	}
 
 	return
+}
+
+func getRelayUrl(conf *config.Config, req *livekit.StartIngressRequest) string {
+	return fmt.Sprintf("http://localhost:%d/%d", conf.HTTPRelayPort, req.IngressId)
 }

@@ -14,6 +14,11 @@ import (
 	"github.com/livekit/protocol/utils"
 )
 
+const (
+	defaultRTMPPort      int = 1935
+	defaultHTTPRelayPort     = 9090
+)
+
 type Config struct {
 	Redis     *redis.RedisConfig `yaml:"redis"`      // required
 	ApiKey    string             `yaml:"api_key"`    // required (env LIVEKIT_API_KEY)
@@ -43,6 +48,13 @@ func NewConfig(confString string) (*Config, error) {
 		if err := yaml.Unmarshal([]byte(confString), conf); err != nil {
 			return nil, errors.ErrCouldNotParseConfig(err)
 		}
+	}
+
+	if conf.RTMPPort == 0 {
+		conf.RTMPPort = defaultRTMPPort
+	}
+	if conf.HTTPRelayPort == 0 {
+		conf.HTTPRelayPort = defaultHTTPRelayPort
 	}
 
 	conf.InitLogger()
