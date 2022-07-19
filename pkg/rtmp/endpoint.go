@@ -266,6 +266,9 @@ func (h *RTMPHandler) StartSerializer(w io.Writer) error {
 	h.flvLock.Lock()
 	defer h.flvLock.Unlock()
 
+	// Stop exsting session
+	h.stopSerializer()
+
 	enc, err := flv.NewEncoder(w, flv.FlagsAudio|flv.FlagsVideo)
 	if err != nil {
 		return err
@@ -292,6 +295,10 @@ func (h *RTMPHandler) StopSerializer() {
 	h.flvLock.Lock()
 	defer h.flvLock.Unlock()
 
+	h.stopSerializer()
+}
+
+func (h *RTMPHandler) stopSerializer() {
 	h.log.Infow("stopping serializer")
 
 	h.flvEnc = nil
