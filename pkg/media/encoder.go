@@ -32,11 +32,6 @@ type Encoder struct {
 	sink     *app.Sink
 
 	samples chan *media.Sample
-
-	h264reader *h264reader.H264Reader
-	pipeReader io.Reader
-	pipeWriter io.Writer
-	writing    bool
 }
 
 func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, error) {
@@ -98,8 +93,6 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 		}
 
 		e.elements = append(e.elements, e.enc, profileCaps)
-		e.pipeReader, e.pipeWriter = io.Pipe()
-		e.h264reader, err = h264reader.NewReader(e.pipeReader)
 		if err != nil {
 			return nil, err
 		}
@@ -213,9 +206,8 @@ func newEncoder(mimeType string) (*Encoder, error) {
 	}
 
 	sink.SetCallbacks(&app.SinkCallbacks{
-		EOSFunc:        e.handleEOS,
-		NewPrerollFunc: nil,
-		NewSampleFunc:  e.handleSample,
+		EOSFunc:       e.handleEOS,
+		NewSampleFunc: e.handleSample,
 	})
 
 	return e, nil
@@ -226,16 +218,6 @@ func (e *Encoder) handleEOS(_ *app.Sink) {
 }
 
 func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
-	writeSample := func(sample *media.Sample) {
-		select {
-		case e.samples <- sample:
-			// continue
-		default:
-			logger.Debugw("sample channel full")
-			e.samples <- sample
-		}
-	}
-
 	// Pull the sample that triggered this callback
 	s := sink.PullSample()
 	if s == nil {
@@ -250,101 +232,90 @@ func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
 
 	switch e.mimeType {
 	case webrtc.MimeTypeH264:
-		if !e.writing {
-			e.writing = true
-			go func() {
-				for {
-					nal, _ := e.h264reader.NextNAL()
+		data := buffer.Bytes()
 
-					sample := &media.Sample{
-						Data: nal.Data,
-					}
+		var currentNalType h264reader.NalUnitType
+		nalStart := -1
+		zeroes := 0
 
-					switch nal.UnitType {
-					case h264reader.NalUnitTypeCodedSliceDataPartitionA,
-						h264reader.NalUnitTypeCodedSliceDataPartitionB,
-						h264reader.NalUnitTypeCodedSliceDataPartitionC,
-						h264reader.NalUnitTypeCodedSliceIdr,
-						h264reader.NalUnitTypeCodedSliceNonIdr:
-						sample.Duration = time.Second / 30
-					}
-
-					writeSample(sample)
+		// pion's h264 packetizer only accepts one NAL per packet
+		for i, b := range data {
+			if i == nalStart {
+				// get type of current NAL
+				currentNalType = h264reader.NalUnitType((b & 0x1F) >> 0)
+				if currentNalType == h264reader.NalUnitTypeSEI {
+					nalStart = -1
 				}
-			}()
+			}
+
+			if b == 0 {
+				zeroes++
+			} else {
+				// NAL separator is either [0 0 0 1] or [0 0 1]
+				if b == 1 && (zeroes > 1) {
+					if nalStart > 0 {
+						nalEnd := i - zeroes
+						if zeroes > 3 {
+							nalEnd = i - 3
+						}
+
+						e.writeNal(data[nalStart:nalEnd], currentNalType)
+					}
+
+					nalStart = i + 1
+				}
+
+				zeroes = 0
+			}
 		}
 
-		_, _ = e.pipeWriter.Write(buffer.Bytes())
-		return gst.FlowOK
-
-		// }()
-
-		// fmt.Println(data[:12])
-		// [0 0 0 1 9 48 0 0 1 65 154 32]
-		// [0 0 0 1 9 16 0 0 0 1 103 66]
-
-		// headerFound := false
-		// zeroBytes := 0
-		// for i := 0; i < len(data); i++ {
-		// 	if !headerFound {
-		// 		if data[i] == 0 {
-		// 			zeroBytes++
-		// 			continue
-		// 		} else if data[i] == 1 {
-		// 			if zeroBytes == 2 || zeroBytes == 3 {
-		// 				headerFound = true
-		// 				continue
-		// 			} else {
-		// 				logger.Errorw("invalid h264 stream", nil)
-		// 			}
-		// 		} else {
-		// 			continue
-		// 		}
-		// 	}
-		//
-		// 	unitType := h264reader.NalUnitType((data[i] & 0x1F) >> 0)
-		//
-		// 	switch unitType {
-		// 	case h264reader.NalUnitTypeAUD:
-		// 		headerFound = false
-		// 		zeroBytes = 0
-		// 		continue
-		//
-		// 	case h264reader.NalUnitTypeCodedSliceDataPartitionA,
-		// 		h264reader.NalUnitTypeCodedSliceDataPartitionB,
-		// 		h264reader.NalUnitTypeCodedSliceDataPartitionC,
-		// 		h264reader.NalUnitTypeCodedSliceIdr,
-		// 		h264reader.NalUnitTypeCodedSliceNonIdr:
-		// 		sample.Duration = time.Second / 30
-		// 	}
-		//
-		// 	sample.Data = data[i:]
-		// 	logger.Debugw("H264 sample",
-		// 		"ForbiddenZeroBit", ((data[i]&0x80)>>7) == 1, // 0x80 = 0b10000000
-		// 		"RefIdc", (data[i]&0x60)>>5, // 0x60 = 0b01100000, should never be 1
-		// 		"UnitType", unitType.String(), // 0x1F = 0b00011111
-		// 	)
-		// 	break
-		// }
+		if nalStart > 0 && nalStart < len(data) {
+			e.writeNal(data[nalStart:], currentNalType)
+		}
 
 	case webrtc.MimeTypeVP8:
-		// frame, header, err := p.ivfreader.ParseNextFrame()
-		// if err != nil {
-		// 	return sample, err
-		// }
-		// delta := header.Timestamp - p.lastTimestamp
-		// sample.Data = frame
-		// sample.Duration = time.Duration(p.ivfTimebase*float64(delta)*1000) * time.Millisecond
-		// p.lastTimestamp = header.Timestamp
+		// untested
+		e.writeSample(&media.Sample{
+			Data:     buffer.Bytes(),
+			Duration: time.Second / 30.0,
+		})
 
 	case webrtc.MimeTypeOpus:
-		writeSample(&media.Sample{
+		e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
 			Duration: opusFrameSize,
 		})
 	}
 
 	return gst.FlowOK
+}
+
+func (e *Encoder) writeNal(nal []byte, nalType h264reader.NalUnitType) {
+	sample := &media.Sample{
+		Data: nal,
+	}
+
+	// only these NAL types get a duration
+	switch nalType {
+	case h264reader.NalUnitTypeCodedSliceDataPartitionA,
+		h264reader.NalUnitTypeCodedSliceDataPartitionB,
+		h264reader.NalUnitTypeCodedSliceDataPartitionC,
+		h264reader.NalUnitTypeCodedSliceIdr,
+		h264reader.NalUnitTypeCodedSliceNonIdr:
+		sample.Duration = time.Second / 30.0
+	}
+
+	e.writeSample(sample)
+}
+
+func (e *Encoder) writeSample(sample *media.Sample) {
+	select {
+	case e.samples <- sample:
+		// continue
+	default:
+		logger.Infow("sample channel full")
+		e.samples <- sample
+	}
 }
 
 func (e *Encoder) linkElements() error {
