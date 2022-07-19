@@ -274,10 +274,12 @@ func (h *RTMPHandler) StartSerializer(w io.Writer) error {
 
 	// Serialize video decoder initialization
 	if h.videoInit != nil {
+		// Copy init tag to be able to reuse it
+
 		if err := h.flvEnc.Encode(&flvtag.FlvTag{
 			TagType:   flvtag.TagTypeVideo,
 			Timestamp: 0,
-			Data:      h.videoInit,
+			Data:      copyVideoTag(h.videoInit),
 		}); err != nil {
 			h.log.Errorw("Failed to write video", err)
 		}
@@ -290,6 +292,15 @@ func (h *RTMPHandler) StopSerializer() {
 	h.flvLock.Lock()
 	defer h.flvLock.Unlock()
 
+	h.log.Infow("stopping serializer")
+
 	h.flvEnc = nil
 	h.keyFrameFound = false
+}
+
+func copyVideoTag(in *flvtag.VideoData) *flvtag.VideoData {
+	ret := *in
+	ret.Data = bytes.NewReader(in.Data.(*bytes.Buffer).Bytes())
+
+	return &ret
 }
