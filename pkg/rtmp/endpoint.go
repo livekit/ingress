@@ -68,12 +68,13 @@ func (s *RTMPServer) Start(conf *config.Config) error {
 			}
 		},
 	})
-	if err := srv.Serve(listener); err != nil {
-		logger.Errorw("failed to start RTMP server", err)
-		return err
-	}
 
 	s.server = srv
+	go func() {
+		if err := srv.Serve(listener); err != nil {
+			logger.Errorw("failed to start RTMP server", err)
+		}
+	}()
 
 	return nil
 }
@@ -231,7 +232,7 @@ func (w *WrappingWriter) Write(b []byte) (int, error) {
 		return len(b), nil
 	}
 
-	return w.Write(b)
+	return wr.Write(b)
 }
 
 func (w *WrappingWriter) SetWriter(wr io.Writer) {
