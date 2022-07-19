@@ -184,7 +184,6 @@ func (h *RTMPHandler) OnAudio(timestamp uint32, payload io.Reader) error {
 	defer h.flvLock.Unlock()
 
 	if h.flvEnc != nil {
-
 		var audio flvtag.AudioData
 		if err := flvtag.DecodeAudioData(payload, &audio); err != nil {
 			return err
