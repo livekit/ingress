@@ -23,8 +23,8 @@ const (
 )
 
 type RTMPServer struct {
-	server  *rtmp.Server
-	writers sync.Map
+	server   *rtmp.Server
+	handlers sync.Map
 }
 
 func NewRTMPServer() *RTMPServer {
@@ -53,8 +53,12 @@ func (s *RTMPServer) Start(conf *config.Config) error {
 			// Should we find a way to use our own logger?
 			l := log.StandardLogger()
 
-			h := NewRTMPHandler(func(ingressId string, w io.Writer) {
-				s.writers.Store(ingressId, w)
+			h := NewRTMPHandler()
+			h.OnPublishCallback(func(ingressId string) {
+				s.handlers.Store(ingressId, h)
+			})
+			h.OnCloseCallback(func(ingressId string) {
+				s.handlers.Delete(ingressId)
 			})
 
 			return conn, &rtmp.ConnConfig{
@@ -79,10 +83,13 @@ func (s *RTMPServer) Start(conf *config.Config) error {
 	return nil
 }
 
-func (s *RTMPServer) AssociateRelay(ingressId string, p io.Writer) error {
-	w, ok := s.writers.Load(ingressId)
-	if ok && w != nil {
-		w.(*WrappingWriter).SetWriter(p)
+func (s *RTMPServer) AssociateRelay(ingressId string, w io.Writer) error {
+	h, ok := s.handlers.Load(ingressId)
+	if ok && h != nil {
+		err := h.(*RTMPHandler).StartSerializer(w)
+		if err != nil {
+			return err
+		}
 	} else {
 		return errors.ErrIngressNotFound
 	}
@@ -91,9 +98,9 @@ func (s *RTMPServer) AssociateRelay(ingressId string, p io.Writer) error {
 }
 
 func (s *RTMPServer) DissociateRelay(ingressId string) error {
-	w, ok := s.writers.Load(ingressId)
-	if ok && w != nil {
-		w.(*WrappingWriter).SetWriter(nil)
+	h, ok := s.handlers.Load(ingressId)
+	if ok && h != nil {
+		h.(*RTMPHandler).StopSerializer()
 	} else {
 		return errors.ErrIngressNotFound
 	}
@@ -107,17 +114,25 @@ func (s *RTMPServer) Stop() error {
 
 type RTMPHandler struct {
 	rtmp.DefaultHandler
+	flvLock   sync.Mutex
 	flvEnc    *flv.Encoder
 	ingressId string
 	log       logger.Logger
 
-	onPublish func(ingressId string, w io.Writer)
+	onPublish func(ingressId string)
+	onClose   func(ingressId string)
 }
 
-func NewRTMPHandler(onPublish func(ingressId string, w io.Writer)) *RTMPHandler {
-	return &RTMPHandler{
-		onPublish: onPublish,
-	}
+func NewRTMPHandler() *RTMPHandler {
+	return &RTMPHandler{}
+}
+
+func (h *RTMPHandler) OnPublishCallback(cb func(ingressId string)) {
+	h.onPublish = cb
+}
+
+func (h *RTMPHandler) OnCloseCallback(cb func(ingressId string)) {
+	h.onClose = cb
 }
 
 func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rtmpmsg.NetStreamPublish) error {
@@ -130,11 +145,110 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 
 	h.ingressId = cmd.PublishingName
 	h.log = logger.Logger(logger.GetLogger().WithValues("ingressID", cmd.PublishingName))
+	if h.onPublish != nil {
+		h.onPublish(h.ingressId)
+	}
 
 	h.log.Infow("Received a new published stream", "ingressID", cmd.PublishingName)
 
-	w := &WrappingWriter{}
-	h.onPublish(h.ingressId, w)
+	return nil
+}
+
+func (h *RTMPHandler) OnSetDataFrame(timestamp uint32, data *rtmpmsg.NetStreamSetDataFrame) error {
+	h.flvLock.Lock()
+	defer h.flvLock.Unlock()
+
+	if h.flvEnc != nil {
+		r := bytes.NewReader(data.Payload)
+
+		var script flvtag.ScriptData
+		if err := flvtag.DecodeScriptData(r, &script); err != nil {
+			h.log.Errorw("failed to decode script data", err)
+			return nil // ignore
+		}
+
+		if err := h.flvEnc.Encode(&flvtag.FlvTag{
+			TagType:   flvtag.TagTypeScriptData,
+			Timestamp: timestamp,
+			Data:      &script,
+		}); err != nil {
+			h.log.Errorw("failed to forward script data", err)
+		}
+	}
+
+	return nil
+}
+
+func (h *RTMPHandler) OnAudio(timestamp uint32, payload io.Reader) error {
+	h.flvLock.Lock()
+	defer h.flvLock.Unlock()
+
+	if h.flvEnc != nil {
+
+		var audio flvtag.AudioData
+		if err := flvtag.DecodeAudioData(payload, &audio); err != nil {
+			return err
+		}
+
+		// Why copy the payload here?
+		flvBody := new(bytes.Buffer)
+		if _, err := io.Copy(flvBody, audio.Data); err != nil {
+			return err
+		}
+		audio.Data = flvBody
+
+		if err := h.flvEnc.Encode(&flvtag.FlvTag{
+			TagType:   flvtag.TagTypeAudio,
+			Timestamp: timestamp,
+			Data:      &audio,
+		}); err != nil {
+			// log and continue, or fail and let sender reconnect?
+			h.log.Errorw("failed to write audio", err)
+		}
+	}
+
+	return nil
+}
+
+func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
+	h.flvLock.Lock()
+	defer h.flvLock.Unlock()
+
+	if h.flvEnc != nil {
+		var video flvtag.VideoData
+		if err := flvtag.DecodeVideoData(payload, &video); err != nil {
+			return err
+		}
+
+		flvBody := new(bytes.Buffer)
+		if _, err := io.Copy(flvBody, video.Data); err != nil {
+			return err
+		}
+		video.Data = flvBody
+
+		// Should we drop messages up to the 1st key frame, or will GST do so?
+		if err := h.flvEnc.Encode(&flvtag.FlvTag{
+			TagType:   flvtag.TagTypeVideo,
+			Timestamp: timestamp,
+			Data:      &video,
+		}); err != nil {
+			h.log.Errorw("Failed to write video", err)
+		}
+	}
+
+	return nil
+}
+
+func (h *RTMPHandler) OnClose() {
+	h.log.Infow("closing ingress RTMP session")
+	if h.onClose != nil {
+		h.onClose(h.ingressId)
+	}
+}
+
+func (h *RTMPHandler) StartSerializer(w io.Writer) error {
+	h.flvLock.Lock()
+	defer h.flvLock.Unlock()
 
 	enc, err := flv.NewEncoder(w, flv.FlagsAudio|flv.FlagsVideo)
 	if err != nil {
@@ -145,98 +259,9 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 	return nil
 }
 
-func (h *RTMPHandler) OnSetDataFrame(timestamp uint32, data *rtmpmsg.NetStreamSetDataFrame) error {
-	r := bytes.NewReader(data.Payload)
+func (h *RTMPHandler) StopSerializer() {
+	h.flvLock.Lock()
+	defer h.flvLock.Unlock()
 
-	var script flvtag.ScriptData
-	if err := flvtag.DecodeScriptData(r, &script); err != nil {
-		h.log.Errorw("failed to decode script data", err)
-		return nil // ignore
-	}
-
-	if err := h.flvEnc.Encode(&flvtag.FlvTag{
-		TagType:   flvtag.TagTypeScriptData,
-		Timestamp: timestamp,
-		Data:      &script,
-	}); err != nil {
-		h.log.Errorw("failed to forward script data", err)
-	}
-
-	return nil
-}
-
-func (h *RTMPHandler) OnAudio(timestamp uint32, payload io.Reader) error {
-	var audio flvtag.AudioData
-	if err := flvtag.DecodeAudioData(payload, &audio); err != nil {
-		return err
-	}
-
-	// Why copy the payload here?
-	flvBody := new(bytes.Buffer)
-	if _, err := io.Copy(flvBody, audio.Data); err != nil {
-		return err
-	}
-	audio.Data = flvBody
-
-	if err := h.flvEnc.Encode(&flvtag.FlvTag{
-		TagType:   flvtag.TagTypeAudio,
-		Timestamp: timestamp,
-		Data:      &audio,
-	}); err != nil {
-		// log and continue, or fail and let sender reconnect?
-		h.log.Errorw("failed to write audio", err)
-	}
-
-	return nil
-}
-
-func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
-	var video flvtag.VideoData
-	if err := flvtag.DecodeVideoData(payload, &video); err != nil {
-		return err
-	}
-
-	flvBody := new(bytes.Buffer)
-	if _, err := io.Copy(flvBody, video.Data); err != nil {
-		return err
-	}
-	video.Data = flvBody
-
-	// Should we drop messages up to the 1st key frame, or will GST do so?
-	if err := h.flvEnc.Encode(&flvtag.FlvTag{
-		TagType:   flvtag.TagTypeVideo,
-		Timestamp: timestamp,
-		Data:      &video,
-	}); err != nil {
-		h.log.Errorw("Failed to write video", err)
-	}
-
-	return nil
-}
-
-func (h *RTMPHandler) OnClose() {
-	h.log.Infow("closing ingress RTMP session")
-}
-
-type WrappingWriter struct {
-	w    io.Writer
-	lock sync.Mutex
-}
-
-func (w *WrappingWriter) Write(b []byte) (int, error) {
-	w.lock.Lock()
-	wr := w.w
-	w.lock.Unlock()
-
-	if wr == nil {
-		return len(b), nil
-	}
-
-	return wr.Write(b)
-}
-
-func (w *WrappingWriter) SetWriter(wr io.Writer) {
-	w.lock.Lock()
-	w.w = wr
-	w.lock.Unlock()
+	h.flvEnc = nil
 }
