@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	opusFrameSize       = 20 * time.Millisecond
-	opusFrameSizeString = "20"
+	opusFrameSize  = 20
+	videoFrameRate = 30
 )
 
 // Encoder manages GStreamer elements that converts & encodes video to the specification that's
@@ -55,7 +55,7 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 	err = inputCaps.SetProperty("caps", gst.NewCapsFromString(
 		fmt.Sprintf(
 			"video/x-raw,framerate=%d/1,width=%d,height=%d",
-			30, // TODO: get actual framerate
+			videoFrameRate, // TODO: get actual framerate
 			layer.Width,
 			layer.Height,
 		),
@@ -175,7 +175,7 @@ func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
 		// if err = e.enc.SetProperty("inband-fec", true); err != nil {
 		// 	return nil, err
 		// }
-		e.enc.SetArg("frame-size", opusFrameSizeString)
+		e.enc.SetArg("frame-size", fmt.Sprint(opusFrameSize))
 
 	default:
 		return nil, errors.ErrUnsupportedEncodeFormat
@@ -213,6 +213,34 @@ func newEncoder(mimeType string) (*Encoder, error) {
 	return e, nil
 }
 
+func (e *Encoder) linkElements() error {
+	if err := e.bin.AddMany(e.elements...); err != nil {
+		return err
+	}
+	if err := gst.ElementLinkMany(e.elements...); err != nil {
+		return err
+	}
+
+	binSink := gst.NewGhostPad("sink", e.elements[0].GetStaticPad("sink"))
+	if !e.bin.AddPad(binSink.Pad) {
+		return errors.ErrUnableToAddPad
+	}
+	return nil
+}
+
+func (e *Encoder) Bin() *gst.Bin {
+	return e.bin
+}
+
+func (e *Encoder) ForceKeyFrame() error {
+	keyFrame := gst.NewStructure("GstForceKeyUnit")
+	if err := keyFrame.SetValue("all-headers", true); err != nil {
+		return err
+	}
+	e.enc.SendEvent(gst.NewCustomEvent(gst.EventTypeCustomDownstream, keyFrame))
+	return nil
+}
+
 func (e *Encoder) handleEOS(_ *app.Sink) {
 	close(e.samples)
 }
@@ -245,6 +273,7 @@ func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
 				currentNalType = h264reader.NalUnitType((b & 0x1F) >> 0)
 				if currentNalType == h264reader.NalUnitTypeSEI {
 					nalStart = -1
+					continue
 				}
 			}
 
@@ -277,13 +306,13 @@ func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
 		// untested
 		e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
-			Duration: time.Second / 30.0,
+			Duration: time.Second / time.Duration(videoFrameRate),
 		})
 
 	case webrtc.MimeTypeOpus:
 		e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
-			Duration: opusFrameSize,
+			Duration: opusFrameSize * time.Millisecond,
 		})
 	}
 
@@ -302,7 +331,7 @@ func (e *Encoder) writeNal(nal []byte, nalType h264reader.NalUnitType) {
 		h264reader.NalUnitTypeCodedSliceDataPartitionC,
 		h264reader.NalUnitTypeCodedSliceIdr,
 		h264reader.NalUnitTypeCodedSliceNonIdr:
-		sample.Duration = time.Second / 30.0
+		sample.Duration = time.Second / time.Duration(videoFrameRate)
 	}
 
 	e.writeSample(sample)
@@ -316,34 +345,6 @@ func (e *Encoder) writeSample(sample *media.Sample) {
 		logger.Infow("sample channel full")
 		e.samples <- sample
 	}
-}
-
-func (e *Encoder) linkElements() error {
-	if err := e.bin.AddMany(e.elements...); err != nil {
-		return err
-	}
-	if err := gst.ElementLinkMany(e.elements...); err != nil {
-		return err
-	}
-
-	binSink := gst.NewGhostPad("sink", e.elements[0].GetStaticPad("sink"))
-	if !e.bin.AddPad(binSink.Pad) {
-		return errors.ErrUnableToAddPad
-	}
-	return nil
-}
-
-func (e *Encoder) Bin() *gst.Bin {
-	return e.bin
-}
-
-func (e *Encoder) ForceKeyFrame() error {
-	keyFrame := gst.NewStructure("GstForceKeyUnit")
-	if err := keyFrame.SetValue("all-headers", true); err != nil {
-		return err
-	}
-	e.enc.SendEvent(gst.NewCustomEvent(gst.EventTypeCustomDownstream, keyFrame))
-	return nil
 }
 
 func (e *Encoder) NextSample() (media.Sample, error) {
