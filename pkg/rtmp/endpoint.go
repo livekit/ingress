@@ -7,7 +7,6 @@ import (
 	"net"
 	"sync"
 
-	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/yutopp/go-flv"
 	flvtag "github.com/yutopp/go-flv/tag"
@@ -15,6 +14,7 @@ import (
 	rtmpmsg "github.com/yutopp/go-rtmp/message"
 
 	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/logger"
 )
 
@@ -27,7 +27,7 @@ type RTMPServer struct {
 	writers sync.Map
 }
 
-func NewRTMPServer(conf *config.Config) *RTMPServer {
+func NewRTMPServer() *RTMPServer {
 	return &RTMPServer{}
 }
 
@@ -53,7 +53,7 @@ func (s *RTMPServer) Start(conf *config.Config) error {
 			// Should we find a way to use our own logger?
 			l := log.StandardLogger()
 
-			h := NewHandler(func(ingressId string, w io.Writer) {
+			h := NewRTMPHandler(func(ingressId string, w io.Writer) {
 				s.writers.Store(ingressId, w)
 			})
 
@@ -78,25 +78,33 @@ func (s *RTMPServer) Start(conf *config.Config) error {
 	return nil
 }
 
-func (s *RTMPServer) AssociatePipeline(ingestID string, p io.Writer) {
-	w, ok := s.writers.Load(ingestID)
+func (s *RTMPServer) AssociateRelay(ingressId string, p io.Writer) error {
+	w, ok := s.writers.Load(ingressId)
 	if ok && w != nil {
 		w.(*WrappingWriter).SetWriter(p)
+	} else {
+		return errors.ErrIngressNotFound
 	}
+
+	return nil
 }
 
-func (s *RTMPServer) DissociatePipeline(ingestID string) {
-	w, ok := s.writers.Load(ingestID)
+func (s *RTMPServer) DissociateRelay(ingressId string) error {
+	w, ok := s.writers.Load(ingressId)
 	if ok && w != nil {
 		w.(*WrappingWriter).SetWriter(nil)
+	} else {
+		return errors.ErrIngressNotFound
 	}
+
+	return nil
 }
 
 func (s *RTMPServer) Stop() error {
 	return s.Stop()
 }
 
-type Handler struct {
+type RTMPHandler struct {
 	rtmp.DefaultHandler
 	flvEnc    *flv.Encoder
 	ingressId string
@@ -105,13 +113,13 @@ type Handler struct {
 	onPublish func(ingressId string, w io.Writer)
 }
 
-func NewHandler(onPublish func(ingressId string, w io.Writer)) *Handler {
-	return &Handler{
+func NewRTMPHandler(onPublish func(ingressId string, w io.Writer)) *RTMPHandler {
+	return &RTMPHandler{
 		onPublish: onPublish,
 	}
 }
 
-func (h *Handler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rtmpmsg.NetStreamPublish) error {
+func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rtmpmsg.NetStreamPublish) error {
 	// Reject a connection when PublishingName is empty
 	if cmd.PublishingName == "" {
 		return errors.New("PublishingName is empty")
@@ -136,7 +144,7 @@ func (h *Handler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rtmpms
 	return nil
 }
 
-func (h *Handler) OnSetDataFrame(timestamp uint32, data *rtmpmsg.NetStreamSetDataFrame) error {
+func (h *RTMPHandler) OnSetDataFrame(timestamp uint32, data *rtmpmsg.NetStreamSetDataFrame) error {
 	r := bytes.NewReader(data.Payload)
 
 	var script flvtag.ScriptData
@@ -156,7 +164,7 @@ func (h *Handler) OnSetDataFrame(timestamp uint32, data *rtmpmsg.NetStreamSetDat
 	return nil
 }
 
-func (h *Handler) OnAudio(timestamp uint32, payload io.Reader) error {
+func (h *RTMPHandler) OnAudio(timestamp uint32, payload io.Reader) error {
 	var audio flvtag.AudioData
 	if err := flvtag.DecodeAudioData(payload, &audio); err != nil {
 		return err
@@ -181,7 +189,7 @@ func (h *Handler) OnAudio(timestamp uint32, payload io.Reader) error {
 	return nil
 }
 
-func (h *Handler) OnVideo(timestamp uint32, payload io.Reader) error {
+func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
 	var video flvtag.VideoData
 	if err := flvtag.DecodeVideoData(payload, &video); err != nil {
 		return err
@@ -205,7 +213,7 @@ func (h *Handler) OnVideo(timestamp uint32, payload io.Reader) error {
 	return nil
 }
 
-func (h *Handler) OnClose() {
+func (h *RTMPHandler) OnClose() {
 	h.log.Infow("closing ingress RTMP session")
 }
 

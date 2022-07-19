@@ -13,6 +13,7 @@ var (
 	ErrInvalidInputDimensions  = errors.New("invalid input media dimensions")
 	ErrInvalidInputFPS         = errors.New("invalid input media FPS")
 	ErrInvalidOutputDimensions = errors.New("invalid output media dimensions")
+	ErrIngressNotFound         = errors.New("ingress not found")
 )
 
 func New(err string) error {
