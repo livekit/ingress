@@ -3,13 +3,22 @@ package media
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v3/pkg/media"
+	"github.com/pion/webrtc/v3/pkg/media/h264reader"
 	"github.com/tinyzimmer/go-gst/gst"
 	"github.com/tinyzimmer/go-gst/gst/app"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/logger"
+)
+
+const (
+	opusFrameSize  = 20
+	videoFrameRate = 30
 )
 
 // Encoder manages GStreamer elements that converts & encodes video to the specification that's
@@ -17,15 +26,16 @@ import (
 type Encoder struct {
 	bin *gst.Bin
 
+	mimeType string
 	elements []*gst.Element
 	enc      *gst.Element
 	sink     *app.Sink
-	writer   *io.PipeWriter
-	reader   *io.PipeReader
+
+	samples chan *media.Sample
 }
 
 func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, error) {
-	e, err := newEncoder()
+	e, err := newEncoder(mimeType)
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +55,7 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 	err = inputCaps.SetProperty("caps", gst.NewCapsFromString(
 		fmt.Sprintf(
 			"video/x-raw,framerate=%d/1,width=%d,height=%d",
-			30, // TODO: get actual framerate
+			videoFrameRate, // TODO: get actual framerate
 			layer.Width,
 			layer.Height,
 		),
@@ -63,29 +73,29 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 		if err != nil {
 			return nil, err
 		}
+
 		if err = e.enc.SetProperty("bitrate", uint(layer.Bitrate)); err != nil {
 			return nil, err
 		}
-		// temporary, only while during testing
-		// if err = enc.SetProperty("key-int-max", uint(100)); err != nil {
-		// 	return nil, err
-		// }
 		if err = e.enc.SetProperty("byte-stream", true); err != nil {
 			return nil, err
 		}
 		e.enc.SetArg("speed-preset", "veryfast")
-		e.enc.SetArg("tune", "zerolatency")
+
 		profileCaps, err := gst.NewElement("capsfilter")
 		if err != nil {
 			return nil, err
 		}
-		err = profileCaps.SetProperty("caps", gst.NewCapsFromString(
+		if err = profileCaps.SetProperty("caps", gst.NewCapsFromString(
 			fmt.Sprintf("video/x-h264,stream-format=byte-stream,profile=baseline"),
-		))
+		)); err != nil {
+			return nil, err
+		}
+
+		e.elements = append(e.elements, e.enc, profileCaps)
 		if err != nil {
 			return nil, err
 		}
-		e.elements = append(e.elements, e.enc, profileCaps)
 
 	case webrtc.MimeTypeVP8:
 		e.enc, err = gst.NewElement("vp8enc")
@@ -106,6 +116,7 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 
 	e.elements = append(e.elements, e.sink.Element)
 
+	e.bin = gst.NewBin("video")
 	if err = e.linkElements(); err != nil {
 		return nil, err
 	}
@@ -114,7 +125,7 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 }
 
 func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
-	e, err := newEncoder()
+	e, err := newEncoder(options.MimeType)
 	if err != nil {
 		return nil, err
 	}
@@ -129,6 +140,11 @@ func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
 		channels = int(options.Channels)
 	}
 
+	audioResample, err := gst.NewElement("audioresample")
+	if err != nil {
+		return nil, err
+	}
+
 	capsFilter, err := gst.NewElement("capsfilter")
 	if err != nil {
 		return nil, err
@@ -140,28 +156,36 @@ func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
 		return nil, err
 	}
 
-	var enc *gst.Element
 	switch options.MimeType {
 	case webrtc.MimeTypeOpus:
-		enc, err = gst.NewElement("opusenc")
+		e.enc, err = gst.NewElement("opusenc")
 		if err != nil {
 			return nil, err
 		}
-		if err = enc.SetProperty("bitrate", int(options.Bitrate)); err != nil {
+
+		if options.Bitrate != 0 {
+			if err = e.enc.SetProperty("bitrate", int(options.Bitrate)); err != nil {
+				return nil, err
+			}
+		}
+		if err = e.enc.SetProperty("dtx", !options.DisableDtx); err != nil {
 			return nil, err
 		}
-		if err = enc.SetProperty("dtx", !options.DisableDtx); err != nil {
-			return nil, err
-		}
+		// TODO: FEC?
+		// if err = e.enc.SetProperty("inband-fec", true); err != nil {
+		// 	return nil, err
+		// }
+		e.enc.SetArg("frame-size", fmt.Sprint(opusFrameSize))
 
 	default:
 		return nil, errors.ErrUnsupportedEncodeFormat
 	}
 
 	e.elements = []*gst.Element{
-		audioConvert, capsFilter, enc, e.sink.Element,
+		audioConvert, audioResample, capsFilter, e.enc, e.sink.Element,
 	}
 
+	e.bin = gst.NewBin("audio")
 	if err = e.linkElements(); err != nil {
 		return nil, err
 	}
@@ -169,57 +193,27 @@ func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
 	return e, nil
 }
 
-func newEncoder() (*Encoder, error) {
+func newEncoder(mimeType string) (*Encoder, error) {
 	sink, err := app.NewAppSink()
 	if err != nil {
 		return nil, err
 	}
 
 	e := &Encoder{
-		sink: sink,
+		mimeType: mimeType,
+		sink:     sink,
+		samples:  make(chan *media.Sample, 1000),
 	}
+
 	sink.SetCallbacks(&app.SinkCallbacks{
-		EOSFunc:        e.handleEOS,
-		NewPrerollFunc: nil,
-		NewSampleFunc:  e.handleSample,
+		EOSFunc:       e.handleEOS,
+		NewSampleFunc: e.handleSample,
 	})
-	e.reader, e.writer = io.Pipe()
+
 	return e, nil
 }
 
-func (e *Encoder) handleEOS(_ *app.Sink) {
-	_ = e.Close()
-}
-
-func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
-	// Pull the sample that triggered this callback
-	sample := sink.PullSample()
-	if sample == nil {
-		return gst.FlowEOS
-	}
-
-	// Retrieve the buffer from the sample
-	buffer := sample.GetBuffer()
-	if buffer == nil {
-		return gst.FlowError
-	}
-
-	if _, err := e.writer.Write(buffer.Bytes()); err != nil {
-		_ = e.writer.CloseWithError(err)
-		return gst.FlowError
-	}
-
-	return gst.FlowOK
-}
-
 func (e *Encoder) linkElements() error {
-	if e.bin != nil {
-		// already linked
-		return nil
-	}
-
-	e.bin = gst.NewBin("encoder")
-
 	if err := e.bin.AddMany(e.elements...); err != nil {
 		return err
 	}
@@ -247,10 +241,125 @@ func (e *Encoder) ForceKeyFrame() error {
 	return nil
 }
 
-func (e *Encoder) Read(p []byte) (int, error) {
-	return e.reader.Read(p)
+func (e *Encoder) handleEOS(_ *app.Sink) {
+	close(e.samples)
 }
 
-func (e *Encoder) Close() error {
-	return e.writer.Close()
+func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
+	// Pull the sample that triggered this callback
+	s := sink.PullSample()
+	if s == nil {
+		return gst.FlowEOS
+	}
+
+	// Retrieve the buffer from the sample
+	buffer := s.GetBuffer()
+	if buffer == nil {
+		return gst.FlowError
+	}
+
+	switch e.mimeType {
+	case webrtc.MimeTypeH264:
+		data := buffer.Bytes()
+
+		var currentNalType h264reader.NalUnitType
+		nalStart := -1
+		zeroes := 0
+
+		// pion's h264 packetizer only accepts one NAL per packet
+		for i, b := range data {
+			if i == nalStart {
+				// get type of current NAL
+				currentNalType = h264reader.NalUnitType((b & 0x1F) >> 0)
+				if currentNalType == h264reader.NalUnitTypeSEI {
+					nalStart = -1
+					continue
+				}
+			}
+
+			if b == 0 {
+				zeroes++
+			} else {
+				// NAL separator is either [0 0 0 1] or [0 0 1]
+				if b == 1 && (zeroes > 1) {
+					if nalStart > 0 {
+						nalEnd := i - zeroes
+						if zeroes > 3 {
+							nalEnd = i - 3
+						}
+
+						e.writeNal(data[nalStart:nalEnd], currentNalType)
+					}
+
+					nalStart = i + 1
+				}
+
+				zeroes = 0
+			}
+		}
+
+		if nalStart > 0 && nalStart < len(data) {
+			e.writeNal(data[nalStart:], currentNalType)
+		}
+
+	case webrtc.MimeTypeVP8:
+		// untested
+		e.writeSample(&media.Sample{
+			Data:     buffer.Bytes(),
+			Duration: time.Second / time.Duration(videoFrameRate),
+		})
+
+	case webrtc.MimeTypeOpus:
+		e.writeSample(&media.Sample{
+			Data:     buffer.Bytes(),
+			Duration: opusFrameSize * time.Millisecond,
+		})
+	}
+
+	return gst.FlowOK
+}
+
+func (e *Encoder) writeNal(nal []byte, nalType h264reader.NalUnitType) {
+	sample := &media.Sample{
+		Data: nal,
+	}
+
+	// only these NAL types get a duration
+	switch nalType {
+	case h264reader.NalUnitTypeCodedSliceDataPartitionA,
+		h264reader.NalUnitTypeCodedSliceDataPartitionB,
+		h264reader.NalUnitTypeCodedSliceDataPartitionC,
+		h264reader.NalUnitTypeCodedSliceIdr,
+		h264reader.NalUnitTypeCodedSliceNonIdr:
+		sample.Duration = time.Second / time.Duration(videoFrameRate)
+	}
+
+	e.writeSample(sample)
+}
+
+func (e *Encoder) writeSample(sample *media.Sample) {
+	select {
+	case e.samples <- sample:
+		// continue
+	default:
+		logger.Infow("sample channel full")
+		e.samples <- sample
+	}
+}
+
+func (e *Encoder) NextSample() (media.Sample, error) {
+	sample := <-e.samples
+	if sample == nil {
+		return media.Sample{}, io.EOF
+	}
+
+	return *sample, nil
+}
+
+func (e *Encoder) OnBind() error {
+	return nil
+}
+
+func (e *Encoder) OnUnbind() error {
+	return nil
 }

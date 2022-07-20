@@ -3,7 +3,9 @@ package media
 import (
 	"context"
 
+	"github.com/go-logr/logr"
 	"github.com/pion/rtcp"
+	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst"
 
 	"github.com/livekit/ingress/pkg/config"
@@ -26,6 +28,7 @@ func NewWebRTCSink(ctx context.Context, conf *config.Config, p *Params) (*WebRTC
 	ctx, span := tracer.Start(ctx, "media.NewWebRTCSink")
 	defer span.End()
 
+	lksdk.SetLogger(logr.Logger(p.Logger))
 	room, err := lksdk.ConnectToRoom(
 		p.WsUrl,
 		lksdk.ConnectInfo{
@@ -83,15 +86,6 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 		return nil, err
 	}
 
-	var pub *lksdk.LocalTrackPublication
-	onComplete := func() {
-		s.logger.Debugw("write complete")
-		if pub != nil {
-			if err := s.room.LocalParticipant.UnpublishTrack(pub.SID()); err != nil {
-				s.logger.Errorw("could not unpublish track", err)
-			}
-		}
-	}
 	onRTCP := func(pkt rtcp.Packet) {
 		switch pkt.(type) {
 		case *rtcp.PictureLossIndication:
@@ -101,15 +95,26 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 			}
 		}
 	}
-
-	track, err := lksdk.NewLocalReaderTrack(encoder, mimeType,
-		lksdk.ReaderTrackWithRTCPHandler(onRTCP),
-		lksdk.ReaderTrackWithOnWriteComplete(onComplete),
-	)
+	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: mimeType}, lksdk.WithRTCPHandler(onRTCP))
 	if err != nil {
 		s.logger.Errorw("could not create track", err)
 		return nil, err
 	}
+
+	var pub *lksdk.LocalTrackPublication
+	onComplete := func() {
+		s.logger.Debugw("write complete")
+		if pub != nil {
+			if err := s.room.LocalParticipant.UnpublishTrack(pub.SID()); err != nil {
+				s.logger.Errorw("could not unpublish track", err)
+			}
+		}
+	}
+	track.OnBind(func() {
+		if err := track.StartWrite(encoder, onComplete); err != nil {
+			s.logger.Errorw("could not start writing", err)
+		}
+	})
 
 	pub, err = s.room.LocalParticipant.PublishTrack(track, opts)
 	if err != nil {

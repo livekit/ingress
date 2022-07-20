@@ -4,14 +4,13 @@ go 1.17
 
 require (
 	github.com/frostbyte73/go-throttle v0.0.0-20210621200530-8018c891361d
+	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/zapr v1.2.3
-	github.com/google/uuid v1.3.0
-	github.com/livekit/protocol v0.13.5-0.20220706183450-cad53a318595
+	github.com/livekit/protocol v0.13.5-0.20220715172701-47777c7162cb
 	github.com/livekit/server-sdk-go v0.10.5-0.20220714205315-505cb6a6ce71
 	github.com/mackerelio/go-osstat v0.2.2
 	github.com/pion/rtcp v1.2.9
 	github.com/pion/webrtc/v3 v3.1.42
-	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.12.2
 	github.com/sirupsen/logrus v1.7.0
 	github.com/stretchr/testify v1.8.0
@@ -26,8 +25,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-replace github.com/livekit/protocol => ../protocol
-
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bep/debounce v1.2.0 // indirect
@@ -37,10 +34,10 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/eapache/channels v1.1.0 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
-	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.0.0 // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/websocket v1.4.2 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
@@ -66,6 +63,7 @@ require (
 	github.com/pion/transport v0.13.1 // indirect
 	github.com/pion/turn/v2 v2.0.8 // indirect
 	github.com/pion/udp v0.1.1 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.32.1 // indirect
