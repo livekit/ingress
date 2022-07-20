@@ -48,11 +48,11 @@ func (s *RTMPServer) Start(conf *config.Config) error {
 			l := log.StandardLogger()
 
 			h := NewRTMPHandler()
-			h.OnPublishCallback(func(ingressId string) {
-				s.handlers.Store(ingressId, h)
+			h.OnPublishCallback(func(streamKey string) {
+				s.handlers.Store(streamKey, h)
 			})
-			h.OnCloseCallback(func(ingressId string) {
-				s.handlers.Delete(ingressId)
+			h.OnCloseCallback(func(streamKey string) {
+				s.handlers.Delete(streamKey)
 			})
 
 			return conn, &rtmp.ConnConfig{
@@ -77,8 +77,8 @@ func (s *RTMPServer) Start(conf *config.Config) error {
 	return nil
 }
 
-func (s *RTMPServer) AssociateRelay(ingressId string, w io.Writer) error {
-	h, ok := s.handlers.Load(ingressId)
+func (s *RTMPServer) AssociateRelay(streamKey string, w io.Writer) error {
+	h, ok := s.handlers.Load(streamKey)
 	if ok && h != nil {
 		err := h.(*RTMPHandler).StartSerializer(w)
 		if err != nil {
@@ -91,8 +91,8 @@ func (s *RTMPServer) AssociateRelay(ingressId string, w io.Writer) error {
 	return nil
 }
 
-func (s *RTMPServer) DissociateRelay(ingressId string) error {
-	h, ok := s.handlers.Load(ingressId)
+func (s *RTMPServer) DissociateRelay(streamKey string) error {
+	h, ok := s.handlers.Load(streamKey)
 	if ok && h != nil {
 		h.(*RTMPHandler).StopSerializer()
 	} else {
@@ -110,26 +110,26 @@ type RTMPHandler struct {
 	rtmp.DefaultHandler
 	flvLock       sync.Mutex
 	flvEnc        *flv.Encoder
-	ingressId     string
+	streamKey     string
 	videoInit     *flvtag.VideoData
 	audioInit     *flvtag.AudioData
 	keyFrameFound bool
 
 	log logger.Logger
 
-	onPublish func(ingressId string)
-	onClose   func(ingressId string)
+	onPublish func(streamKey string)
+	onClose   func(streamKey string)
 }
 
 func NewRTMPHandler() *RTMPHandler {
 	return &RTMPHandler{}
 }
 
-func (h *RTMPHandler) OnPublishCallback(cb func(ingressId string)) {
+func (h *RTMPHandler) OnPublishCallback(cb func(streamKey string)) {
 	h.onPublish = cb
 }
 
-func (h *RTMPHandler) OnCloseCallback(cb func(ingressId string)) {
+func (h *RTMPHandler) OnCloseCallback(cb func(streamKey string)) {
 	h.onClose = cb
 }
 
@@ -141,13 +141,13 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 
 	// TODO check in store that PublishingName == stream key belongs to a valid ingress
 
-	_, h.ingressId = path.Split(cmd.PublishingName)
-	h.log = logger.Logger(logger.GetLogger().WithValues("ingressID", cmd.PublishingName))
+	_, h.streamKey = path.Split(cmd.PublishingName)
+	h.log = logger.Logger(logger.GetLogger().WithValues("streamKey", h.streamKey))
 	if h.onPublish != nil {
-		h.onPublish(h.ingressId)
+		h.onPublish(h.streamKey)
 	}
 
-	h.log.Infow("Received a new published stream", "ingressID", cmd.PublishingName)
+	h.log.Infow("Received a new published stream")
 
 	return nil
 }
@@ -259,7 +259,7 @@ func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
 func (h *RTMPHandler) OnClose() {
 	h.log.Infow("closing ingress RTMP session")
 	if h.onClose != nil {
-		h.onClose(h.ingressId)
+		h.onClose(h.streamKey)
 	}
 }
 

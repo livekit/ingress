@@ -69,21 +69,21 @@ func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	ingressId := strings.TrimLeft(r.URL.Path, "/")
+	streamKey := strings.TrimLeft(r.URL.Path, "/")
 
-	log := logger.Logger(logger.GetLogger().WithValues("ingressID", ingressId))
+	log := logger.Logger(logger.GetLogger().WithValues("streamKey", streamKey))
 	log.Infow("relaying ingress")
 
 	pr, pw := io.Pipe()
 	bw := bufio.NewWriterSize(pw, 100)
 
-	err = h.rtmpServer.AssociateRelay(ingressId, bw)
+	err = h.rtmpServer.AssociateRelay(streamKey, bw)
 	if err != nil {
 		return
 	}
 	defer func() {
 		pw.Close()
-		h.rtmpServer.DissociateRelay(ingressId)
+		h.rtmpServer.DissociateRelay(streamKey)
 	}()
 
 	_, err = io.Copy(w, pr)

@@ -8,6 +8,7 @@ import (
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/utils"
 )
 
 type Params struct {
@@ -30,13 +31,16 @@ type Params struct {
 }
 
 func Validate(ctx context.Context, conf *config.Config, req *livekit.StartIngressRequest) (*livekit.IngressInfo, error) {
-	p, err := getParams(ctx, conf, req)
-	p.Url = rtmp.NewUrl(req.IngressId)
+	sk := utils.NewGuid("")
+
+	p, err := getParams(ctx, conf, req, sk)
+
+	p.Url = rtmp.NewUrl(p.IngressInfo.StreamKey)
 	return p.IngressInfo, err
 }
 
-func GetParams(ctx context.Context, conf *config.Config, req *livekit.StartIngressRequest, url string) (*Params, error) {
-	p, err := getParams(ctx, conf, req)
+func GetParams(ctx context.Context, conf *config.Config, req *livekit.StartIngressRequest, url string, streamKey string) (*Params, error) {
+	p, err := getParams(ctx, conf, req, streamKey)
 	if err != nil {
 		return nil, err
 	}
@@ -44,10 +48,11 @@ func GetParams(ctx context.Context, conf *config.Config, req *livekit.StartIngre
 	return p, nil
 }
 
-func getParams(ctx context.Context, conf *config.Config, req *livekit.StartIngressRequest) (p *Params, err error) {
+func getParams(ctx context.Context, conf *config.Config, req *livekit.StartIngressRequest, streamKey string) (p *Params, err error) {
 	p = &Params{
 		IngressInfo: &livekit.IngressInfo{
 			IngressId:           req.IngressId,
+			StreamKey:           streamKey,
 			Name:                req.Request.Name,
 			InputType:           0,
 			Status:              livekit.IngressInfo_ENDPOINT_WAITING,
@@ -64,13 +69,13 @@ func getParams(ctx context.Context, conf *config.Config, req *livekit.StartIngre
 		WsUrl:        conf.WsUrl,
 		ApiKey:       conf.ApiKey,
 		ApiSecret:    conf.ApiSecret,
-		RelayUrl:     getRelayUrl(conf, req),
+		RelayUrl:     getRelayUrl(conf, streamKey),
 		GstReady:     make(chan struct{}),
 	}
 
 	return
 }
 
-func getRelayUrl(conf *config.Config, req *livekit.StartIngressRequest) string {
-	return fmt.Sprintf("http://localhost:%d/%s", conf.HTTPRelayPort, req.IngressId)
+func getRelayUrl(conf *config.Config, streamKey string) string {
+	return fmt.Sprintf("http://localhost:%d/%s", conf.HTTPRelayPort, streamKey)
 }

@@ -44,6 +44,9 @@ func main() {
 					&cli.StringFlag{
 						Name: "config-body",
 					},
+					&cli.StringFlag{
+						Name: "stream-key",
+					},
 				},
 				Action: runHandler,
 				Hidden: true,
@@ -188,8 +191,12 @@ func runHandler(c *cli.Context) error {
 	if url == "" {
 		return errors.New("url missing")
 	}
+	streamKey := c.String("stream-key")
+	if streamKey == "" {
+		return errors.New("stream key missing")
+	}
 
-	handler.HandleRequest(ctx, req, url)
+	handler.HandleRequest(ctx, req, url, streamKey)
 	return nil
 }
 
