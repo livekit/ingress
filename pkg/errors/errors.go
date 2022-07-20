@@ -3,6 +3,8 @@ package errors
 import (
 	"errors"
 	"fmt"
+
+	"github.com/tinyzimmer/go-gst/gst"
 )
 
 var (
@@ -13,6 +15,7 @@ var (
 	ErrInvalidInputDimensions  = errors.New("invalid input media dimensions")
 	ErrInvalidInputFPS         = errors.New("invalid input media FPS")
 	ErrInvalidOutputDimensions = errors.New("invalid output media dimensions")
+	ErrIngressNotFound         = errors.New("ingress not found")
 )
 
 func New(err string) error {
@@ -21,4 +24,8 @@ func New(err string) error {
 
 func ErrCouldNotParseConfig(err error) error {
 	return fmt.Errorf("could not parse config: %v", err)
+}
+
+func ErrFromGstFlowReturn(ret gst.FlowReturn) error {
+	return fmt.Errorf("GST Flow Error %d (%s)", ret, ret.String())
 }

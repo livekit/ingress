@@ -44,6 +44,9 @@ func main() {
 					&cli.StringFlag{
 						Name: "config-body",
 					},
+					&cli.StringFlag{
+						Name: "stream-key",
+					},
 				},
 				Action: runHandler,
 				Hidden: true,
@@ -115,20 +118,34 @@ func runService(c *cli.Context) error {
 	killChan := make(chan os.Signal, 1)
 	signal.Notify(killChan, syscall.SIGINT)
 
+	// Run RTMP server
+	rtmpsrv := rtmp.NewRTMPServer()
+	relay := rtmp.NewRTMPRelay(rtmpsrv)
+
+	err = rtmpsrv.Start(conf)
+	if err != nil {
+		return err
+	}
+	err = relay.Start(conf)
+	if err != nil {
+		return err
+	}
+
 	go func() {
 		select {
 		case sig := <-stopChan:
 			logger.Infow("exit requested, finishing recording then shutting down", "signal", sig)
 			svc.Stop(false)
+			relay.Stop()
+			rtmpsrv.Stop()
+
 		case sig := <-killChan:
 			logger.Infow("exit requested, stopping recording and shutting down", "signal", sig)
 			svc.Stop(true)
+			relay.Stop()
+			rtmpsrv.Stop()
 		}
 	}()
-
-	if err = rtmp.Launch(); err != nil {
-		return err
-	}
 
 	return svc.Run()
 }
@@ -174,8 +191,12 @@ func runHandler(c *cli.Context) error {
 	if url == "" {
 		return errors.New("url missing")
 	}
+	streamKey := c.String("stream-key")
+	if streamKey == "" {
+		return errors.New("stream key missing")
+	}
 
-	handler.HandleRequest(ctx, req, url)
+	handler.HandleRequest(ctx, req, url, streamKey)
 	return nil
 }
 

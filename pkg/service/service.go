@@ -122,7 +122,7 @@ func (s *Service) Run() error {
 					continue
 				}
 
-				go s.launchHandler(ctx, req, info.Url)
+				go s.launchHandler(ctx, req, info.Url, info.StreamKey)
 			}
 
 			span.End()
@@ -193,7 +193,7 @@ func (s *Service) sendResponse(ctx context.Context, req *livekit.StartIngressReq
 	}
 }
 
-func (s *Service) launchHandler(ctx context.Context, req *livekit.StartIngressRequest, url string) {
+func (s *Service) launchHandler(ctx context.Context, req *livekit.StartIngressRequest, url string, streamKey string) {
 	ctx, span := tracer.Start(ctx, "Service.launchHandler")
 	defer span.End()
 
@@ -216,6 +216,7 @@ func (s *Service) launchHandler(ctx context.Context, req *livekit.StartIngressRe
 		"--config-body", string(confString),
 		"--request", string(reqString),
 		"--url", url,
+		"--stream-key", streamKey,
 	)
 	cmd.Dir = "/"
 	cmd.Stdout = os.Stdout

@@ -19,6 +19,7 @@ type Pipeline struct {
 	pipeline *gst.Pipeline
 	loop     *glib.MainLoop
 	sink     *WebRTCSink
+	input    *Input
 
 	onStatusUpdate func(context.Context, *livekit.IngressInfo)
 	closed         chan struct{}
@@ -56,6 +57,7 @@ func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, e
 		Params:   params,
 		pipeline: pipeline,
 		sink:     sink,
+		input:    input,
 		closed:   make(chan struct{}),
 	}
 
@@ -112,9 +114,19 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 		return p.IngressInfo
 	}
 
+	err := p.input.Start(ctx)
+	if err != nil {
+		span.RecordError(err)
+		p.Logger.Errorw("failed to start input", err)
+		p.InputStatus = &livekit.InputStatus{StatusDescription: err.Error()}
+		p.Status = livekit.IngressInfo_ENDPOINT_ERROR
+		return p.IngressInfo
+	}
+
 	// run main loop
 	p.loop.Run()
 
+	p.input.Close()
 	p.sink.Close()
 	return p.IngressInfo
 }

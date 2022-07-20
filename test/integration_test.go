@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io/ioutil"
-	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -16,6 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
@@ -37,14 +37,22 @@ func TestIngress(t *testing.T) {
 	tc.NodeID = "INGRESS_TEST"
 	tc.InitLogger()
 
-	rtsp := exec.Command("./rtsp-simple-server")
-	rtsp.Stdout = os.Stdout
-	rtsp.Stderr = os.Stderr
-	rtsp.Dir = "../bin"
-	require.NoError(t, rtsp.Start())
-	t.Cleanup(func() { _ = rtsp.Process.Kill() })
-
 	conf := tc.Config
+	conf.RTMPPort = 1935
+	conf.HTTPRelayPort = 9090
+
+	rtmpsrv := rtmp.NewRTMPServer()
+	relay := rtmp.NewRTMPRelay(rtmpsrv)
+
+	err = rtmpsrv.Start(conf)
+	require.NoError(t, err)
+	err = relay.Start(conf)
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		relay.Stop()
+		rtmpsrv.Stop()
+	})
 
 	rc, err := redis.GetRedisClient(conf.Redis)
 	require.NoError(t, err)

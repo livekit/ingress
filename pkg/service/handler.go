@@ -29,11 +29,11 @@ func NewHandler(conf *config.Config, rpcServer ingress.RPCServer) *Handler {
 	}
 }
 
-func (h *Handler) HandleRequest(ctx context.Context, req *livekit.StartIngressRequest, url string) {
+func (h *Handler) HandleRequest(ctx context.Context, req *livekit.StartIngressRequest, url string, streamKey string) {
 	ctx, span := tracer.Start(ctx, "Handler.HandleRequest")
 	defer span.End()
 
-	p, err := h.buildPipeline(ctx, req, url)
+	p, err := h.buildPipeline(ctx, req, url, streamKey)
 	if err != nil {
 		span.RecordError(err)
 		return
@@ -87,13 +87,13 @@ func (h *Handler) HandleRequest(ctx context.Context, req *livekit.StartIngressRe
 	}
 }
 
-func (h *Handler) buildPipeline(ctx context.Context, req *livekit.StartIngressRequest, url string) (*media.Pipeline, error) {
+func (h *Handler) buildPipeline(ctx context.Context, req *livekit.StartIngressRequest, url string, streamKey string) (*media.Pipeline, error) {
 	ctx, span := tracer.Start(ctx, "Handler.buildPipeline")
 	defer span.End()
 
 	// build/verify params
 	var p *media.Pipeline
-	params, err := media.GetParams(ctx, h.conf, req, url)
+	params, err := media.GetParams(ctx, h.conf, req, url, streamKey)
 	if err == nil {
 		// create the pipeline
 		p, err = media.New(ctx, h.conf, params)
