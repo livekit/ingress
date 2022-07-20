@@ -13,6 +13,7 @@ import (
 )
 
 type RTMPRelay struct {
+	server     *http.Server
 	rtmpServer *RTMPServer
 }
 
@@ -26,15 +27,23 @@ func (r *RTMPRelay) Start(conf *config.Config) error {
 	port := conf.HTTPRelayPort
 
 	h := NewRTMPRelayHandler(r.rtmpServer)
+	r.server = &http.Server{
+		Handler: h,
+		Addr:    fmt.Sprintf(":%d", port),
+	}
 
 	go func() {
-		err := http.ListenAndServe(fmt.Sprintf(":%d", port), h)
+		err := r.server.ListenAndServe()
 		if err != nil {
 			logger.Errorw("failed to start RTMP relay", err)
 		}
 	}()
 
 	return nil
+}
+
+func (r *RTMPRelay) Stop() error {
+	return r.server.Close()
 }
 
 type RTMPRelayHandler struct {

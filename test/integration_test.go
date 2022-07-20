@@ -50,6 +50,7 @@ func TestIngress(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
+		relay.Stop()
 		rtmpsrv.Stop()
 	})
 
