@@ -87,6 +87,4 @@ func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	_, err = io.Copy(w, pr)
-	fmt.Println("Copy", err)
-
 }
