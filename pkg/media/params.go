@@ -72,5 +72,5 @@ func getParams(ctx context.Context, conf *config.Config, req *livekit.StartIngre
 }
 
 func getRelayUrl(conf *config.Config, req *livekit.StartIngressRequest) string {
-	return fmt.Sprintf("http://localhost:%d/%d", conf.HTTPRelayPort, req.IngressId)
+	return fmt.Sprintf("http://localhost:%d/%s", conf.HTTPRelayPort, req.IngressId)
 }
