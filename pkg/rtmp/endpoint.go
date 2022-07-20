@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"path"
 	"sync"
 
 	log "github.com/sirupsen/logrus"
@@ -102,7 +103,7 @@ func (s *RTMPServer) DissociateRelay(ingressId string) error {
 }
 
 func (s *RTMPServer) Stop() error {
-	return s.Stop()
+	return s.server.Close()
 }
 
 type RTMPHandler struct {
@@ -139,7 +140,7 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 
 	// TODO check in store that PublishingName == stream key belongs to a valid ingress
 
-	h.ingressId = cmd.PublishingName
+	_, h.ingressId = path.Split(cmd.PublishingName)
 	h.log = logger.Logger(logger.GetLogger().WithValues("ingressID", cmd.PublishingName))
 	if h.onPublish != nil {
 		h.onPublish(h.ingressId)

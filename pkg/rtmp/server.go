@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-
-	"github.com/google/uuid"
 )
 
 func Launch() error {
@@ -15,8 +13,8 @@ func Launch() error {
 	return cmd.Start()
 }
 
-func NewUrl() string {
-	return fmt.Sprintf("rtmp://localhost:1935/live/%s", uuid.NewString())
+func NewUrl(ingressId string) string {
+	return fmt.Sprintf("rtmp://localhost:1935/live/%s", ingressId)
 }
 
 func Wait(url string) {

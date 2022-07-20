@@ -31,7 +31,7 @@ type Params struct {
 
 func Validate(ctx context.Context, conf *config.Config, req *livekit.StartIngressRequest) (*livekit.IngressInfo, error) {
 	p, err := getParams(ctx, conf, req)
-	p.Url = rtmp.NewUrl()
+	p.Url = rtmp.NewUrl(req.IngressId)
 	return p.IngressInfo, err
 }
 

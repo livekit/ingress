@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -40,6 +41,10 @@ func NewHTTPRelaySource(ctx context.Context, p *Params) (*HTTPRelaySource, error
 		return nil, err
 	}
 	src.SetProperty("caps", "video/x-flv")
+	src.SetArg("format", "time")
+	if err := src.SetProperty("is-live", true); err != nil {
+		return nil, err
+	}
 	s.flvSrc = app.SrcFromElement(src)
 	s.writer = newAppSrcWriter(s.flvSrc)
 
@@ -48,8 +53,11 @@ func NewHTTPRelaySource(ctx context.Context, p *Params) (*HTTPRelaySource, error
 
 func (s *HTTPRelaySource) Start(ctx context.Context) error {
 	resp, err := http.Get(s.params.RelayUrl)
-	if err != nil {
+	switch {
+	case err != nil:
 		return err
+	case resp != nil && (resp.StatusCode < 200 || resp.StatusCode >= 400):
+		return fmt.Errorf("HTTP request failed with code %d", resp.StatusCode)
 	}
 
 	go func() {

@@ -26,10 +26,13 @@ func (r *RTMPRelay) Start(conf *config.Config) error {
 	port := conf.HTTPRelayPort
 
 	h := NewRTMPRelayHandler(r.rtmpServer)
-	err := http.ListenAndServe(fmt.Sprintf(":%d", port), h)
-	if err != nil {
-		return err
-	}
+
+	go func() {
+		err := http.ListenAndServe(fmt.Sprintf(":%d", port), h)
+		if err != nil {
+			logger.Errorw("failed to start RTMP relay", err)
+		}
+	}()
 
 	return nil
 }
