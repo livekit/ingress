@@ -12,7 +12,10 @@ import (
 )
 
 func main() {
-	conf := &config.Config{}
+	conf := &config.Config{
+		RTMPPort:      1935,
+		HTTPRelayPort: 9090,
+	}
 
 	rtmpServer := rtmp.NewRTMPServer()
 	relay := rtmp.NewRTMPRelay(rtmpServer)
