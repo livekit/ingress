@@ -1,7 +1,6 @@
 package rtmp
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"net/http"
@@ -75,9 +74,15 @@ func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Infow("relaying ingress")
 
 	pr, pw := io.Pipe()
-	bw := bufio.NewWriterSize(pw, 100)
+	done := make(chan error)
 
-	err = h.rtmpServer.AssociateRelay(streamKey, bw)
+	go func() {
+		_, err = io.Copy(w, pr)
+		done <- err
+		close(done)
+	}()
+
+	err = h.rtmpServer.AssociateRelay(streamKey, pw)
 	if err != nil {
 		return
 	}
@@ -86,5 +91,5 @@ func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.rtmpServer.DissociateRelay(streamKey)
 	}()
 
-	_, err = io.Copy(w, pr)
+	err = <-done
 }

@@ -80,7 +80,7 @@ func (s *RTMPServer) Start(conf *config.Config) error {
 func (s *RTMPServer) AssociateRelay(streamKey string, w io.Writer) error {
 	h, ok := s.handlers.Load(streamKey)
 	if ok && h != nil {
-		err := h.(*RTMPHandler).StartSerializer(w)
+		err := h.(*RTMPHandler).SetWriter(w)
 		if err != nil {
 			return err
 		}
@@ -94,7 +94,10 @@ func (s *RTMPServer) AssociateRelay(streamKey string, w io.Writer) error {
 func (s *RTMPServer) DissociateRelay(streamKey string) error {
 	h, ok := s.handlers.Load(streamKey)
 	if ok && h != nil {
-		h.(*RTMPHandler).StopSerializer()
+		err := h.(*RTMPHandler).SetWriter(nil)
+		if err != nil {
+			return err
+		}
 	} else {
 		return errors.ErrIngressNotFound
 	}
@@ -108,12 +111,13 @@ func (s *RTMPServer) Stop() error {
 
 type RTMPHandler struct {
 	rtmp.DefaultHandler
-	flvLock       sync.Mutex
+
 	flvEnc        *flv.Encoder
 	streamKey     string
 	videoInit     *flvtag.VideoData
 	audioInit     *flvtag.AudioData
 	keyFrameFound bool
+	mediaBuffer   *prerollBuffer
 
 	log logger.Logger
 
@@ -122,7 +126,16 @@ type RTMPHandler struct {
 }
 
 func NewRTMPHandler() *RTMPHandler {
-	return &RTMPHandler{}
+	h := &RTMPHandler{}
+
+	h.mediaBuffer = newPrerollBuffer(func() error {
+		h.log.Infow("preroll buffer reset event")
+		h.flvEnc = nil
+
+		return nil
+	})
+
+	return h
 }
 
 func (h *RTMPHandler) OnPublishCallback(cb func(streamKey string)) {
@@ -153,104 +166,105 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 }
 
 func (h *RTMPHandler) OnSetDataFrame(timestamp uint32, data *rtmpmsg.NetStreamSetDataFrame) error {
-	h.flvLock.Lock()
-	defer h.flvLock.Unlock()
-
-	if h.flvEnc != nil {
-		r := bytes.NewReader(data.Payload)
-
-		var script flvtag.ScriptData
-		if err := flvtag.DecodeScriptData(r, &script); err != nil {
-			h.log.Errorw("failed to decode script data", err)
-			return nil // ignore
+	if h.flvEnc == nil {
+		err := h.initFlvEncoder()
+		if err != nil {
+			return err
 		}
+	}
+	r := bytes.NewReader(data.Payload)
 
-		if err := h.flvEnc.Encode(&flvtag.FlvTag{
-			TagType:   flvtag.TagTypeScriptData,
-			Timestamp: timestamp,
-			Data:      &script,
-		}); err != nil {
-			h.log.Errorw("failed to forward script data", err)
-		}
+	var script flvtag.ScriptData
+	if err := flvtag.DecodeScriptData(r, &script); err != nil {
+		h.log.Errorw("failed to decode script data", err)
+		return nil // ignore
+	}
+
+	if err := h.flvEnc.Encode(&flvtag.FlvTag{
+		TagType:   flvtag.TagTypeScriptData,
+		Timestamp: timestamp,
+		Data:      &script,
+	}); err != nil {
+		h.log.Errorw("failed to forward script data", err)
 	}
 
 	return nil
 }
 
 func (h *RTMPHandler) OnAudio(timestamp uint32, payload io.Reader) error {
-	h.flvLock.Lock()
-	defer h.flvLock.Unlock()
-
-	var audio flvtag.AudioData
-	if h.flvEnc != nil || h.audioInit == nil {
-		if err := flvtag.DecodeAudioData(payload, &audio); err != nil {
+	if h.flvEnc == nil {
+		err := h.initFlvEncoder()
+		if err != nil {
 			return err
-		}
-
-		// Why copy the payload here?
-		flvBody := new(bytes.Buffer)
-		if _, err := io.Copy(flvBody, audio.Data); err != nil {
-			return err
-		}
-		audio.Data = flvBody
-
-		if h.audioInit == nil {
-			h.audioInit = &audio
 		}
 	}
 
-	if h.flvEnc != nil {
-		if err := h.flvEnc.Encode(&flvtag.FlvTag{
-			TagType:   flvtag.TagTypeAudio,
-			Timestamp: timestamp,
-			Data:      &audio,
-		}); err != nil {
-			// log and continue, or fail and let sender reconnect?
-			h.log.Errorw("failed to write audio", err)
-		}
+	var audio flvtag.AudioData
+	if err := flvtag.DecodeAudioData(payload, &audio); err != nil {
+		return err
+	}
+
+	// Why copy the payload here?
+	flvBody := new(bytes.Buffer)
+	if _, err := io.Copy(flvBody, audio.Data); err != nil {
+		return err
+	}
+	audio.Data = flvBody
+
+	if h.audioInit == nil {
+		h.audioInit = copyAudioTag(&audio)
+	}
+
+	if err := h.flvEnc.Encode(&flvtag.FlvTag{
+		TagType:   flvtag.TagTypeAudio,
+		Timestamp: timestamp,
+		Data:      &audio,
+	}); err != nil {
+		// log and continue, or fail and let sender reconnect?
+		h.log.Errorw("failed to write audio", err)
 	}
 
 	return nil
 }
 
 func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
-	h.flvLock.Lock()
-	defer h.flvLock.Unlock()
-
-	var video flvtag.VideoData
-	if h.flvEnc != nil || h.videoInit == nil {
-		if err := flvtag.DecodeVideoData(payload, &video); err != nil {
+	if h.flvEnc == nil {
+		err := h.initFlvEncoder()
+		if err != nil {
 			return err
-		}
-
-		flvBody := new(bytes.Buffer)
-		if _, err := io.Copy(flvBody, video.Data); err != nil {
-			return err
-		}
-		video.Data = flvBody
-
-		if h.videoInit == nil {
-			h.videoInit = &video
 		}
 	}
 
-	if h.flvEnc != nil {
-		if !h.keyFrameFound {
-			if video.FrameType == flvtag.FrameTypeKeyFrame {
-				h.log.Infow("key frame found")
-				h.keyFrameFound = true
-			} else {
-				return nil
-			}
-		}
+	var video flvtag.VideoData
+	if err := flvtag.DecodeVideoData(payload, &video); err != nil {
+		return err
+	}
 
-		if err := h.flvEnc.Encode(&flvtag.FlvTag{
-			TagType:   flvtag.TagTypeVideo,
-			Timestamp: timestamp,
-			Data:      &video,
-		}); err != nil {
-			h.log.Errorw("Failed to write video", err)
+	flvBody := new(bytes.Buffer)
+	if _, err := io.Copy(flvBody, video.Data); err != nil {
+		return err
+	}
+	video.Data = flvBody
+
+	if h.videoInit == nil {
+		h.videoInit = copyVideoTag(&video)
+	}
+
+	if !h.keyFrameFound {
+		if video.FrameType == flvtag.FrameTypeKeyFrame {
+			h.log.Infow("key frame found")
+			h.keyFrameFound = true
+		} else {
+			return nil
 		}
+	}
+
+	if err := h.flvEnc.Encode(&flvtag.FlvTag{
+		TagType:   flvtag.TagTypeVideo,
+		Timestamp: timestamp,
+		Data:      &video,
+	}); err != nil {
+		h.log.Errorw("Failed to write video", err)
 	}
 
 	return nil
@@ -263,14 +277,13 @@ func (h *RTMPHandler) OnClose() {
 	}
 }
 
-func (h *RTMPHandler) StartSerializer(w io.Writer) error {
-	h.flvLock.Lock()
-	defer h.flvLock.Unlock()
+func (h *RTMPHandler) SetWriter(w io.Writer) error {
+	return h.mediaBuffer.setWriter(w)
+}
 
-	// Stop exsting session
-	h.stopSerializer()
-
-	enc, err := flv.NewEncoder(w, flv.FlagsAudio|flv.FlagsVideo)
+func (h *RTMPHandler) initFlvEncoder() error {
+	h.keyFrameFound = false
+	enc, err := flv.NewEncoder(h.mediaBuffer, flv.FlagsAudio|flv.FlagsVideo)
 	if err != nil {
 		return err
 	}
@@ -285,7 +298,7 @@ func (h *RTMPHandler) StartSerializer(w io.Writer) error {
 			Timestamp: 0,
 			Data:      copyVideoTag(h.videoInit),
 		}); err != nil {
-			h.log.Errorw("Failed to write video", err)
+			return err
 		}
 	}
 	if h.audioInit != nil {
@@ -296,37 +309,23 @@ func (h *RTMPHandler) StartSerializer(w io.Writer) error {
 			Timestamp: 0,
 			Data:      copyAudioTag(h.audioInit),
 		}); err != nil {
-			h.log.Errorw("Failed to write audio", err)
+			return err
 		}
 	}
 
 	return nil
 }
 
-func (h *RTMPHandler) StopSerializer() {
-	h.flvLock.Lock()
-	defer h.flvLock.Unlock()
-
-	h.stopSerializer()
-}
-
-func (h *RTMPHandler) stopSerializer() {
-	h.log.Infow("stopping serializer")
-
-	h.flvEnc = nil
-	h.keyFrameFound = false
-}
-
 func copyVideoTag(in *flvtag.VideoData) *flvtag.VideoData {
 	ret := *in
-	ret.Data = bytes.NewReader(in.Data.(*bytes.Buffer).Bytes())
+	ret.Data = bytes.NewBuffer(in.Data.(*bytes.Buffer).Bytes())
 
 	return &ret
 }
 
 func copyAudioTag(in *flvtag.AudioData) *flvtag.AudioData {
 	ret := *in
-	ret.Data = bytes.NewReader(in.Data.(*bytes.Buffer).Bytes())
+	ret.Data = bytes.NewBuffer(in.Data.(*bytes.Buffer).Bytes())
 
 	return &ret
 }
