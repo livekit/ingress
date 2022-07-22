@@ -21,9 +21,9 @@ const (
 	videoFrameRate = 30
 )
 
-// Encoder manages GStreamer elements that converts & encodes video to the specification that's
+// Output manages GStreamer elements that converts & encodes video to the specification that's
 // suitable for WebRTC
-type Encoder struct {
+type Output struct {
 	bin *gst.Bin
 
 	mimeType string
@@ -34,8 +34,8 @@ type Encoder struct {
 	samples chan *media.Sample
 }
 
-func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, error) {
-	e, err := newEncoder(mimeType)
+func NewVideoOutput(mimeType string, layer *livekit.VideoLayer) (*Output, error) {
+	e, err := newOutput(mimeType)
 	if err != nil {
 		return nil, err
 	}
@@ -124,8 +124,8 @@ func NewVideoEncoder(mimeType string, layer *livekit.VideoLayer) (*Encoder, erro
 	return e, nil
 }
 
-func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
-	e, err := newEncoder(options.MimeType)
+func NewAudioOutput(options *livekit.IngressAudioOptions) (*Output, error) {
+	e, err := newOutput(options.MimeType)
 	if err != nil {
 		return nil, err
 	}
@@ -193,13 +193,13 @@ func NewAudioEncoder(options *livekit.IngressAudioOptions) (*Encoder, error) {
 	return e, nil
 }
 
-func newEncoder(mimeType string) (*Encoder, error) {
+func newOutput(mimeType string) (*Output, error) {
 	sink, err := app.NewAppSink()
 	if err != nil {
 		return nil, err
 	}
 
-	e := &Encoder{
+	e := &Output{
 		mimeType: mimeType,
 		sink:     sink,
 		samples:  make(chan *media.Sample, 1000),
@@ -213,7 +213,7 @@ func newEncoder(mimeType string) (*Encoder, error) {
 	return e, nil
 }
 
-func (e *Encoder) linkElements() error {
+func (e *Output) linkElements() error {
 	if err := e.bin.AddMany(e.elements...); err != nil {
 		return err
 	}
@@ -228,11 +228,11 @@ func (e *Encoder) linkElements() error {
 	return nil
 }
 
-func (e *Encoder) Bin() *gst.Bin {
+func (e *Output) Bin() *gst.Bin {
 	return e.bin
 }
 
-func (e *Encoder) ForceKeyFrame() error {
+func (e *Output) ForceKeyFrame() error {
 	keyFrame := gst.NewStructure("GstForceKeyUnit")
 	if err := keyFrame.SetValue("all-headers", true); err != nil {
 		return err
@@ -241,11 +241,11 @@ func (e *Encoder) ForceKeyFrame() error {
 	return nil
 }
 
-func (e *Encoder) handleEOS(_ *app.Sink) {
+func (e *Output) handleEOS(_ *app.Sink) {
 	close(e.samples)
 }
 
-func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
+func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 	// Pull the sample that triggered this callback
 	s := sink.PullSample()
 	if s == nil {
@@ -270,7 +270,7 @@ func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
 		for i, b := range data {
 			if i == nalStart {
 				// get type of current NAL
-				currentNalType = h264reader.NalUnitType((b & 0x1F) >> 0)
+				currentNalType = h264reader.NalUnitType(b & 0x1F)
 				if currentNalType == h264reader.NalUnitTypeSEI {
 					nalStart = -1
 					continue
@@ -319,7 +319,7 @@ func (e *Encoder) handleSample(sink *app.Sink) gst.FlowReturn {
 	return gst.FlowOK
 }
 
-func (e *Encoder) writeNal(nal []byte, nalType h264reader.NalUnitType) {
+func (e *Output) writeNal(nal []byte, nalType h264reader.NalUnitType) {
 	sample := &media.Sample{
 		Data: nal,
 	}
@@ -337,17 +337,17 @@ func (e *Encoder) writeNal(nal []byte, nalType h264reader.NalUnitType) {
 	e.writeSample(sample)
 }
 
-func (e *Encoder) writeSample(sample *media.Sample) {
+func (e *Output) writeSample(sample *media.Sample) {
 	select {
 	case e.samples <- sample:
 		// continue
 	default:
-		logger.Infow("sample channel full")
+		logger.Warnw("sample channel full", nil)
 		e.samples <- sample
 	}
 }
 
-func (e *Encoder) NextSample() (media.Sample, error) {
+func (e *Output) NextSample() (media.Sample, error) {
 	sample := <-e.samples
 	if sample == nil {
 		return media.Sample{}, io.EOF
@@ -356,10 +356,10 @@ func (e *Encoder) NextSample() (media.Sample, error) {
 	return *sample, nil
 }
 
-func (e *Encoder) OnBind() error {
+func (e *Output) OnBind() error {
 	return nil
 }
 
-func (e *Encoder) OnUnbind() error {
+func (e *Output) OnUnbind() error {
 	return nil
 }

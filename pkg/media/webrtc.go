@@ -55,14 +55,14 @@ func NewWebRTCSink(ctx context.Context, conf *config.Config, p *Params) (*WebRTC
 
 func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 	var mimeType string
-	var encoder *Encoder
+	var output *Output
 	var opts *lksdk.TrackPublicationOptions
 	var err error
 
 	switch kind {
 	case Audio:
 		mimeType = s.audioOptions.MimeType
-		encoder, err = NewAudioEncoder(s.audioOptions)
+		output, err = NewAudioOutput(s.audioOptions)
 		opts = &lksdk.TrackPublicationOptions{
 			Name:       s.audioOptions.Name,
 			Source:     s.audioOptions.Source,
@@ -72,7 +72,7 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 	case Video:
 		mimeType = s.videoOptions.MimeType
 		layer := s.videoOptions.Layers[0]
-		encoder, err = NewVideoEncoder(mimeType, layer)
+		output, err = NewVideoOutput(mimeType, layer)
 		opts = &lksdk.TrackPublicationOptions{
 			Name:        s.videoOptions.Name,
 			Source:      s.videoOptions.Source,
@@ -82,7 +82,7 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 	}
 
 	if err != nil {
-		s.logger.Errorw("could not create encoder", err)
+		s.logger.Errorw("could not create output", err)
 		return nil, err
 	}
 
@@ -90,7 +90,7 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 		switch pkt.(type) {
 		case *rtcp.PictureLossIndication:
 			s.logger.Debugw("PLI received")
-			if err := encoder.ForceKeyFrame(); err != nil {
+			if err := output.ForceKeyFrame(); err != nil {
 				s.logger.Errorw("could not force key frame", err)
 			}
 		}
@@ -111,7 +111,7 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 		}
 	}
 	track.OnBind(func() {
-		if err := track.StartWrite(encoder, onComplete); err != nil {
+		if err := track.StartWrite(output, onComplete); err != nil {
 			s.logger.Errorw("could not start writing", err)
 		}
 	})
@@ -122,7 +122,7 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 		return nil, err
 	}
 
-	return encoder.bin, nil
+	return output.bin, nil
 }
 
 func (s *WebRTCSink) Close() {

@@ -17,19 +17,19 @@ const (
 // OutputStream holds one or more encoders for either an audio or video stream
 type OutputStream struct {
 	kind         StreamKind
-	encoders     []*Encoder
+	encoders     []*Output
 	audioOptions *livekit.IngressAudioOptions
 	videoOptions *livekit.IngressVideoOptions
 }
 
 func NewAudioOutputStream(options *livekit.IngressAudioOptions) (*OutputStream, error) {
-	encoder, err := NewAudioEncoder(options)
+	encoder, err := NewAudioOutput(options)
 	if err != nil {
 		return nil, err
 	}
 	return &OutputStream{
 		kind:         Audio,
-		encoders:     []*Encoder{encoder},
+		encoders:     []*Output{encoder},
 		audioOptions: options,
 	}, nil
 }
@@ -45,7 +45,7 @@ func NewVideoOutputStream(options *livekit.IngressVideoOptions, inputLayer *live
 	}
 
 	for _, l := range layers {
-		encoder, err := NewVideoEncoder(options.MimeType, l)
+		encoder, err := NewVideoOutput(options.MimeType, l)
 		if err != nil {
 			return nil, err
 		}

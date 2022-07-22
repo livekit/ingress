@@ -6,12 +6,13 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/tracer"
 	"github.com/tinyzimmer/go-gst/gst"
 	"github.com/tinyzimmer/go-gst/gst/app"
 	"go.uber.org/atomic"
+
+	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/tracer"
 )
 
 const (
@@ -35,17 +36,17 @@ func NewHTTPRelaySource(ctx context.Context, p *Params) (*HTTPRelaySource, error
 		params: p,
 	}
 
-	src, err := gst.NewElementWithName("appsrc", FlvAppSource)
+	elem, err := gst.NewElementWithName("appsrc", FlvAppSource)
 	if err != nil {
 		s.logger.Errorw("could not create appsrc", err)
 		return nil, err
 	}
-	src.SetProperty("caps", "video/x-flv")
-	src.SetArg("format", "time")
-	if err := src.SetProperty("is-live", true); err != nil {
+	elem.SetProperty("caps", "video/x-flv")
+	elem.SetArg("format", "time")
+	if err := elem.SetProperty("is-live", true); err != nil {
 		return nil, err
 	}
-	s.flvSrc = app.SrcFromElement(src)
+	s.flvSrc = app.SrcFromElement(elem)
 	s.writer = newAppSrcWriter(s.flvSrc)
 
 	return s, nil

@@ -51,12 +51,6 @@ func main() {
 				Action: runHandler,
 				Hidden: true,
 			},
-			{
-				Name:        "test",
-				Description: "runs tests",
-				Action:      runTests,
-				Hidden:      true,
-			},
 		},
 		Flags: []cli.Flag{
 			&cli.StringFlag{
@@ -197,10 +191,6 @@ func runHandler(c *cli.Context) error {
 	}
 
 	handler.HandleRequest(ctx, req, url, streamKey)
-	return nil
-}
-
-func runTests(c *cli.Context) error {
 	return nil
 }
 
