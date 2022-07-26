@@ -31,13 +31,13 @@ func NewInput(p *Params) (*Input, error) {
 	}
 	flvSrc := src.GetSource()
 
-	// queue, err := gst.NewElement("queue")
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// if err = queue.SetProperty("max-size-time", uint64(3e9)); err != nil {
-	// 	return nil, err
-	// }
+	queue, err := gst.NewElement("queue")
+	if err != nil {
+		return nil, err
+	}
+	if err = queue.SetProperty("max-size-time", uint64(3e9)); err != nil {
+		return nil, err
+	}
 
 	decodeBin, err := gst.NewElement("decodebin3")
 	if err != nil {

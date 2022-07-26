@@ -114,7 +114,15 @@ func NewVideoOutput(mimeType string, layer *livekit.VideoLayer) (*Output, error)
 		return nil, errors.ErrUnsupportedEncodeFormat
 	}
 
-	e.elements = append(e.elements, e.sink.Element)
+	queue, err := gst.NewElement("queue")
+	if err != nil {
+		return nil, err
+	}
+	if err = queue.SetProperty("max-size-time", uint64(3e9)); err != nil {
+		return nil, err
+	}
+
+	e.elements = append(e.elements, queue, e.sink.Element)
 
 	e.bin = gst.NewBin("video")
 	if err = e.linkElements(); err != nil {
@@ -181,8 +189,16 @@ func NewAudioOutput(options *livekit.IngressAudioOptions) (*Output, error) {
 		return nil, errors.ErrUnsupportedEncodeFormat
 	}
 
+	queue, err := gst.NewElement("queue")
+	if err != nil {
+		return nil, err
+	}
+	if err = queue.SetProperty("max-size-time", uint64(3e9)); err != nil {
+		return nil, err
+	}
+
 	e.elements = []*gst.Element{
-		audioConvert, audioResample, capsFilter, e.enc, e.sink.Element,
+		audioConvert, audioResample, capsFilter, e.enc, queue, e.sink.Element,
 	}
 
 	e.bin = gst.NewBin("audio")
