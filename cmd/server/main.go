@@ -22,7 +22,6 @@ import (
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/redis"
 	"github.com/livekit/protocol/tracer"
-	"github.com/livekit/protocol/utils"
 )
 
 func main() {
@@ -98,12 +97,7 @@ func runService(c *cli.Context) error {
 		return err
 	}
 
-	nodeId, err := utils.LocalNodeID()
-	if err != nil {
-		return err
-	}
-
-	rpcServer := ingress.NewRedisRPC(livekit.NodeID(nodeId), rc)
+	rpcServer := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
 	svc := service.NewService(conf, rpcServer)
 
 	if conf.HealthPort != 0 {
@@ -175,7 +169,7 @@ func runHandler(c *cli.Context) error {
 		return err
 	}
 
-	rpcHandler := ingress.NewRedisRPCServer(rc)
+	rpcHandler := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
 	handler := service.NewHandler(conf, rpcHandler)
 
 	killChan := make(chan os.Signal, 1)
