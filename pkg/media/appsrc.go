@@ -41,11 +41,14 @@ func NewHTTPRelaySource(ctx context.Context, p *Params) (*HTTPRelaySource, error
 		s.logger.Errorw("could not create appsrc", err)
 		return nil, err
 	}
-	elem.SetProperty("caps", "video/x-flv")
-	elem.SetArg("format", "time")
-	if err := elem.SetProperty("is-live", true); err != nil {
+	if err = elem.SetProperty("caps", "video/x-flv"); err != nil {
 		return nil, err
 	}
+	if err = elem.SetProperty("is-live", true); err != nil {
+		return nil, err
+	}
+	elem.SetArg("format", "time")
+
 	s.flvSrc = app.SrcFromElement(elem)
 	s.writer = newAppSrcWriter(s.flvSrc)
 

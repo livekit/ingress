@@ -48,7 +48,7 @@ func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, e
 		return nil, err
 	}
 
-	sink, err := NewWebRTCSink(ctx, conf, params)
+	sink, err := NewWebRTCSink(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -109,8 +109,8 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 	if err := p.pipeline.Start(); err != nil {
 		span.RecordError(err)
 		p.Logger.Errorw("failed to set pipeline state", err)
-		p.InputStatus = &livekit.InputStatus{StatusDescription: err.Error()}
-		p.Status = livekit.IngressInfo_ENDPOINT_ERROR
+		p.State.Status = livekit.IngressState_ENDPOINT_ERROR
+		p.State.Error = err.Error()
 		return p.IngressInfo
 	}
 
@@ -118,8 +118,8 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 	if err != nil {
 		span.RecordError(err)
 		p.Logger.Errorw("failed to start input", err)
-		p.InputStatus = &livekit.InputStatus{StatusDescription: err.Error()}
-		p.Status = livekit.IngressInfo_ENDPOINT_ERROR
+		p.State.Status = livekit.IngressState_ENDPOINT_ERROR
+		p.State.Error = err.Error()
 		return p.IngressInfo
 	}
 

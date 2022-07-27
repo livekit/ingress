@@ -28,6 +28,10 @@ func NewRTMPServer() *RTMPServer {
 	return &RTMPServer{}
 }
 
+func NewUrl(ingressId string) string {
+	return fmt.Sprintf("rtmp://localhost:1935/live/%s", ingressId)
+}
+
 func (s *RTMPServer) Start(conf *config.Config) error {
 	port := conf.RTMPPort
 

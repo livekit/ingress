@@ -16,9 +16,6 @@ type Params struct {
 
 	Logger logger.Logger
 
-	AudioOptions *livekit.IngressAudioOptions
-	VideoOptions *livekit.IngressVideoOptions
-
 	// connection info
 	WsUrl     string
 	ApiKey    string
@@ -52,25 +49,26 @@ func getParams(ctx context.Context, conf *config.Config, req *livekit.StartIngre
 	p = &Params{
 		IngressInfo: &livekit.IngressInfo{
 			IngressId:           req.IngressId,
-			StreamKey:           streamKey,
 			Name:                req.Request.Name,
-			InputType:           0,
-			Status:              livekit.IngressInfo_ENDPOINT_WAITING,
-			InputStatus:         nil,
-			Room:                req.Request.RoomName,
+			StreamKey:           streamKey,
+			Url:                 "TODO",
+			InputType:           livekit.IngressInput_RTMP_INPUT,
+			Audio:               req.Request.Audio,
+			Video:               req.Request.Video,
+			RoomName:            req.Request.RoomName,
 			ParticipantIdentity: req.Request.ParticipantIdentity,
 			ParticipantName:     req.Request.ParticipantName,
-			Url:                 "",
-			Tracks:              nil,
+			Reusable:            false,
+			State: &livekit.IngressState{
+				Status: livekit.IngressState_ENDPOINT_INACTIVE,
+			},
 		},
-		Logger:       logger.Logger(logger.GetLogger().WithValues("ingressID", req.IngressId)),
-		AudioOptions: req.Request.Audio,
-		VideoOptions: req.Request.Video,
-		WsUrl:        conf.WsUrl,
-		ApiKey:       conf.ApiKey,
-		ApiSecret:    conf.ApiSecret,
-		RelayUrl:     getRelayUrl(conf, streamKey),
-		GstReady:     make(chan struct{}),
+		Logger:    logger.Logger(logger.GetLogger().WithValues("ingressID", req.IngressId)),
+		WsUrl:     conf.WsUrl,
+		ApiKey:    conf.ApiKey,
+		ApiSecret: conf.ApiSecret,
+		RelayUrl:  getRelayUrl(conf, streamKey),
+		GstReady:  make(chan struct{}),
 	}
 
 	return
