@@ -58,8 +58,8 @@ func TestIngress(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, rc, "redis required")
 
-	rpcServer := ingress.NewRedisRPCServer(rc)
-	rpcClient := ingress.NewRedisRPCClient("ingress_test", rc)
+	rpcServer := ingress.NewRedisRPC("ingress_test_service", rc)
+	rpcClient := ingress.NewRedisRPC("ingress_test_client", rc)
 
 	svc := service.NewService(conf, rpcServer)
 	go func() {
