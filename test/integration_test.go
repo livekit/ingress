@@ -122,7 +122,7 @@ func TestIngress(t *testing.T) {
 
 	info, err = rpcClient.SendRequest(ctx, &livekit.IngressRequest{
 		IngressId: info.IngressId,
-		Stop:      &livekit.StopIngressRequest{IngressId: info.IngressId},
+		Request:   &livekit.IngressRequest_Delete{Delete: &livekit.DeleteIngressRequest{IngressId: info.IngressId}},
 	})
 	require.NoError(t, err)
 
@@ -131,5 +131,5 @@ func TestIngress(t *testing.T) {
 
 	final := &livekit.IngressInfo{}
 	require.NoError(t, proto.Unmarshal(b, final))
-	require.NotEqual(t, final.Status, livekit.IngressInfo_ENDPOINT_ERROR)
+	require.NotEqual(t, final.State.Status, livekit.IngressState_ENDPOINT_ERROR)
 }
