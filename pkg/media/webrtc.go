@@ -8,7 +8,6 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst"
 
-	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
@@ -24,7 +23,7 @@ type WebRTCSink struct {
 	videoOptions *livekit.IngressVideoOptions
 }
 
-func NewWebRTCSink(ctx context.Context, conf *config.Config, p *Params) (*WebRTCSink, error) {
+func NewWebRTCSink(ctx context.Context, p *Params) (*WebRTCSink, error) {
 	ctx, span := tracer.Start(ctx, "media.NewWebRTCSink")
 	defer span.End()
 
@@ -34,7 +33,7 @@ func NewWebRTCSink(ctx context.Context, conf *config.Config, p *Params) (*WebRTC
 		lksdk.ConnectInfo{
 			APIKey:              p.ApiKey,
 			APISecret:           p.ApiSecret,
-			RoomName:            p.Room,
+			RoomName:            p.RoomName,
 			ParticipantName:     p.ParticipantName,
 			ParticipantIdentity: p.ParticipantIdentity,
 		},
@@ -48,8 +47,8 @@ func NewWebRTCSink(ctx context.Context, conf *config.Config, p *Params) (*WebRTC
 	return &WebRTCSink{
 		room:         room,
 		logger:       p.Logger,
-		audioOptions: p.AudioOptions,
-		videoOptions: p.VideoOptions,
+		audioOptions: p.Audio,
+		videoOptions: p.Video,
 	}, nil
 }
 
