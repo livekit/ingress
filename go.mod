@@ -2,6 +2,8 @@ module github.com/livekit/ingress
 
 go 1.17
 
+replace github.com/livekit/protocol => ../protocol
+
 require (
 	github.com/frostbyte73/go-throttle v0.0.0-20210621200530-8018c891361d
 	github.com/go-logr/logr v1.2.3

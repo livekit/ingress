@@ -27,8 +27,8 @@ import (
 const shutdownTimer = time.Second * 30
 
 type Service struct {
-	conf      *config.Config
-	rpcServer ingress.RPCServer
+	conf *config.Config
+	rpc  ingress.RPC
 
 	promServer *http.Server
 
@@ -37,15 +37,14 @@ type Service struct {
 }
 
 type process struct {
-	req *livekit.StartIngressRequest
 	cmd *exec.Cmd
 }
 
-func NewService(conf *config.Config, rpcServer ingress.RPCServer) *Service {
+func NewService(conf *config.Config, rpc ingress.RPC) *Service {
 	s := &Service{
-		conf:      conf,
-		rpcServer: rpcServer,
-		shutdown:  make(chan struct{}),
+		conf:     conf,
+		rpc:      rpc,
+		shutdown: make(chan struct{}),
 	}
 
 	if conf.PrometheusPort > 0 {
@@ -56,6 +55,20 @@ func NewService(conf *config.Config, rpcServer ingress.RPCServer) *Service {
 	}
 
 	return s
+}
+
+func (s *Service) ValidateIngressConnection(ctx context.Context, streamKey string) (*livekit.IngressInfo, error) {
+	info, err := s.rpc.SendRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	err = media.Validate(ctx, info)
+	if err != nil {
+		return nil, err
+	}
+
+	return info, nil
 }
 
 func (s *Service) Run() error {
@@ -79,15 +92,6 @@ func (s *Service) Run() error {
 	}); err != nil {
 		return err
 	}
-
-	requests, err := s.rpcServer.GetRequestChannel(context.Background())
-	if err != nil {
-		return err
-	}
-
-	defer func() {
-		_ = requests.Close()
-	}()
 
 	logger.Debugw("service ready")
 
