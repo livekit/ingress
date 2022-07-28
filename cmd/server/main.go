@@ -97,7 +97,7 @@ func runService(c *cli.Context) error {
 		return err
 	}
 
-	rpcServer := ingress.NewRedisRPCServer(rc)
+	rpcServer := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
 	svc := service.NewService(conf, rpcServer)
 
 	if conf.HealthPort != 0 {
@@ -169,7 +169,7 @@ func runHandler(c *cli.Context) error {
 		return err
 	}
 
-	rpcHandler := ingress.NewRedisRPCServer(rc)
+	rpcHandler := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
 	handler := service.NewHandler(conf, rpcHandler)
 
 	killChan := make(chan os.Signal, 1)
