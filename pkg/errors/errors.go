@@ -16,6 +16,7 @@ var (
 	ErrInvalidInputFPS         = errors.New("invalid input media FPS")
 	ErrInvalidOutputDimensions = errors.New("invalid output media dimensions")
 	ErrIngressNotFound         = errors.New("ingress not found")
+	ErrServerCapacityExceeded  = errors.New("server capacity exceeded")
 )
 
 type InvalidIngressError string

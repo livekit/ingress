@@ -36,16 +36,10 @@ func main() {
 				Description: "runs a request in a new process",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name: "request",
-					},
-					&cli.StringFlag{
-						Name: "url",
+						Name: "info",
 					},
 					&cli.StringFlag{
 						Name: "config-body",
-					},
-					&cli.StringFlag{
-						Name: "stream-key",
 					},
 				},
 				Action: runHandler,

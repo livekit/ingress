@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media"
 	"github.com/livekit/ingress/pkg/sysload"
 	"github.com/livekit/protocol/ingress"
@@ -37,7 +38,13 @@ type Service struct {
 }
 
 type process struct {
-	cmd *exec.Cmd
+	info *livekit.IngressInfo
+	cmd  *exec.Cmd
+}
+
+type NewRTMPPublisherRequest struct {
+	StreamKey string
+	Result    chan<- error
 }
 
 func NewService(conf *config.Config, rpc ingress.RPC) *Service {
@@ -58,6 +65,13 @@ func NewService(conf *config.Config, rpc ingress.RPC) *Service {
 }
 
 func (s *Service) ValidateIngressConnection(ctx context.Context, streamKey string) (*livekit.IngressInfo, error) {
+	return info, nil
+}
+
+func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) (*livekit.IngressInfo, error) {
+	req := &livekit.GetIngressInfoRequest{
+		StreamKey: streamKey,
+	}
 	info, err := s.rpc.SendRequest(ctx, req)
 	if err != nil {
 		return nil, err
@@ -65,8 +79,16 @@ func (s *Service) ValidateIngressConnection(ctx context.Context, streamKey strin
 
 	err = media.Validate(ctx, info)
 	if err != nil {
-		return nil, err
+		return info, err
 	}
+
+	// check cpu load
+	if !sysload.AcceptIngress(info) {
+		logger.Debugw("rejecting ingress", args...)
+		return nil, errors.ErrServerCapacityExceeded
+	}
+
+	go s.launchHandler(ctx, info)
 
 	return info, nil
 }
@@ -103,101 +125,36 @@ func (s *Service) Run() error {
 				time.Sleep(shutdownTimer)
 			}
 			return nil
-
-		case msg := <-requests.Channel():
-			logger.Debugw("request received")
-
+		case req := <-s.newRTMPPublisher:
 			ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
-
-			req := &livekit.StartIngressRequest{}
-			if err = proto.Unmarshal(requests.Payload(msg), req); err != nil {
-				logger.Errorw("malformed request", err)
-				span.End()
-				continue
+			err, info := s.handleNewRTMPPublisher(ctx, req.StreamKey)
+			if info != nil {
+				s.sendUpdate(ctx, info, err)
 			}
-
-			if s.acceptRequest(ctx, req) {
-				// validate before launching handler
-				info, err := media.Validate(ctx, s.conf, req)
-				s.sendResponse(ctx, req, info, err)
-				if err != nil {
-					span.RecordError(err)
-					span.End()
-					continue
-				}
-
-				go s.launchHandler(ctx, req, info.Url, info.StreamKey)
+			if err != nil {
+				span.RecordError(err)
 			}
-
+			// Result channel should be buffered
+			req.Result <- err
 			span.End()
 		}
 	}
 }
 
-func (s *Service) isIdle() bool {
-	idle := true
-	s.processes.Range(func(key, value interface{}) bool {
-		idle = false
-		return false
-	})
-	return idle
-}
-
-func (s *Service) acceptRequest(ctx context.Context, req *livekit.StartIngressRequest) bool {
-	ctx, span := tracer.Start(ctx, "Service.acceptRequest")
-	defer span.End()
-
-	args := []interface{}{
-		"ingressID", req.IngressId,
-		"requestID", req.RequestId,
-		"senderID", req.SenderId,
-	}
-	logger.Debugw("request received", args...)
-
-	// check request time
-	if time.Since(time.Unix(0, req.SentAt)) >= ingress.RequestExpiration {
-		return false
-	}
-
-	// check cpu load
-	if !sysload.CanAcceptRequest(req) {
-		args = append(args, "reason", "not enough cpu")
-		logger.Debugw("rejecting request", args...)
-		return false
-	}
-
-	// claim request
-	claimed, err := s.rpcServer.ClaimRequest(context.Background(), req)
+func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {
 	if err != nil {
-		span.RecordError(err)
-		logger.Errorw("could not claim request", err, args...)
-		return false
-	} else if !claimed {
-		return false
+		info.State.Status = livekit.IngressState_ENDPOINT_ERROR
+		info.State.Error = err.Error()
+		logger.Errorw("ingress failed", errors.New(info.State.Error))
 	}
 
-	sysload.AcceptRequest(req)
-	logger.Infow("request accepted", args...)
-
-	return true
-}
-
-func (s *Service) sendResponse(ctx context.Context, req *livekit.StartIngressRequest, info *livekit.IngressInfo, err error) {
-	if err != nil {
-		logger.Infow("bad request",
-			"error", err,
-			"ingressID", info.IngressId,
-			"requestID", req.RequestId,
-			"senderID", req.SenderId,
-		)
-	}
-
-	if err = s.rpcServer.SendResponse(ctx, req, info, err); err != nil {
-		logger.Errorw("failed to send response", err)
+	if err := s.rpc.SendUpdate(ctx, info); err != nil {
+		logger.Errorw("failed to send update", err)
 	}
 }
 
-func (s *Service) launchHandler(ctx context.Context, req *livekit.StartIngressRequest, url string, streamKey string) {
+func (s *Service) launchHandler(ctx context.Context, info *livekit.IngressInfo) {
+	// TODO send update on failure
 	ctx, span := tracer.Start(ctx, "Service.launchHandler")
 	defer span.End()
 
@@ -208,7 +165,7 @@ func (s *Service) launchHandler(ctx context.Context, req *livekit.StartIngressRe
 		return
 	}
 
-	reqString, err := proto.Marshal(req)
+	infoString, err := proto.Marshal(info)
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("could not marshal request", err)
@@ -218,19 +175,18 @@ func (s *Service) launchHandler(ctx context.Context, req *livekit.StartIngressRe
 	cmd := exec.Command("ingress",
 		"run-handler",
 		"--config-body", string(confString),
-		"--request", string(reqString),
-		"--url", url,
-		"--stream-key", streamKey,
+		"--info", string(infoString),
 	)
+
 	cmd.Dir = "/"
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	s.processes.Store(req.IngressId, &process{
-		req: req,
-		cmd: cmd,
+	s.processes.Store(info.IngressId, &process{
+		info: info,
+		cmd:  cmd,
 	})
-	defer s.processes.Delete(req.IngressId)
+	defer s.processes.Delete(info.IngressId)
 
 	err = cmd.Run()
 	if err != nil {
@@ -244,7 +200,7 @@ func (s *Service) Status() ([]byte, error) {
 	}
 	s.processes.Range(func(key, value interface{}) bool {
 		p := value.(*process)
-		info[key.(string)] = p.req.Request
+		info[key.(string)] = p.info
 		return true
 	})
 
