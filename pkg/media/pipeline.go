@@ -67,13 +67,30 @@ func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, e
 }
 
 func (p *Pipeline) onOutputReady(pad *gst.Pad, kind StreamKind) {
-	bin, err := p.sink.AddTrack(kind)
+	var bin *gst.Bin
+	var err error
+
+	defer func() {
+		if err != nil {
+			p.IngressInfo.State.Status = livekit.IngressState_ENDPOINT_ERROR
+			p.IngressInfo.State.Error = err.Error()
+		} else {
+			p.IngressInfo.State.Status = livekit.IngressState_ENDPOINT_PUBLISHING
+		}
+
+		if p.onStatusUpdate != nil {
+			p.onStatusUpdate(context.Background(), p.IngressInfo)
+		}
+	}()
+
+	bin, err = p.sink.AddTrack(kind)
 	if err != nil {
 		return
 	}
 
 	if err = p.pipeline.Add(bin.Element); err != nil {
 		p.Logger.Errorw("could not add bin", err)
+		return
 	}
 
 	pad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {

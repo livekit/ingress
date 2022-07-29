@@ -33,8 +33,9 @@ type Service struct {
 
 	promServer *http.Server
 
-	processes sync.Map
-	shutdown  chan struct{}
+	processes           sync.Map
+	rtmpPublishRequests chan rtmpPublishRequest
+	shutdown            chan struct{}
 }
 
 type process struct {
@@ -42,16 +43,17 @@ type process struct {
 	cmd  *exec.Cmd
 }
 
-type NewRTMPPublisherRequest struct {
-	StreamKey string
-	Result    chan<- error
+type rtmpPublishRequest struct {
+	streamKey string
+	result    chan<- error
 }
 
 func NewService(conf *config.Config, rpc ingress.RPC) *Service {
 	s := &Service{
-		conf:     conf,
-		rpc:      rpc,
-		shutdown: make(chan struct{}),
+		conf:                conf,
+		rpc:                 rpc,
+		rtmpPublishRequests: make(chan rtmpPublishRequest),
+		shutdown:            make(chan struct{}),
 	}
 
 	if conf.PrometheusPort > 0 {
@@ -64,8 +66,20 @@ func NewService(conf *config.Config, rpc ingress.RPC) *Service {
 	return s
 }
 
-func (s *Service) ValidateIngressConnection(ctx context.Context, streamKey string) (*livekit.IngressInfo, error) {
-	return info, nil
+func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
+	res := make(chan error)
+	r := rtmpPublishRequest{
+		streamKey: streamKey,
+		result:    res,
+	}
+
+	select {
+	case <-s.shutdown:
+		return fmt.Errorf("server shutting down")
+	case s.rtmpPublishRequests <- r:
+		err := <-res
+		return err
+	}
 }
 
 func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) (*livekit.IngressInfo, error) {
@@ -84,9 +98,11 @@ func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) 
 
 	// check cpu load
 	if !sysload.AcceptIngress(info) {
-		logger.Debugw("rejecting ingress", args...)
+		logger.Debugw("rejecting ingress")
 		return nil, errors.ErrServerCapacityExceeded
 	}
+
+	info.State.Status = livekit.IngressState_ENDPOINT_BUFFERING
 
 	go s.launchHandler(ctx, info)
 
@@ -125,20 +141,31 @@ func (s *Service) Run() error {
 				time.Sleep(shutdownTimer)
 			}
 			return nil
-		case req := <-s.newRTMPPublisher:
-			ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
-			err, info := s.handleNewRTMPPublisher(ctx, req.StreamKey)
-			if info != nil {
-				s.sendUpdate(ctx, info, err)
-			}
-			if err != nil {
-				span.RecordError(err)
-			}
-			// Result channel should be buffered
-			req.Result <- err
-			span.End()
+		case req := <-s.rtmpPublishRequests:
+			go func() {
+				ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
+				info, err := s.handleNewRTMPPublisher(ctx, req.streamKey)
+				if info != nil {
+					s.sendUpdate(ctx, info, err)
+				}
+				if err != nil {
+					span.RecordError(err)
+				}
+				// Result channel should be buffered
+				req.result <- err
+				span.End()
+			}()
 		}
 	}
+}
+
+func (s *Service) isIdle() bool {
+	idle := true
+	s.processes.Range(func(key, value interface{}) bool {
+		idle = false
+		return false
+	})
+	return idle
 }
 
 func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {

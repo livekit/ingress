@@ -28,7 +28,7 @@ func NewRTMPServer() *RTMPServer {
 	return &RTMPServer{}
 }
 
-func (s *RTMPServer) Start(conf *config.Config) error {
+func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey string) error) error {
 	port := conf.RTMPPort
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", port))
@@ -48,8 +48,15 @@ func (s *RTMPServer) Start(conf *config.Config) error {
 			l := log.StandardLogger()
 
 			h := NewRTMPHandler()
-			h.OnPublishCallback(func(streamKey string) {
+			h.OnPublishCallback(func(streamKey string) error {
+				err := onPublish(streamKey)
+				if err != nil {
+					return err
+				}
+
 				s.handlers.Store(streamKey, h)
+
+				return nil
 			})
 			h.OnCloseCallback(func(streamKey string) {
 				s.handlers.Delete(streamKey)
@@ -121,7 +128,7 @@ type RTMPHandler struct {
 
 	log logger.Logger
 
-	onPublish func(streamKey string)
+	onPublish func(streamKey string) error
 	onClose   func(streamKey string)
 }
 
@@ -138,7 +145,7 @@ func NewRTMPHandler() *RTMPHandler {
 	return h
 }
 
-func (h *RTMPHandler) OnPublishCallback(cb func(streamKey string)) {
+func (h *RTMPHandler) OnPublishCallback(cb func(streamKey string) error) {
 	h.onPublish = cb
 }
 
@@ -157,7 +164,10 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 	_, h.streamKey = path.Split(cmd.PublishingName)
 	h.log = logger.Logger(logger.GetLogger().WithValues("streamKey", h.streamKey))
 	if h.onPublish != nil {
-		h.onPublish(h.streamKey)
+		err := h.onPublish(h.streamKey)
+		if err != nil {
+			return err
+		}
 	}
 
 	h.log.Infow("Received a new published stream")

@@ -110,7 +110,7 @@ func runService(c *cli.Context) error {
 	rtmpsrv := rtmp.NewRTMPServer()
 	relay := rtmp.NewRTMPRelay(rtmpsrv)
 
-	err = rtmpsrv.Start(conf)
+	err = rtmpsrv.Start(conf, svc.HandleRTMPPublishRequest)
 	if err != nil {
 		return err
 	}
@@ -146,7 +146,6 @@ func runHandler(c *cli.Context) error {
 
 	ctx, span := tracer.Start(context.Background(), "Handler.New")
 	defer span.End()
-
 	logger.Debugw("handler launched")
 
 	rc, err := redis.GetRedisClient(conf.Redis)
@@ -155,9 +154,9 @@ func runHandler(c *cli.Context) error {
 		return err
 	}
 
-	req := &livekit.StartIngressRequest{}
-	reqString := c.String("request")
-	err = proto.Unmarshal([]byte(reqString), req)
+	info := &livekit.IngressInfo{}
+	infoString := c.String("info")
+	err = proto.Unmarshal([]byte(infoString), info)
 	if err != nil {
 		span.RecordError(err)
 		return err
@@ -175,16 +174,7 @@ func runHandler(c *cli.Context) error {
 		handler.Kill()
 	}()
 
-	url := c.String("url")
-	if url == "" {
-		return errors.New("url missing")
-	}
-	streamKey := c.String("stream-key")
-	if streamKey == "" {
-		return errors.New("stream key missing")
-	}
-
-	handler.HandleRequest(ctx, req, url, streamKey)
+	handler.HandleIngress(ctx, info)
 	return nil
 }
 
