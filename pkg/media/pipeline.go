@@ -83,6 +83,8 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind StreamKind) {
 		}
 
 		if p.onStatusUpdate != nil {
+			// Is it ok to send this message here? The update handler is not waiting for a response but still doing I/O.
+			// We could send this in a separate goroutine, but this would make races more likely.
 			p.onStatusUpdate(context.Background(), p.IngressInfo)
 		}
 	}()
