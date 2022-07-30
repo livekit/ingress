@@ -102,7 +102,9 @@ func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) 
 		return nil, errors.ErrServerCapacityExceeded
 	}
 
-	info.State.Status = livekit.IngressState_ENDPOINT_BUFFERING
+	info.State = &livekit.IngressState{
+		Status: livekit.IngressState_ENDPOINT_BUFFERING,
+	}
 
 	go s.launchHandler(ctx, info)
 
