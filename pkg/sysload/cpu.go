@@ -73,16 +73,16 @@ func GetCPULoad() float64 {
 	return (numCPUs - idleCPUs.Load()) / numCPUs * 100
 }
 
-func CanAcceptRequest(req *livekit.StartIngressRequest) bool {
+func AcceptIngress(info *livekit.IngressInfo) bool {
 	available := idleCPUs.Load() - pendingCPUs.Load()
 	accept := available > 1
 
+	if accept {
+		cpuHold := 1.0
+		pendingCPUs.Add(cpuHold)
+		time.AfterFunc(time.Second, func() { pendingCPUs.Sub(cpuHold) })
+	}
+
 	logger.Debugw("cpu request", "accepted", accept, "availableCPUs", available, "numCPUs", runtime.NumCPU())
 	return accept
-}
-
-func AcceptRequest(req *livekit.StartIngressRequest) {
-	cpuHold := 1.0
-	pendingCPUs.Add(cpuHold)
-	time.AfterFunc(time.Second, func() { pendingCPUs.Sub(cpuHold) })
 }

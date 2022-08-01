@@ -5,10 +5,9 @@ import (
 	"fmt"
 
 	"github.com/livekit/ingress/pkg/config"
-	"github.com/livekit/ingress/pkg/rtmp"
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/utils"
 )
 
 type Params struct {
@@ -27,51 +26,44 @@ type Params struct {
 	GstReady chan struct{}
 }
 
-func Validate(ctx context.Context, conf *config.Config, req *livekit.StartIngressRequest) (*livekit.IngressInfo, error) {
-	sk := utils.NewGuid("")
+func Validate(ctx context.Context, info *livekit.IngressInfo) error {
+	if info.InputType != livekit.IngressInput_RTMP_INPUT {
+		return errors.NewInvalidIngressError("unsupported input type")
+	}
 
-	p, err := getParams(ctx, conf, req, sk)
+	if info.StreamKey == "" {
+		return errors.NewInvalidIngressError("no stream key")
+	}
 
-	p.Url = rtmp.NewUrl(p.IngressInfo.StreamKey)
-	return p.IngressInfo, err
+	// For now, require a room to be set. We should eventually allow changing the room on an active ingress
+	if info.RoomName == "" {
+		return errors.NewInvalidIngressError("no room name")
+	}
+
+	if info.ParticipantIdentity == "" {
+		return errors.NewInvalidIngressError("no participant identity")
+	}
+
+	return nil
 }
 
-func GetParams(ctx context.Context, conf *config.Config, req *livekit.StartIngressRequest, url string, streamKey string) (*Params, error) {
-	p, err := getParams(ctx, conf, req, streamKey)
-	if err != nil {
-		return nil, err
+func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressInfo) (*Params, error) {
+	infoCopy := *info
+	infoCopy.State = &livekit.IngressState{
+		Status: livekit.IngressState_ENDPOINT_INACTIVE,
 	}
-	p.Url = url
+
+	p := &Params{
+		IngressInfo: &infoCopy,
+		Logger:      logger.Logger(logger.GetLogger().WithValues("ingressID", info.IngressId)),
+		WsUrl:       conf.WsUrl,
+		ApiKey:      conf.ApiKey,
+		ApiSecret:   conf.ApiSecret,
+		RelayUrl:    getRelayUrl(conf, info.StreamKey),
+		GstReady:    make(chan struct{}),
+	}
+
 	return p, nil
-}
-
-func getParams(ctx context.Context, conf *config.Config, req *livekit.StartIngressRequest, streamKey string) (p *Params, err error) {
-	p = &Params{
-		IngressInfo: &livekit.IngressInfo{
-			IngressId:           req.IngressId,
-			Name:                req.Request.Name,
-			StreamKey:           streamKey,
-			Url:                 "TODO",
-			InputType:           livekit.IngressInput_RTMP_INPUT,
-			Audio:               req.Request.Audio,
-			Video:               req.Request.Video,
-			RoomName:            req.Request.RoomName,
-			ParticipantIdentity: req.Request.ParticipantIdentity,
-			ParticipantName:     req.Request.ParticipantName,
-			Reusable:            false,
-			State: &livekit.IngressState{
-				Status: livekit.IngressState_ENDPOINT_INACTIVE,
-			},
-		},
-		Logger:    logger.Logger(logger.GetLogger().WithValues("ingressID", req.IngressId)),
-		WsUrl:     conf.WsUrl,
-		ApiKey:    conf.ApiKey,
-		ApiSecret: conf.ApiSecret,
-		RelayUrl:  getRelayUrl(conf, streamKey),
-		GstReady:  make(chan struct{}),
-	}
-
-	return
 }
 
 func getRelayUrl(conf *config.Config, streamKey string) string {

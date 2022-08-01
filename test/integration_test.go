@@ -41,10 +41,19 @@ func TestIngress(t *testing.T) {
 	conf.RTMPPort = 1935
 	conf.HTTPRelayPort = 9090
 
+	rc, err := redis.GetRedisClient(conf.Redis)
+	require.NoError(t, err)
+	require.NotNil(t, rc, "redis required")
+
+	rpcServer := ingress.NewRedisRPC("ingress_test_service", rc)
+	rpcClient := ingress.NewRedisRPC("ingress_test_client", rc)
+
+	svc := service.NewService(conf, rpcServer)
+
 	rtmpsrv := rtmp.NewRTMPServer()
 	relay := rtmp.NewRTMPRelay(rtmpsrv)
 
-	err = rtmpsrv.Start(conf)
+	err = rtmpsrv.Start(conf, svc.HandleRTMPPublishRequest)
 	require.NoError(t, err)
 	err = relay.Start(conf)
 	require.NoError(t, err)
@@ -54,14 +63,6 @@ func TestIngress(t *testing.T) {
 		rtmpsrv.Stop()
 	})
 
-	rc, err := redis.GetRedisClient(conf.Redis)
-	require.NoError(t, err)
-	require.NotNil(t, rc, "redis required")
-
-	rpcServer := ingress.NewRedisRPC("ingress_test_service", rc)
-	rpcClient := ingress.NewRedisRPC("ingress_test_client", rc)
-
-	svc := service.NewService(conf, rpcServer)
 	go func() {
 		err := svc.Run()
 		require.NoError(t, err)
@@ -73,36 +74,66 @@ func TestIngress(t *testing.T) {
 	updates, err := rpcClient.GetUpdateChannel(ctx)
 	require.NoError(t, err)
 
-	info, err := rpcClient.SendRequest(ctx, &livekit.StartIngressRequest{
-		Request: &livekit.CreateIngressRequest{
-			InputType:           livekit.IngressInput_RTMP_INPUT,
-			Name:                "ingress-test",
-			RoomName:            tc.RoomName,
-			ParticipantIdentity: "ingress-test",
-			ParticipantName:     "ingress-test",
-			Audio: &livekit.IngressAudioOptions{
-				Name:       "audio",
-				Source:     0,
-				MimeType:   webrtc.MimeTypeOpus,
-				Bitrate:    64000,
-				DisableDtx: false,
-				Channels:   2,
-			},
-			Video: &livekit.IngressVideoOptions{
-				Name:     "video",
-				Source:   0,
-				MimeType: webrtc.MimeTypeH264,
-				Layers: []*livekit.VideoLayer{
-					{
-						Quality: livekit.VideoQuality_HIGH,
-						Width:   1280,
-						Height:  720,
-						Bitrate: 3000,
-					},
+	info := &livekit.IngressInfo{
+		InputType:           livekit.IngressInput_RTMP_INPUT,
+		Name:                "ingress-test",
+		RoomName:            tc.RoomName,
+		ParticipantIdentity: "ingress-test",
+		ParticipantName:     "ingress-test",
+		Reusable:            true,
+		StreamKey:           "ingress-test",
+		Url:                 "rtmp://localhost:1935/live/ingress-test",
+		Audio: &livekit.IngressAudioOptions{
+			Name:       "audio",
+			Source:     0,
+			MimeType:   webrtc.MimeTypeOpus,
+			Bitrate:    64000,
+			DisableDtx: false,
+			Channels:   2,
+		},
+		Video: &livekit.IngressVideoOptions{
+			Name:     "video",
+			Source:   0,
+			MimeType: webrtc.MimeTypeH264,
+			Layers: []*livekit.VideoLayer{
+				{
+					Quality: livekit.VideoQuality_HIGH,
+					Width:   1280,
+					Height:  720,
+					Bitrate: 3000,
 				},
 			},
 		},
-	})
+	}
+
+	shutdown := make(chan struct{})
+	go func() {
+		pubSub, err := rpcClient.GetEntityChannel(context.Background())
+		require.NoError(t, err)
+
+		for {
+			select {
+			case msg := <-pubSub.Channel():
+				b := pubSub.Payload(msg)
+
+				req := &livekit.GetIngressInfoRequest{}
+				if err = proto.Unmarshal(b, req); err != nil {
+					logger.Errorw("failed to read request", err)
+					continue
+				}
+
+				err = rpcClient.SendResponse(context.Background(), req, info, err)
+				if err != nil {
+					logger.Errorw("could not send response", err)
+				}
+
+			case <-shutdown:
+				_ = pubSub.Close()
+				return
+			}
+		}
+	}()
+
 	require.NoError(t, err)
 	require.NotEmpty(t, info.Url)
 
@@ -125,6 +156,8 @@ func TestIngress(t *testing.T) {
 		Request:   &livekit.IngressRequest_Delete{Delete: &livekit.DeleteIngressRequest{IngressId: info.IngressId}},
 	})
 	require.NoError(t, err)
+
+	close(shutdown)
 
 	msg := <-updates.Channel()
 	b := updates.Payload(msg)

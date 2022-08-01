@@ -67,13 +67,36 @@ func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, e
 }
 
 func (p *Pipeline) onOutputReady(pad *gst.Pad, kind StreamKind) {
-	bin, err := p.sink.AddTrack(kind)
+	var bin *gst.Bin
+	var err error
+
+	defer func() {
+		if err != nil {
+			p.IngressInfo.State = &livekit.IngressState{
+				Status: livekit.IngressState_ENDPOINT_ERROR,
+				Error:  err.Error(),
+			}
+		} else {
+			p.IngressInfo.State = &livekit.IngressState{
+				Status: livekit.IngressState_ENDPOINT_PUBLISHING,
+			}
+		}
+
+		if p.onStatusUpdate != nil {
+			// Is it ok to send this message here? The update handler is not waiting for a response but still doing I/O.
+			// We could send this in a separate goroutine, but this would make races more likely.
+			p.onStatusUpdate(context.Background(), p.IngressInfo)
+		}
+	}()
+
+	bin, err = p.sink.AddTrack(kind)
 	if err != nil {
 		return
 	}
 
 	if err = p.pipeline.Add(bin.Element); err != nil {
 		p.Logger.Errorw("could not add bin", err)
+		return
 	}
 
 	pad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
@@ -109,8 +132,10 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 	if err := p.pipeline.Start(); err != nil {
 		span.RecordError(err)
 		p.Logger.Errorw("failed to set pipeline state", err)
-		p.State.Status = livekit.IngressState_ENDPOINT_ERROR
-		p.State.Error = err.Error()
+		p.State = &livekit.IngressState{
+			Status: livekit.IngressState_ENDPOINT_ERROR,
+			Error:  err.Error(),
+		}
 		return p.IngressInfo
 	}
 
@@ -118,8 +143,10 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 	if err != nil {
 		span.RecordError(err)
 		p.Logger.Errorw("failed to start input", err)
-		p.State.Status = livekit.IngressState_ENDPOINT_ERROR
-		p.State.Error = err.Error()
+		p.State = &livekit.IngressState{
+			Status: livekit.IngressState_ENDPOINT_ERROR,
+			Error:  err.Error(),
+		}
 		return p.IngressInfo
 	}
 

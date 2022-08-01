@@ -16,7 +16,10 @@ var (
 	ErrInvalidInputFPS         = errors.New("invalid input media FPS")
 	ErrInvalidOutputDimensions = errors.New("invalid output media dimensions")
 	ErrIngressNotFound         = errors.New("ingress not found")
+	ErrServerCapacityExceeded  = errors.New("server capacity exceeded")
 )
+
+type InvalidIngressError string
 
 func New(err string) error {
 	return errors.New(err)
@@ -28,4 +31,12 @@ func ErrCouldNotParseConfig(err error) error {
 
 func ErrFromGstFlowReturn(ret gst.FlowReturn) error {
 	return fmt.Errorf("GST Flow Error %d (%s)", ret, ret.String())
+}
+
+func NewInvalidIngressError(s string) InvalidIngressError {
+	return InvalidIngressError(s)
+}
+
+func (s InvalidIngressError) Error() string {
+	return string(s)
 }
