@@ -6,7 +6,7 @@ require (
 	github.com/frostbyte73/go-throttle v0.0.0-20210621200530-8018c891361d
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/zapr v1.2.3
-	github.com/livekit/protocol v0.13.5-0.20220727215941-ac26418a52e9
+	github.com/livekit/protocol v0.13.5-0.20220801175011-ae34dc3ec45d
 	github.com/livekit/server-sdk-go v0.10.5-0.20220714205315-505cb6a6ce71
 	github.com/mackerelio/go-osstat v0.2.2
 	github.com/pion/rtcp v1.2.9

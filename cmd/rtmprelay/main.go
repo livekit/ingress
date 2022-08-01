@@ -20,7 +20,7 @@ func main() {
 	rtmpServer := rtmp.NewRTMPServer()
 	relay := rtmp.NewRTMPRelay(rtmpServer)
 
-	err := rtmpServer.Start(conf)
+	err := rtmpServer.Start(conf, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed starting RTMP server %s", err))
 	}
