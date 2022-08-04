@@ -8,6 +8,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/pion/webrtc/v3"
 )
 
 type Params struct {
@@ -53,6 +54,13 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		Status: livekit.IngressState_ENDPOINT_INACTIVE,
 	}
 
+	if infoCopy.Audio == nil {
+		infoCopy.Audio = getDefaultAudioParams()
+	}
+	if infoCopy.Video == nil {
+		infoCopy.Video = getDefaultVideoParams()
+	}
+
 	p := &Params{
 		IngressInfo: &infoCopy,
 		Logger:      logger.Logger(logger.GetLogger().WithValues("ingressID", info.IngressId)),
@@ -68,4 +76,31 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 
 func getRelayUrl(conf *config.Config, streamKey string) string {
 	return fmt.Sprintf("http://localhost:%d/%s", conf.HTTPRelayPort, streamKey)
+}
+
+func getDefaultAudioParams() *livekit.IngressAudioOptions {
+	return &livekit.IngressAudioOptions{
+		Name:       "audio",
+		Source:     0,
+		MimeType:   webrtc.MimeTypeOpus,
+		Bitrate:    64000,
+		DisableDtx: false,
+		Channels:   2,
+	}
+}
+
+func getDefaultVideoParams() *livekit.IngressVideoOptions {
+	return &livekit.IngressVideoOptions{
+		Name:     "video",
+		Source:   0,
+		MimeType: webrtc.MimeTypeH264,
+		Layers: []*livekit.VideoLayer{
+			{
+				Quality: livekit.VideoQuality_HIGH,
+				Width:   1280,
+				Height:  720,
+				Bitrate: 3000,
+			},
+		},
+	}
 }
