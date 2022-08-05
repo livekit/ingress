@@ -155,6 +155,9 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 
 	p.input.Close()
 	p.sink.Close()
+
+	p.IngressInfo.State.Status = livekit.IngressState_ENDPOINT_INACTIVE
+
 	return p.IngressInfo
 }
 

@@ -73,6 +73,8 @@ func (s *HTTPRelaySource) Start(ctx context.Context) error {
 		default:
 			s.logger.Errorw("error while copying media from relay", err)
 		}
+
+		s.flvSrc.EndStream()
 	}()
 
 	return nil
