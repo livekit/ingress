@@ -25,6 +25,7 @@ type HTTPRelaySource struct {
 
 	flvSrc *app.Source
 	writer *appSrcWriter
+	result chan error
 }
 
 func NewHTTPRelaySource(ctx context.Context, p *Params) (*HTTPRelaySource, error) {
@@ -56,6 +57,8 @@ func NewHTTPRelaySource(ctx context.Context, p *Params) (*HTTPRelaySource, error
 }
 
 func (s *HTTPRelaySource) Start(ctx context.Context) error {
+	s.result = make(chan error)
+
 	resp, err := http.Get(s.params.RelayUrl)
 	switch {
 	case err != nil:
@@ -75,13 +78,17 @@ func (s *HTTPRelaySource) Start(ctx context.Context) error {
 		}
 
 		s.flvSrc.EndStream()
+
+		s.result <- err
+		close(s.result)
 	}()
 
 	return nil
 }
 
 func (s *HTTPRelaySource) Close() error {
-	return s.writer.Close()
+	s.writer.Close()
+	return <-s.result
 }
 
 func (s *HTTPRelaySource) GetSource() *app.Source {
