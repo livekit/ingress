@@ -19,7 +19,7 @@ var (
 type prerollBuffer struct {
 	lock   sync.Mutex
 	buffer *bytes.Buffer
-	w      io.Writer
+	w      io.WriteCloser
 
 	onBufferReset func() error
 }
@@ -31,7 +31,7 @@ func newPrerollBuffer(onBufferReset func() error) *prerollBuffer {
 	}
 }
 
-func (pb *prerollBuffer) setWriter(w io.Writer) error {
+func (pb *prerollBuffer) setWriter(w io.WriteCloser) error {
 	pb.lock.Lock()
 	defer pb.lock.Unlock()
 
@@ -65,4 +65,15 @@ func (pb *prerollBuffer) Write(p []byte) (int, error) {
 	}
 
 	return pb.w.Write(p)
+}
+
+func (pb *prerollBuffer) Close() error {
+	pb.lock.Lock()
+	defer pb.lock.Unlock()
+
+	if pb.w != nil {
+		return pb.w.Close()
+	}
+
+	return nil
 }

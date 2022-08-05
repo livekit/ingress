@@ -153,8 +153,17 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 	// run main loop
 	p.loop.Run()
 
-	p.input.Close()
+	err = p.input.Close()
 	p.sink.Close()
+
+	switch err {
+	case nil:
+		p.IngressInfo.State.Status = livekit.IngressState_ENDPOINT_INACTIVE
+	default:
+		p.IngressInfo.State.Status = livekit.IngressState_ENDPOINT_ERROR
+		p.IngressInfo.State.Error = err.Error()
+	}
+
 	return p.IngressInfo
 }
 

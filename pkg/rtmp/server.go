@@ -49,9 +49,11 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey string)
 
 			h := NewRTMPHandler()
 			h.OnPublishCallback(func(streamKey string) error {
-				err := onPublish(streamKey)
-				if err != nil {
-					return err
+				if onPublish != nil {
+					err := onPublish(streamKey)
+					if err != nil {
+						return err
+					}
 				}
 
 				s.handlers.Store(streamKey, h)
@@ -84,7 +86,7 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey string)
 	return nil
 }
 
-func (s *RTMPServer) AssociateRelay(streamKey string, w io.Writer) error {
+func (s *RTMPServer) AssociateRelay(streamKey string, w io.WriteCloser) error {
 	h, ok := s.handlers.Load(streamKey)
 	if ok && h != nil {
 		err := h.(*RTMPHandler).SetWriter(w)
@@ -282,12 +284,15 @@ func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
 
 func (h *RTMPHandler) OnClose() {
 	h.log.Infow("closing ingress RTMP session")
+
+	h.mediaBuffer.Close()
+
 	if h.onClose != nil {
 		h.onClose(h.streamKey)
 	}
 }
 
-func (h *RTMPHandler) SetWriter(w io.Writer) error {
+func (h *RTMPHandler) SetWriter(w io.WriteCloser) error {
 	return h.mediaBuffer.setWriter(w)
 }
 
