@@ -2,6 +2,8 @@ module github.com/livekit/ingress
 
 go 1.17
 
+replace github.com/livekit/protocol => ../protocol
+
 require (
 	github.com/frostbyte73/go-throttle v0.0.0-20210621200530-8018c891361d
 	github.com/go-logr/logr v1.2.3
@@ -11,7 +13,7 @@ require (
 	github.com/mackerelio/go-osstat v0.2.2
 	github.com/pion/rtcp v1.2.9
 	github.com/pion/webrtc/v3 v3.1.42
-	github.com/prometheus/client_golang v1.12.2
+	github.com/prometheus/client_golang v1.13.0
 	github.com/sirupsen/logrus v1.7.0
 	github.com/stretchr/testify v1.8.0
 	github.com/tinyzimmer/go-glib v0.0.24
@@ -66,8 +68,8 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
-	github.com/prometheus/common v0.32.1 // indirect
-	github.com/prometheus/procfs v0.7.3 // indirect
+	github.com/prometheus/common v0.37.0 // indirect
+	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/thoas/go-funk v0.9.0 // indirect

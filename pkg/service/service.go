@@ -103,7 +103,8 @@ func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) 
 	}
 
 	info.State = &livekit.IngressState{
-		Status: livekit.IngressState_ENDPOINT_BUFFERING,
+		Status:    livekit.IngressState_ENDPOINT_BUFFERING,
+		StartedAt: time.Now().UnixNano(),
 	}
 
 	go s.launchHandler(ctx, info)

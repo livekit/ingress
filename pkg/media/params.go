@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
@@ -50,8 +51,13 @@ func Validate(ctx context.Context, info *livekit.IngressInfo) error {
 
 func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressInfo) (*Params, error) {
 	infoCopy := *info
-	infoCopy.State = &livekit.IngressState{
-		Status: livekit.IngressState_ENDPOINT_INACTIVE,
+
+	// The state should have been created by the service, before launching the hander, but be defensive here.
+	if infoCopy.State == nil {
+		infoCopy.State = &livekit.IngressState{
+			Status:    livekit.IngressState_ENDPOINT_BUFFERING,
+			StartedAt: time.Now().UnixNano(),
+		}
 	}
 
 	if infoCopy.Audio == nil {
@@ -103,4 +109,9 @@ func getDefaultVideoParams() *livekit.IngressVideoOptions {
 			},
 		},
 	}
+}
+
+func (p *Params) SetStatus(status livekit.IngressState_Status, errString string) {
+	p.State.Status = status
+	p.State.Error = errString
 }
