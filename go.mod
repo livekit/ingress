@@ -2,13 +2,11 @@ module github.com/livekit/ingress
 
 go 1.17
 
-replace github.com/livekit/protocol => ../protocol
-
 require (
 	github.com/frostbyte73/go-throttle v0.0.0-20210621200530-8018c891361d
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/zapr v1.2.3
-	github.com/livekit/protocol v0.13.5-0.20220801175011-ae34dc3ec45d
+	github.com/livekit/protocol v1.0.1-0.20220809040042-d76090cba26e
 	github.com/livekit/server-sdk-go v0.10.5-0.20220714205315-505cb6a6ce71
 	github.com/mackerelio/go-osstat v0.2.2
 	github.com/pion/rtcp v1.2.9
@@ -22,7 +20,7 @@ require (
 	github.com/yutopp/go-flv v0.2.0
 	github.com/yutopp/go-rtmp v0.0.2-0.20210218160027-ece21675a185
 	go.uber.org/atomic v1.9.0
-	go.uber.org/zap v1.21.0
+	go.uber.org/zap v1.22.0
 	google.golang.org/protobuf v1.28.1
 	gopkg.in/yaml.v3 v3.0.1
 )
