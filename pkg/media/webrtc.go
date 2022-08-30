@@ -28,15 +28,9 @@ func NewWebRTCSink(ctx context.Context, p *Params) (*WebRTCSink, error) {
 	defer span.End()
 
 	lksdk.SetLogger(logr.Logger(p.Logger))
-	room, err := lksdk.ConnectToRoom(
+	room, err := lksdk.ConnectToRoomWithToken(
 		p.WsUrl,
-		lksdk.ConnectInfo{
-			APIKey:              p.ApiKey,
-			APISecret:           p.ApiSecret,
-			RoomName:            p.RoomName,
-			ParticipantName:     p.ParticipantName,
-			ParticipantIdentity: p.ParticipantIdentity,
-		},
+		p.Token,
 		lksdk.NewRoomCallback(),
 		lksdk.WithAutoSubscribe(false),
 	)
