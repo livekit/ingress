@@ -49,6 +49,8 @@ func Validate(ctx context.Context, info *livekit.IngressInfo) error {
 }
 
 func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressInfo, wsUrl string, token string) (*Params, error) {
+	var err error
+
 	infoCopy := *info
 	infoCopy.State = &livekit.IngressState{
 		Status: livekit.IngressState_ENDPOINT_INACTIVE,
@@ -66,7 +68,10 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 	}
 
 	if token == "" {
-		ingress.BuildIngressToken(conf.ApiKey, conf.ApiSecret, info.RoomName, info.ParticipantIdentity, info.ParticipantName)
+		token, err = ingress.BuildIngressToken(conf.ApiKey, conf.ApiSecret, info.RoomName, info.ParticipantIdentity, info.ParticipantName)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	p := &Params{
