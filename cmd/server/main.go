@@ -41,6 +41,12 @@ func main() {
 					&cli.StringFlag{
 						Name: "config-body",
 					},
+					&cli.StringFlag{
+						Name: "ws-url",
+					},
+					&cli.StringFlag{
+						Name: "token",
+					},
 				},
 				Action: runHandler,
 				Hidden: true,
@@ -162,6 +168,9 @@ func runHandler(c *cli.Context) error {
 		return err
 	}
 
+	wsUrl := c.String("ws_url")
+	token := c.String("token")
+
 	rpcHandler := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
 	handler := service.NewHandler(conf, rpcHandler)
 
@@ -174,7 +183,7 @@ func runHandler(c *cli.Context) error {
 		handler.Kill()
 	}()
 
-	handler.HandleIngress(ctx, info)
+	handler.HandleIngress(ctx, info, wsUrl, token)
 	return nil
 }
 
