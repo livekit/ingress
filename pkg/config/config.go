@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	defaultRTMPPort      int = 1935
-	defaultHTTPRelayPort     = 9090
+	DefaultRTMPPort      int = 1935
+	DefaultHTTPRelayPort     = 9090
 )
 
 type Config struct {
@@ -33,7 +33,6 @@ type Config struct {
 
 	// internal
 	NodeID string `yaml:"-"`
-	Url    string `yaml:"url"`
 }
 
 func NewConfig(confString string) (*Config, error) {
@@ -51,10 +50,10 @@ func NewConfig(confString string) (*Config, error) {
 	}
 
 	if conf.RTMPPort == 0 {
-		conf.RTMPPort = defaultRTMPPort
+		conf.RTMPPort = DefaultRTMPPort
 	}
 	if conf.HTTPRelayPort == 0 {
-		conf.HTTPRelayPort = defaultHTTPRelayPort
+		conf.HTTPRelayPort = DefaultHTTPRelayPort
 	}
 
 	conf.InitLogger()
