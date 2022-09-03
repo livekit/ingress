@@ -15,16 +15,16 @@ import (
 )
 
 type Handler struct {
-	conf *config.Config
-	rpc  ingress.RPC
-	kill chan struct{}
+	conf      *config.Config
+	rpcServer ingress.RPCServer
+	kill      chan struct{}
 }
 
-func NewHandler(conf *config.Config, rpc ingress.RPC) *Handler {
+func NewHandler(conf *config.Config, rpcServer ingress.RPCServer) *Handler {
 	return &Handler{
-		conf: conf,
-		rpc:  rpc,
-		kill: make(chan struct{}),
+		conf:      conf,
+		rpcServer: rpcServer,
+		kill:      make(chan struct{}),
 	}
 }
 
@@ -39,7 +39,7 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	}
 
 	// subscribe to request channel
-	requests, err := h.rpc.IngressSubscription(context.Background(), p.GetInfo().IngressId)
+	requests, err := h.rpcServer.IngressSubscription(context.Background(), p.GetInfo().IngressId)
 	if err != nil {
 		span.RecordError(err)
 		return
@@ -113,7 +113,7 @@ func (h *Handler) sendUpdate(ctx context.Context, info *livekit.IngressInfo) {
 		logger.Errorw("ingress failed", errors.New(info.State.Error))
 	}
 
-	if err := h.rpc.SendUpdate(ctx, info); err != nil {
+	if err := h.rpcServer.SendUpdate(ctx, info); err != nil {
 		logger.Errorw("failed to send update", err)
 	}
 }
@@ -131,7 +131,7 @@ func (h *Handler) sendResponse(ctx context.Context, req *livekit.IngressRequest,
 		logger.Debugw("request handled", args...)
 	}
 
-	if err := h.rpc.SendResponse(ctx, req, info, err); err != nil {
+	if err := h.rpcServer.SendResponse(ctx, req, info, err); err != nil {
 		logger.Errorw("failed to send response", err, args...)
 	}
 }
