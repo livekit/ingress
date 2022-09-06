@@ -72,20 +72,15 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind StreamKind) {
 
 	defer func() {
 		if err != nil {
-			p.IngressInfo.State = &livekit.IngressState{
-				Status: livekit.IngressState_ENDPOINT_ERROR,
-				Error:  err.Error(),
-			}
+			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
 		} else {
-			p.IngressInfo.State = &livekit.IngressState{
-				Status: livekit.IngressState_ENDPOINT_PUBLISHING,
-			}
+			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
 		}
 
 		if p.onStatusUpdate != nil {
 			// Is it ok to send this message here? The update handler is not waiting for a response but still doing I/O.
 			// We could send this in a separate goroutine, but this would make races more likely.
-			p.onStatusUpdate(context.Background(), p.IngressInfo)
+			p.onStatusUpdate(context.Background(), p.GetInfo())
 		}
 	}()
 
@@ -132,22 +127,16 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 	if err := p.pipeline.Start(); err != nil {
 		span.RecordError(err)
 		p.Logger.Errorw("failed to set pipeline state", err)
-		p.State = &livekit.IngressState{
-			Status: livekit.IngressState_ENDPOINT_ERROR,
-			Error:  err.Error(),
-		}
-		return p.IngressInfo
+		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+		return p.GetInfo()
 	}
 
 	err := p.input.Start(ctx)
 	if err != nil {
 		span.RecordError(err)
 		p.Logger.Errorw("failed to start input", err)
-		p.State = &livekit.IngressState{
-			Status: livekit.IngressState_ENDPOINT_ERROR,
-			Error:  err.Error(),
-		}
-		return p.IngressInfo
+		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+		return p.GetInfo()
 	}
 
 	// run main loop
@@ -158,13 +147,12 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 
 	switch err {
 	case nil:
-		p.IngressInfo.State.Status = livekit.IngressState_ENDPOINT_INACTIVE
+		p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
 	default:
-		p.IngressInfo.State.Status = livekit.IngressState_ENDPOINT_ERROR
-		p.IngressInfo.State.Error = err.Error()
+		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
 	}
 
-	return p.IngressInfo
+	return p.GetInfo()
 }
 
 func (p *Pipeline) messageWatch(msg *gst.Message) bool {
@@ -203,7 +191,7 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 	default:
 		close(p.closed)
 		if p.onStatusUpdate != nil {
-			p.onStatusUpdate(ctx, p.IngressInfo)
+			p.onStatusUpdate(ctx, p.GetInfo())
 		}
 
 		p.Logger.Debugw("sending EOS to pipeline")
