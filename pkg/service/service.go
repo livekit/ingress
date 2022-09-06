@@ -86,30 +86,30 @@ func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) 
 	req := &livekit.GetIngressInfoRequest{
 		StreamKey: streamKey,
 	}
-	info, err := s.rpc.SendRequest(ctx, req)
+	resp, err := s.rpc.SendGetIngressInfoRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	err = media.Validate(ctx, info)
+	err = media.Validate(ctx, resp.Info)
 	if err != nil {
-		return info, err
+		return resp.Info, err
 	}
 
 	// check cpu load
-	if !sysload.AcceptIngress(info) {
+	if !sysload.AcceptIngress(resp.Info) {
 		logger.Debugw("rejecting ingress")
 		return nil, errors.ErrServerCapacityExceeded
 	}
 
-	info.State = &livekit.IngressState{
+	resp.Info.State = &livekit.IngressState{
 		Status:    livekit.IngressState_ENDPOINT_BUFFERING,
 		StartedAt: time.Now().UnixNano(),
 	}
 
-	go s.launchHandler(ctx, info)
+	go s.launchHandler(ctx, resp)
 
-	return info, nil
+	return resp.Info, nil
 }
 
 func (s *Service) Run() error {
@@ -183,7 +183,7 @@ func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err
 	}
 }
 
-func (s *Service) launchHandler(ctx context.Context, info *livekit.IngressInfo) {
+func (s *Service) launchHandler(ctx context.Context, resp *livekit.GetIngressInfoResponse) {
 	// TODO send update on failure
 	ctx, span := tracer.Start(ctx, "Service.launchHandler")
 	defer span.End()
@@ -195,28 +195,39 @@ func (s *Service) launchHandler(ctx context.Context, info *livekit.IngressInfo) 
 		return
 	}
 
-	infoString, err := proto.Marshal(info)
+	infoString, err := proto.Marshal(resp.Info)
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("could not marshal request", err)
 		return
 	}
 
-	cmd := exec.Command("ingress",
+	args := []string{
 		"run-handler",
 		"--config-body", string(confString),
 		"--info", string(infoString),
+	}
+
+	if resp.WsUrl != "" {
+		args = append(args, "--ws-url", resp.WsUrl)
+	}
+	if resp.Token != "" {
+		args = append(args, "--token", resp.Token)
+	}
+
+	cmd := exec.Command("ingress",
+		args...,
 	)
 
 	cmd.Dir = "/"
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	s.processes.Store(info.IngressId, &process{
-		info: info,
+	s.processes.Store(resp.Info.IngressId, &process{
+		info: resp.Info,
 		cmd:  cmd,
 	})
-	defer s.processes.Delete(info.IngressId)
+	defer s.processes.Delete(resp.Info.IngressId)
 
 	err = cmd.Run()
 	if err != nil {

@@ -122,7 +122,8 @@ func TestIngress(t *testing.T) {
 					continue
 				}
 
-				err = rpcClient.SendResponse(context.Background(), req, info, err)
+				resp := &livekit.GetIngressInfoResponse{Info: info}
+				err = rpcClient.SendGetIngressInfoResponse(context.Background(), req, resp, err)
 				if err != nil {
 					logger.Errorw("could not send response", err)
 				}

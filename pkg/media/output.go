@@ -278,18 +278,26 @@ func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 	case webrtc.MimeTypeH264:
 		data := buffer.Bytes()
 
-		var currentNalType h264reader.NalUnitType
+		var (
+			currentNalType h264reader.NalUnitType
+			duration       time.Duration
+		)
 		nalStart := -1
 		zeroes := 0
 
-		// pion's h264 packetizer only accepts one NAL per packet
+	duration_loop:
 		for i, b := range data {
 			if i == nalStart {
 				// get type of current NAL
 				currentNalType = h264reader.NalUnitType(b & 0x1F)
-				if currentNalType == h264reader.NalUnitTypeSEI {
-					nalStart = -1
-					continue
+				switch currentNalType {
+				case h264reader.NalUnitTypeCodedSliceDataPartitionA,
+					h264reader.NalUnitTypeCodedSliceDataPartitionB,
+					h264reader.NalUnitTypeCodedSliceDataPartitionC,
+					h264reader.NalUnitTypeCodedSliceIdr,
+					h264reader.NalUnitTypeCodedSliceNonIdr:
+					duration = time.Second / time.Duration(videoFrameRate)
+					break duration_loop
 				}
 			}
 
@@ -298,14 +306,6 @@ func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 			} else {
 				// NAL separator is either [0 0 0 1] or [0 0 1]
 				if b == 1 && (zeroes > 1) {
-					if nalStart > 0 {
-						nalEnd := i - zeroes
-						if zeroes > 3 {
-							nalEnd = i - 3
-						}
-
-						e.writeNal(data[nalStart:nalEnd], currentNalType)
-					}
 
 					nalStart = i + 1
 				}
@@ -313,10 +313,10 @@ func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 				zeroes = 0
 			}
 		}
-
-		if nalStart > 0 && nalStart < len(data) {
-			e.writeNal(data[nalStart:], currentNalType)
-		}
+		e.writeSample(&media.Sample{
+			Data:     buffer.Bytes(),
+			Duration: duration,
+		})
 
 	case webrtc.MimeTypeVP8:
 		// untested
@@ -333,24 +333,6 @@ func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 	}
 
 	return gst.FlowOK
-}
-
-func (e *Output) writeNal(nal []byte, nalType h264reader.NalUnitType) {
-	sample := &media.Sample{
-		Data: nal,
-	}
-
-	// only these NAL types get a duration
-	switch nalType {
-	case h264reader.NalUnitTypeCodedSliceDataPartitionA,
-		h264reader.NalUnitTypeCodedSliceDataPartitionB,
-		h264reader.NalUnitTypeCodedSliceDataPartitionC,
-		h264reader.NalUnitTypeCodedSliceIdr,
-		h264reader.NalUnitTypeCodedSliceNonIdr:
-		sample.Duration = time.Second / time.Duration(videoFrameRate)
-	}
-
-	e.writeSample(sample)
 }
 
 func (e *Output) writeSample(sample *media.Sample) {

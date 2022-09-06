@@ -7,6 +7,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/pion/webrtc/v3"
@@ -18,9 +19,8 @@ type Params struct {
 	Logger logger.Logger
 
 	// connection info
-	WsUrl     string
-	ApiKey    string
-	ApiSecret string
+	WsUrl string
+	Token string
 
 	// relay info
 	RelayUrl string
@@ -49,7 +49,9 @@ func Validate(ctx context.Context, info *livekit.IngressInfo) error {
 	return nil
 }
 
-func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressInfo) (*Params, error) {
+func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressInfo, wsUrl string, token string) (*Params, error) {
+	var err error
+
 	infoCopy := *info
 
 	// The state should have been created by the service, before launching the hander, but be defensive here.
@@ -67,12 +69,22 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		infoCopy.Video = getDefaultVideoParams()
 	}
 
+	if wsUrl == "" {
+		wsUrl = conf.WsUrl
+	}
+
+	if token == "" {
+		token, err = ingress.BuildIngressToken(conf.ApiKey, conf.ApiSecret, info.RoomName, info.ParticipantIdentity, info.ParticipantName)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	p := &Params{
 		IngressInfo: &infoCopy,
 		Logger:      logger.Logger(logger.GetLogger().WithValues("ingressID", info.IngressId)),
-		WsUrl:       conf.WsUrl,
-		ApiKey:      conf.ApiKey,
-		ApiSecret:   conf.ApiSecret,
+		Token:       token,
+		WsUrl:       wsUrl,
 		RelayUrl:    getRelayUrl(conf, info.StreamKey),
 		GstReady:    make(chan struct{}),
 	}
