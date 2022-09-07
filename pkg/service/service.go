@@ -28,8 +28,8 @@ import (
 const shutdownTimer = time.Second * 30
 
 type Service struct {
-	conf *config.Config
-	rpc  ingress.RPC
+	conf      *config.Config
+	rpcServer ingress.RPCServer
 
 	promServer *http.Server
 
@@ -48,10 +48,10 @@ type rtmpPublishRequest struct {
 	result    chan<- error
 }
 
-func NewService(conf *config.Config, rpc ingress.RPC) *Service {
+func NewService(conf *config.Config, rpcServer ingress.RPCServer) *Service {
 	s := &Service{
 		conf:                conf,
-		rpc:                 rpc,
+		rpcServer:           rpcServer,
 		rtmpPublishRequests: make(chan rtmpPublishRequest),
 		shutdown:            make(chan struct{}),
 	}
@@ -86,7 +86,7 @@ func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) 
 	req := &livekit.GetIngressInfoRequest{
 		StreamKey: streamKey,
 	}
-	resp, err := s.rpc.SendGetIngressInfoRequest(ctx, req)
+	resp, err := s.rpcServer.SendGetIngressInfoRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +178,7 @@ func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err
 		logger.Errorw("ingress failed", errors.New(info.State.Error))
 	}
 
-	if err := s.rpc.SendUpdate(ctx, info); err != nil {
+	if err := s.rpcServer.SendUpdate(ctx, info); err != nil {
 		logger.Errorw("failed to send update", err)
 	}
 }

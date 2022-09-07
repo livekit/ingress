@@ -55,12 +55,12 @@ func main() {
 		Flags: []cli.Flag{
 			&cli.StringFlag{
 				Name:    "config",
-				Usage:   "LiveKit Egress yaml config file",
+				Usage:   "LiveKit Ingress yaml config file",
 				EnvVars: []string{"INGRESS_CONFIG_FILE"},
 			},
 			&cli.StringFlag{
 				Name:    "config-body",
-				Usage:   "LiveKit Egress yaml config body",
+				Usage:   "LiveKit Ingress yaml config body",
 				EnvVars: []string{"INGRESS_CONFIG_BODY"},
 			},
 		},
