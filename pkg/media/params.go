@@ -62,10 +62,10 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		}
 	}
 
-	if isEmptyAudioParams(infoCopy.Audio) {
+	if !isValidAudioParams(infoCopy.Audio) {
 		infoCopy.Audio = getDefaultAudioParams()
 	}
-	if isEmptyVideoParams(infoCopy.Video) {
+	if !isValidVideoParams(infoCopy.Video) {
 		infoCopy.Video = getDefaultVideoParams()
 	}
 
@@ -96,7 +96,7 @@ func getRelayUrl(conf *config.Config, streamKey string) string {
 	return fmt.Sprintf("http://localhost:%d/%s", conf.HTTPRelayPort, streamKey)
 }
 
-func isEmptyAudioParams(options *livekit.IngressAudioOptions) bool {
+func isValidAudioParams(options *livekit.IngressAudioOptions) bool {
 	if options == nil {
 		return false
 	}
@@ -127,7 +127,7 @@ func getDefaultAudioParams() *livekit.IngressAudioOptions {
 	}
 }
 
-func isEmptyVideoParams(options *livekit.IngressVideoOptions) bool {
+func isValidVideoParams(options *livekit.IngressVideoOptions) bool {
 	if options == nil {
 		return false
 	}
