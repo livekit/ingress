@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"gopkg.in/yaml.v2"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
@@ -186,12 +187,12 @@ func (s *Service) launchHandler(ctx context.Context, resp *livekit.GetIngressInf
 	ctx, span := tracer.Start(ctx, "Service.launchHandler")
 	defer span.End()
 
-	//confString, err := yaml.Marshal(s.conf)
-	//if err != nil {
-	//	span.RecordError(err)
-	//	logger.Errorw("could not marshal config", err)
-	//	return
-	//}
+	confString, err := yaml.Marshal(s.conf)
+	if err != nil {
+		span.RecordError(err)
+		logger.Errorw("could not marshal config", err)
+		return
+	}
 
 	//infoString, err := proto.Marshal(resp.Info)
 	//if err != nil {
@@ -202,15 +203,15 @@ func (s *Service) launchHandler(ctx context.Context, resp *livekit.GetIngressInf
 
 	args := []string{
 		"run-handler",
-		//	"--config-body", string(confString),
+		"--config-body", string(confString),
 		//	"--info", string(infoString),
 	}
 
 	if resp.WsUrl != "" {
-		//	args = append(args, "--ws-url", resp.WsUrl)
+		args = append(args, "--ws-url", resp.WsUrl)
 	}
 	if resp.Token != "" {
-		//	args = append(args, "--token", resp.Token)
+		args = append(args, "--token", resp.Token)
 	}
 
 	fmt.Println("ARGS", args)
@@ -229,7 +230,7 @@ func (s *Service) launchHandler(ctx context.Context, resp *livekit.GetIngressInf
 	})
 	defer s.processes.Delete(resp.Info.IngressId)
 
-	err := cmd.Run()
+	err = cmd.Run()
 	if err != nil {
 		logger.Errorw("could not launch handler", err)
 	}
