@@ -13,7 +13,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/protobuf/encoding/protojson"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
@@ -214,8 +214,6 @@ func (s *Service) launchHandler(ctx context.Context, resp *livekit.GetIngressInf
 	if resp.Token != "" {
 		args = append(args, "--token", resp.Token)
 	}
-
-	fmt.Println("ARGS", args)
 
 	cmd := exec.Command("ingress",
 		args...,
