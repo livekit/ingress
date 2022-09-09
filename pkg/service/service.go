@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"google.golang.org/protobuf/proto"
 	"gopkg.in/yaml.v2"
 
 	"github.com/livekit/ingress/pkg/config"
@@ -194,17 +195,21 @@ func (s *Service) launchHandler(ctx context.Context, resp *livekit.GetIngressInf
 		return
 	}
 
-	//infoString, err := proto.Marshal(resp.Info)
-	//if err != nil {
-	//	span.RecordError(err)
-	//	logger.Errorw("could not marshal request", err)
-	//	return
-	//}
+	infoString, err := proto.Marshal(resp.Info)
+	if err != nil {
+		span.RecordError(err)
+		logger.Errorw("could not marshal request", err)
+		return
+	}
+
+	for _, b := range infoString {
+		fmt.Printf("0x%02x ", b)
+	}
 
 	args := []string{
 		"run-handler",
 		"--config-body", string(confString),
-		//	"--info", string(infoString),
+		"--info", string(infoString),
 	}
 
 	if resp.WsUrl != "" {
