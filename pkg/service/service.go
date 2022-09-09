@@ -215,6 +215,8 @@ func (s *Service) launchHandler(ctx context.Context, resp *livekit.GetIngressInf
 		args = append(args, "--token", resp.Token)
 	}
 
+	fmt.Println("ARGS", args)
+
 	cmd := exec.Command("ingress",
 		args...,
 	)
