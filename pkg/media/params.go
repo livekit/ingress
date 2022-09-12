@@ -62,10 +62,10 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		}
 	}
 
-	if infoCopy.Audio == nil {
+	if !isValidAudioParams(infoCopy.Audio) {
 		infoCopy.Audio = getDefaultAudioParams()
 	}
-	if infoCopy.Video == nil {
+	if !isValidVideoParams(infoCopy.Video) {
 		infoCopy.Video = getDefaultVideoParams()
 	}
 
@@ -96,6 +96,26 @@ func getRelayUrl(conf *config.Config, streamKey string) string {
 	return fmt.Sprintf("http://localhost:%d/%s", conf.HTTPRelayPort, streamKey)
 }
 
+func isValidAudioParams(options *livekit.IngressAudioOptions) bool {
+	if options == nil {
+		return false
+	}
+
+	if options.MimeType == "" {
+		return false
+	}
+
+	if options.Bitrate == 0 {
+		return false
+	}
+
+	if options.Channels == 0 {
+		return false
+	}
+
+	return true
+}
+
 func getDefaultAudioParams() *livekit.IngressAudioOptions {
 	return &livekit.IngressAudioOptions{
 		Name:       "audio",
@@ -105,6 +125,18 @@ func getDefaultAudioParams() *livekit.IngressAudioOptions {
 		DisableDtx: false,
 		Channels:   2,
 	}
+}
+
+func isValidVideoParams(options *livekit.IngressVideoOptions) bool {
+	if options == nil {
+		return false
+	}
+
+	if len(options.Layers) == 0 {
+		return false
+	}
+
+	return true
 }
 
 func getDefaultVideoParams() *livekit.IngressVideoOptions {

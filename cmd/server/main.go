@@ -10,7 +10,7 @@ import (
 	"syscall"
 
 	"github.com/urfave/cli/v2"
-	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
@@ -162,7 +162,7 @@ func runHandler(c *cli.Context) error {
 
 	info := &livekit.IngressInfo{}
 	infoString := c.String("info")
-	err = proto.Unmarshal([]byte(infoString), info)
+	err = protojson.Unmarshal([]byte(infoString), info)
 	if err != nil {
 		span.RecordError(err)
 		return err
