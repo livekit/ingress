@@ -235,7 +235,7 @@ func (s *Service) launchHandler(ctx context.Context, resp *livekit.GetIngressInf
 	}
 }
 
-func (s *Service) Status() ([]byte, error) {
+func (s *Service) Status() ([]byte, bool, error) {
 	info := map[string]interface{}{
 		"CpuLoad": sysload.GetCPULoad(),
 	}
@@ -245,7 +245,9 @@ func (s *Service) Status() ([]byte, error) {
 		return true
 	})
 
-	return json.Marshal(info)
+	b, err := json.Marshal(info)
+
+	return b, sysload.CanAcceptIngress(), err
 }
 
 func (s *Service) Stop(kill bool) {
