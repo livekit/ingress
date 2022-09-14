@@ -88,7 +88,9 @@ func runService(c *cli.Context) error {
 
 	err = setupHealthHandlers(conf, svc)
 	if err != nil {
+		return err
 	}
+
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, syscall.SIGTERM, syscall.SIGQUIT)
 
