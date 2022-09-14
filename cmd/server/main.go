@@ -72,20 +72,6 @@ func main() {
 	}
 }
 
-type httpHandler struct {
-	svc *service.Service
-}
-
-func (h *httpHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
-	info, err := h.svc.Status()
-	if err != nil {
-		logger.Errorw("failed to read status", err)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write(info)
-}
-
 func runService(c *cli.Context) error {
 	conf, err := getConfig(c)
 	if err != nil {
@@ -100,12 +86,9 @@ func runService(c *cli.Context) error {
 	rpcServer := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
 	svc := service.NewService(conf, rpcServer)
 
-	if conf.HealthPort != 0 {
-		go func() {
-			_ = http.ListenAndServe(fmt.Sprintf(":%d", conf.HealthPort), &httpHandler{svc: svc})
-		}()
+	err = setupHealthHandlers(conf, svc)
+	if err != nil {
 	}
-
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -142,6 +125,54 @@ func runService(c *cli.Context) error {
 	}()
 
 	return svc.Run()
+}
+
+type healthHttpHandler struct {
+	svc *service.Service
+}
+
+func (h *healthHttpHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	info, _, err := h.svc.Status()
+	if err != nil {
+		logger.Errorw("failed to read status", err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(info)
+}
+
+type availabilityHttpHandler struct {
+	svc *service.Service
+}
+
+func (h *availabilityHttpHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
+	_, canAccept, err := h.svc.Status()
+	if err != nil {
+		logger.Errorw("failed to read status", err)
+	}
+
+	if !canAccept {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("No availability"))
+	}
+
+	_, _ = w.Write([]byte("Available"))
+}
+
+func setupHealthHandlers(conf *config.Config, svc *service.Service) error {
+	if conf.HealthPort == 0 {
+		return nil
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/", &healthHttpHandler{svc: svc})
+	mux.Handle("/availability", &availabilityHttpHandler{svc: svc})
+
+	go func() {
+		_ = http.ListenAndServe(fmt.Sprintf(":%d", conf.HealthPort), mux)
+	}()
+
+	return nil
 }
 
 func runHandler(c *cli.Context) error {

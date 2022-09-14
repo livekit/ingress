@@ -73,6 +73,10 @@ func GetCPULoad() float64 {
 	return (numCPUs - idleCPUs.Load()) / numCPUs * 100
 }
 
+func CanAcceptIngress() bool {
+	return (idleCPUs.Load() - pendingCPUs.Load()) > 1
+}
+
 func AcceptIngress(info *livekit.IngressInfo) bool {
 	available := idleCPUs.Load() - pendingCPUs.Load()
 	accept := available > 1
