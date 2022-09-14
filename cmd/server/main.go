@@ -127,46 +127,38 @@ func runService(c *cli.Context) error {
 	return svc.Run()
 }
 
-type healthHttpHandler struct {
-	svc *service.Service
-}
-
-func (h *healthHttpHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
-	info, _, err := h.svc.Status()
-	if err != nil {
-		logger.Errorw("failed to read status", err)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write(info)
-}
-
-type availabilityHttpHandler struct {
-	svc *service.Service
-}
-
-func (h *availabilityHttpHandler) ServeHTTP(w http.ResponseWriter, _ *http.Request) {
-	_, canAccept, err := h.svc.Status()
-	if err != nil {
-		logger.Errorw("failed to read status", err)
-	}
-
-	if !canAccept {
-		w.WriteHeader(http.StatusServiceUnavailable)
-		_, _ = w.Write([]byte("No availability"))
-	}
-
-	_, _ = w.Write([]byte("Available"))
-}
-
 func setupHealthHandlers(conf *config.Config, svc *service.Service) error {
 	if conf.HealthPort == 0 {
 		return nil
 	}
 
+	healthHttpHandler := func(w http.ResponseWriter, _ *http.Request) {
+		info, _, err := svc.Status()
+		if err != nil {
+			logger.Errorw("failed to read status", err)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(info)
+	}
+
+	availabilityHttpHandler := func(w http.ResponseWriter, _ *http.Request) {
+		_, canAccept, err := svc.Status()
+		if err != nil {
+			logger.Errorw("failed to read status", err)
+		}
+
+		if !canAccept {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("No availability"))
+		}
+
+		_, _ = w.Write([]byte("Available"))
+	}
+
 	mux := http.NewServeMux()
-	mux.Handle("/", &healthHttpHandler{svc: svc})
-	mux.Handle("/availability", &availabilityHttpHandler{svc: svc})
+	mux.HandleFunc("/", healthHttpHandler)
+	mux.HandleFunc("/availability", availabilityHttpHandler)
 
 	go func() {
 		_ = http.ListenAndServe(fmt.Sprintf(":%d", conf.HealthPort), mux)
