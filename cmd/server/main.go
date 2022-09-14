@@ -135,13 +135,7 @@ func setupHealthHandlers(conf *config.Config, svc *service.Service) error {
 	}
 
 	healthHttpHandler := func(w http.ResponseWriter, _ *http.Request) {
-		info, _, err := svc.Status()
-		if err != nil {
-			logger.Errorw("failed to read status", err)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write(info)
+		_, _ = w.Write([]byte("Healthy"))
 	}
 
 	availabilityHttpHandler := func(w http.ResponseWriter, _ *http.Request) {
