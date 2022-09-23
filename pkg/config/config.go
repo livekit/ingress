@@ -31,8 +31,15 @@ type Config struct {
 	HTTPRelayPort  int    `yaml:"http_relay_port"`
 	LogLevel       string `yaml:"log_level"`
 
+	// CPU costs for various ingress types
+	CPUCost CPUCostConfig `yaml"cpu_cost"`
+
 	// internal
 	NodeID string `yaml:"-"`
+}
+
+type CPUCostConfig struct {
+	RTMPCpuCost float64 `yaml:"rtmp_cpu_cost"`
 }
 
 func NewConfig(confString string) (*Config, error) {

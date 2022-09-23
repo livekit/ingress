@@ -18,7 +18,7 @@ import (
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media"
-	"github.com/livekit/ingress/pkg/sysload"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -28,7 +28,9 @@ import (
 const shutdownTimer = time.Second * 30
 
 type Service struct {
-	conf      *config.Config
+	conf    *config.Config
+	monitor *stats.Monitor
+
 	rpcServer ingress.RPCServer
 
 	promServer *http.Server
@@ -51,6 +53,7 @@ type rtmpPublishRequest struct {
 func NewService(conf *config.Config, rpcServer ingress.RPCServer) *Service {
 	s := &Service{
 		conf:                conf,
+		monitor:             stats.NewMonitor(),
 		rpcServer:           rpcServer,
 		rtmpPublishRequests: make(chan rtmpPublishRequest),
 		shutdown:            make(chan struct{}),
@@ -97,7 +100,7 @@ func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) 
 	}
 
 	// check cpu load
-	if !sysload.AcceptIngress(resp.Info) {
+	if !s.monitor.AcceptIngress(resp.Info) {
 		logger.Debugw("rejecting ingress")
 		return nil, errors.ErrServerCapacityExceeded
 	}
@@ -125,7 +128,7 @@ func (s *Service) Run() error {
 		}()
 	}
 
-	if err := sysload.Init(s.conf, s.shutdown, func() float64 {
+	if err := s.monitor.Start(s.conf, s.shutdown, func() float64 {
 		if s.isIdle() {
 			return 1
 		}
@@ -223,11 +226,15 @@ func (s *Service) launchHandler(ctx context.Context, resp *livekit.GetIngressInf
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	s.monitor.IngressStarted(resp.Info)
 	s.processes.Store(resp.Info.IngressId, &process{
 		info: resp.Info,
 		cmd:  cmd,
 	})
-	defer s.processes.Delete(resp.Info.IngressId)
+	defer func() {
+		s.monitor.IngressEnded(resp.Info)
+		s.processes.Delete(resp.Info.IngressId)
+	}()
 
 	err = cmd.Run()
 	if err != nil {
@@ -237,7 +244,7 @@ func (s *Service) launchHandler(ctx context.Context, resp *livekit.GetIngressInf
 
 func (s *Service) Status() ([]byte, bool, error) {
 	info := map[string]interface{}{
-		"CpuLoad": sysload.GetCPULoad(),
+		"CpuLoad": s.monitor.GetCPULoad(),
 	}
 	s.processes.Range(func(key, value interface{}) bool {
 		p := value.(*process)
@@ -247,7 +254,7 @@ func (s *Service) Status() ([]byte, bool, error) {
 
 	b, err := json.Marshal(info)
 
-	return b, sysload.CanAcceptIngress(), err
+	return b, s.monitor.CanAcceptIngress(), err
 }
 
 func (s *Service) Stop(kill bool) {
