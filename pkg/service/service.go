@@ -181,7 +181,7 @@ func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err
 		logger.Errorw("ingress failed", errors.New(info.State.Error))
 	}
 
-	if err := s.rpcServer.SendUpdate(ctx, info); err != nil {
+	if err := s.rpcServer.SendUpdate(ctx, info.IngressId, info.State); err != nil {
 		logger.Errorw("failed to send update", err)
 	}
 }

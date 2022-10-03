@@ -114,7 +114,7 @@ func (h *Handler) sendUpdate(ctx context.Context, info *livekit.IngressInfo) {
 		logger.Errorw("ingress failed", errors.New(info.State.Error))
 	}
 
-	if err := h.rpcServer.SendUpdate(ctx, info); err != nil {
+	if err := h.rpcServer.SendUpdate(ctx, info.IngressId, info.State); err != nil {
 		logger.Errorw("failed to send update", err)
 	}
 }
@@ -132,7 +132,7 @@ func (h *Handler) sendResponse(ctx context.Context, req *livekit.IngressRequest,
 		logger.Debugw("request handled", args...)
 	}
 
-	if err := h.rpcServer.SendResponse(ctx, req, info, err); err != nil {
+	if err := h.rpcServer.SendResponse(ctx, req, info.State, err); err != nil {
 		logger.Errorw("failed to send response", err, args...)
 	}
 }
