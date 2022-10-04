@@ -159,3 +159,7 @@ func (p *Params) SetStatus(status livekit.IngressState_Status, errString string)
 	p.State.Status = status
 	p.State.Error = errString
 }
+
+func (p *Params) SetRoomId(roomId string) {
+	p.State.RoomId = roomId
+}
