@@ -152,7 +152,7 @@ func TestIngress(t *testing.T) {
 
 	time.Sleep(time.Second * 45)
 
-	info, err = rpcClient.SendRequest(ctx, &livekit.IngressRequest{
+	_, err = rpcClient.SendRequest(ctx, &livekit.IngressRequest{
 		IngressId: info.IngressId,
 		Request:   &livekit.IngressRequest_Delete{Delete: &livekit.DeleteIngressRequest{IngressId: info.IngressId}},
 	})
@@ -163,7 +163,7 @@ func TestIngress(t *testing.T) {
 	msg := <-updates.Channel()
 	b := updates.Payload(msg)
 
-	final := &livekit.IngressInfo{}
+	final := &livekit.UpdateIngressStateRequest{}
 	require.NoError(t, proto.Unmarshal(b, final))
 	require.NotEqual(t, final.State.Status, livekit.IngressState_ENDPOINT_ERROR)
 }
