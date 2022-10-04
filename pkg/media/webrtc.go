@@ -38,6 +38,8 @@ func NewWebRTCSink(ctx context.Context, p *Params) (*WebRTCSink, error) {
 		return nil, err
 	}
 
+	p.SetRoomId(room.SID())
+
 	return &WebRTCSink{
 		room:         room,
 		logger:       p.Logger,
