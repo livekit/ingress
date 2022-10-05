@@ -84,14 +84,16 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind StreamKind) {
 		}
 	}()
 
-	bin, err = p.sink.AddTrack(kind)
+	bins, err := p.sink.AddTrack(kind)
 	if err != nil {
 		return
 	}
 
-	if err = p.pipeline.Add(bin.Element); err != nil {
-		p.Logger.Errorw("could not add bin", err)
-		return
+	for _, bin := range bins {
+		if err = p.pipeline.Add(bin.Element); err != nil {
+			p.Logger.Errorw("could not add bin", err)
+			return
+		}
 	}
 
 	pad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
