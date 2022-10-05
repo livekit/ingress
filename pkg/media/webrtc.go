@@ -8,6 +8,7 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst"
 
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
@@ -51,11 +52,23 @@ func NewWebRTCSink(ctx context.Context, p *Params) (*WebRTCSink, error) {
 	}, nil
 }
 
-func (s *WebRTCSink) AddTrackLayer(mimeType string, opts *lksdk.TrackPublicationOptions, trackOpts []lksdk.LocalSampleTrackOptions, output *Output) error {
-	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: mimeType}, trackOpts...)
+func (s *WebRTCSink) AddAudioTrack(mimeType string) (*Output, error) {
+	output, err := NewAudioOutput(s.audioOptions)
+	opts := &lksdk.TrackPublicationOptions{
+		Name:       s.audioOptions.Name,
+		Source:     s.audioOptions.Source,
+		DisableDTX: s.audioOptions.DisableDtx,
+	}
+
+	if err != nil {
+		s.logger.Errorw("could not create output", err)
+		return nil, err
+	}
+
+	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: mimeType})
 	if err != nil {
 		s.logger.Errorw("could not create track", err)
-		return err
+		return nil, err
 	}
 
 	var pub *lksdk.LocalTrackPublication
@@ -76,83 +89,133 @@ func (s *WebRTCSink) AddTrackLayer(mimeType string, opts *lksdk.TrackPublication
 	pub, err = s.room.LocalParticipant.PublishTrack(track, opts)
 	if err != nil {
 		s.logger.Errorw("could not publish track", err)
-		return err
+		return nil, err
 	}
 
-	return nil
+	return output, nil
+}
+
+func (s *WebRTCSink) AddVideoTrack(mimeType string) ([]*Output, error) {
+	opts := &lksdk.TrackPublicationOptions{
+		Name:        s.videoOptions.Name,
+		Source:      s.videoOptions.Source,
+		VideoWidth:  int(s.videoOptions.Layers[0].Width),
+		VideoHeight: int(s.videoOptions.Layers[0].Height),
+	}
+
+	var pub *lksdk.LocalTrackPublication
+	var err error
+	onComplete := func() {
+		s.logger.Debugw("write complete")
+		if pub != nil {
+			if err := s.room.LocalParticipant.UnpublishTrack(pub.SID()); err != nil {
+				s.logger.Errorw("could not unpublish track", err)
+			}
+		}
+	}
+
+	outputs := make([]*Output, 0)
+	tracks := make([]*lksdk.LocalSampleTrack, 0)
+	for _, layer := range s.videoOptions.Layers {
+		output, err := NewVideoOutput(mimeType, layer)
+
+		onRTCP := func(pkt rtcp.Packet) {
+			switch pkt.(type) {
+			case *rtcp.PictureLossIndication:
+				s.logger.Debugw("PLI received")
+				if err := output.ForceKeyFrame(); err != nil {
+					s.logger.Errorw("could not force key frame", err)
+				}
+			}
+		}
+		track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: mimeType}, lksdk.WithRTCPHandler(onRTCP), lksdk.WithSimulcast(s.ingressId, layer))
+		if err != nil {
+			s.logger.Errorw("could not create track", err)
+			return nil, err
+		}
+
+		track.OnBind(func() {
+			if err := track.StartWrite(output, onComplete); err != nil {
+				s.logger.Errorw("could not start writing", err)
+			}
+		})
+		tracks = append(tracks, track)
+		outputs = append(outputs, output)
+	}
+
+	pub, err = s.room.LocalParticipant.PublishSimulcastTrack(tracks, opts)
+	if err != nil {
+		s.logger.Errorw("could not publish track", err)
+		return nil, err
+	}
+
+	return outputs, nil
+}
+
+func (s *WebRTCSink) CreateTee(outputs []*Output) (*gst.Bin, error) {
+	tee, err := gst.NewElement("tee")
+	if err != nil {
+		return nil, err
+	}
+
+	bin := gst.NewBin("tee")
+	err = bin.Add(tee)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, output := range outputs {
+		err := bin.Add(output.bin.Element)
+		if err != nil {
+			return nil, err
+		}
+
+		err = gst.ElementLinkMany(tee, output.bin.Element)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	binSink := gst.NewGhostPad("sink", tee.GetStaticPad("sink"))
+	if !bin.AddPad(binSink.Pad) {
+		return nil, errors.ErrUnableToAddPad
+	}
+
+	return bin, nil
 }
 
 // This may return more than 1 bin if simulcast is enabled
-func (s *WebRTCSink) AddTrack(kind StreamKind) ([]*gst.Bin, error) {
+func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 	var mimeType string
-	var output *Output
-	var opts *lksdk.TrackPublicationOptions
-	var trackOpts []lksdk.LocalSampleTrackOptions
-	var err error
+	var bin *gst.Bin
 
-	onRTCP := func(pkt rtcp.Packet) {
-		switch pkt.(type) {
-		case *rtcp.PictureLossIndication:
-			s.logger.Debugw("PLI received")
-			if err := output.ForceKeyFrame(); err != nil {
-				s.logger.Errorw("could not force key frame", err)
-			}
-		}
-	}
-
-	bins := make([]*gst.Bin, 0)
 	switch kind {
 	case Audio:
 		mimeType = s.audioOptions.MimeType
-		output, err = NewAudioOutput(s.audioOptions)
-		opts = &lksdk.TrackPublicationOptions{
-			Name:       s.audioOptions.Name,
-			Source:     s.audioOptions.Source,
-			DisableDTX: s.audioOptions.DisableDtx,
-		}
-		trackOpts = []lksdk.LocalSampleTrackOptions{
-			lksdk.WithRTCPHandler(onRTCP),
-		}
-
+		output, err := s.AddAudioTrack(mimeType)
 		if err != nil {
-			s.logger.Errorw("could not create output", err)
+			s.logger.Errorw("could not add audio track", err)
 			return nil, err
 		}
 
-		err = s.AddTrackLayer(mimeType, opts, trackOpts, output)
-		if err != nil {
-			s.logger.Errorw("could not add track", err)
-			return nil, err
-		}
-
-		bins = append(bins, output.bin)
+		bin = output.bin
 
 	case Video:
 		mimeType = s.videoOptions.MimeType
-		for _, layer := range s.videoOptions.Layers {
-			output, err = NewVideoOutput(mimeType, layer)
-			opts = &lksdk.TrackPublicationOptions{
-				Name:        s.videoOptions.Name,
-				Source:      s.videoOptions.Source,
-				VideoWidth:  int(layer.Width),
-				VideoHeight: int(layer.Height),
-			}
-			trackOpts = []lksdk.LocalSampleTrackOptions{
-				lksdk.WithRTCPHandler(onRTCP),
-				lksdk.WithSimulcast(s.ingressId, layer),
-			}
+		outputs, err := s.AddVideoTrack(mimeType)
+		if err != nil {
+			s.logger.Errorw("could not add video track", err)
+			return nil, err
+		}
 
-			err = s.AddTrackLayer(mimeType, opts, trackOpts, output)
-			if err != nil {
-				s.logger.Errorw("could not add layer", err)
-				return nil, err
-			}
-
-			bins = append(bins, output.bin)
+		bin, err = s.CreateTee(outputs)
+		s.logger.Errorw("could not create tee", err)
+		if err != nil {
+			return nil, err
 		}
 	}
 
-	return bins, nil
+	return bin, nil
 }
 
 func (s *WebRTCSink) Close() {

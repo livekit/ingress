@@ -124,7 +124,7 @@ func NewVideoOutput(mimeType string, layer *livekit.VideoLayer) (*Output, error)
 
 	e.elements = append(e.elements, queue, e.sink.Element)
 
-	e.bin = gst.NewBin("video")
+	e.bin = gst.NewBin(fmt.Sprintf("video_%s", layer.Quality.String()))
 	if err = e.linkElements(); err != nil {
 		return nil, err
 	}
@@ -264,6 +264,7 @@ func (e *Output) handleEOS(_ *app.Sink) {
 func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 	// Pull the sample that triggered this callback
 	s := sink.PullSample()
+
 	if s == nil {
 		return gst.FlowEOS
 	}
