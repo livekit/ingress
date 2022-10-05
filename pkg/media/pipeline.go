@@ -67,7 +67,6 @@ func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, e
 }
 
 func (p *Pipeline) onOutputReady(pad *gst.Pad, kind StreamKind) {
-	var bin *gst.Bin
 	var err error
 
 	defer func() {
@@ -94,19 +93,21 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind StreamKind) {
 			p.Logger.Errorw("could not add bin", err)
 			return
 		}
+
+		pad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+			// link
+			if linkReturn := pad.Link(bin.GetStaticPad("sink")); linkReturn != gst.PadLinkOK {
+				p.Logger.Errorw("failed to link output bin", err)
+			}
+
+			// sync state
+			bin.SyncStateWithParent()
+
+			return gst.PadProbeRemove
+		})
+
 	}
 
-	pad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
-		// link
-		if linkReturn := pad.Link(bin.GetStaticPad("sink")); linkReturn != gst.PadLinkOK {
-			p.Logger.Errorw("failed to link output bin", err)
-		}
-
-		// sync state
-		bin.SyncStateWithParent()
-
-		return gst.PadProbeRemove
-	})
 }
 
 func (p *Pipeline) GetInfo() *livekit.IngressInfo {
