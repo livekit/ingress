@@ -52,7 +52,7 @@ func NewWebRTCSink(ctx context.Context, p *Params) (*WebRTCSink, error) {
 	}, nil
 }
 
-func (s *WebRTCSink) AddAudioTrack(mimeType string) (*Output, error) {
+func (s *WebRTCSink) addAudioTrack(mimeType string) (*Output, error) {
 	output, err := NewAudioOutput(s.audioOptions)
 	opts := &lksdk.TrackPublicationOptions{
 		Name:       s.audioOptions.Name,
@@ -95,7 +95,7 @@ func (s *WebRTCSink) AddAudioTrack(mimeType string) (*Output, error) {
 	return output, nil
 }
 
-func (s *WebRTCSink) AddVideoTrack(mimeType string) ([]*Output, error) {
+func (s *WebRTCSink) addVideoTrack(mimeType string) ([]*Output, error) {
 	opts := &lksdk.TrackPublicationOptions{
 		Name:        s.videoOptions.Name,
 		Source:      s.videoOptions.Source,
@@ -152,7 +152,7 @@ func (s *WebRTCSink) AddVideoTrack(mimeType string) ([]*Output, error) {
 	return outputs, nil
 }
 
-func (s *WebRTCSink) CreateTee(outputs []*Output) (*gst.Bin, error) {
+func (s *WebRTCSink) createTee(outputs []*Output) (*gst.Bin, error) {
 	tee, err := gst.NewElement("tee")
 	if err != nil {
 		return nil, err
@@ -192,7 +192,7 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 	switch kind {
 	case Audio:
 		mimeType = s.audioOptions.MimeType
-		output, err := s.AddAudioTrack(mimeType)
+		output, err := s.addAudioTrack(mimeType)
 		if err != nil {
 			s.logger.Errorw("could not add audio track", err)
 			return nil, err
@@ -202,13 +202,13 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 
 	case Video:
 		mimeType = s.videoOptions.MimeType
-		outputs, err := s.AddVideoTrack(mimeType)
+		outputs, err := s.addVideoTrack(mimeType)
 		if err != nil {
 			s.logger.Errorw("could not add video track", err)
 			return nil, err
 		}
 
-		bin, err = s.CreateTee(outputs)
+		bin, err = s.createTee(outputs)
 		s.logger.Errorw("could not create tee", err)
 		if err != nil {
 			return nil, err

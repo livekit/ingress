@@ -264,7 +264,6 @@ func (e *Output) handleEOS(_ *app.Sink) {
 func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 	// Pull the sample that triggered this callback
 	s := sink.PullSample()
-
 	if s == nil {
 		return gst.FlowEOS
 	}
