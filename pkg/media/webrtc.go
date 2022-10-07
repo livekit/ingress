@@ -52,7 +52,7 @@ func NewWebRTCSink(ctx context.Context, p *Params) (*WebRTCSink, error) {
 	}, nil
 }
 
-func (s *WebRTCSink) addAudioTrack(mimeType string) (*Output, error) {
+func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 	output, err := NewAudioOutput(s.audioOptions)
 	opts := &lksdk.TrackPublicationOptions{
 		Name:       s.audioOptions.Name,
@@ -65,7 +65,7 @@ func (s *WebRTCSink) addAudioTrack(mimeType string) (*Output, error) {
 		return nil, err
 	}
 
-	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: mimeType})
+	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: s.audioOptions.MimeType})
 	if err != nil {
 		s.logger.Errorw("could not create track", err)
 		return nil, err
@@ -95,7 +95,7 @@ func (s *WebRTCSink) addAudioTrack(mimeType string) (*Output, error) {
 	return output, nil
 }
 
-func (s *WebRTCSink) addVideoTrack(mimeType string) ([]*Output, error) {
+func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 	opts := &lksdk.TrackPublicationOptions{
 		Name:        s.videoOptions.Name,
 		Source:      s.videoOptions.Source,
@@ -117,7 +117,7 @@ func (s *WebRTCSink) addVideoTrack(mimeType string) ([]*Output, error) {
 	outputs := make([]*Output, 0)
 	tracks := make([]*lksdk.LocalSampleTrack, 0)
 	for _, layer := range s.videoOptions.Layers {
-		output, err := NewVideoOutput(mimeType, layer)
+		output, err := NewVideoOutput(s.videoOptions.MimeType, layer)
 
 		onRTCP := func(pkt rtcp.Packet) {
 			switch pkt.(type) {
@@ -128,7 +128,7 @@ func (s *WebRTCSink) addVideoTrack(mimeType string) ([]*Output, error) {
 				}
 			}
 		}
-		track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: mimeType}, lksdk.WithRTCPHandler(onRTCP), lksdk.WithSimulcast(s.ingressId, layer))
+		track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: s.videoOptions.MimeType}, lksdk.WithRTCPHandler(onRTCP), lksdk.WithSimulcast(s.ingressId, layer))
 		if err != nil {
 			s.logger.Errorw("could not create track", err)
 			return nil, err
@@ -186,13 +186,11 @@ func (s *WebRTCSink) createTee(outputs []*Output) (*gst.Bin, error) {
 
 // This may return more than 1 bin if simulcast is enabled
 func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
-	var mimeType string
 	var bin *gst.Bin
 
 	switch kind {
 	case Audio:
-		mimeType = s.audioOptions.MimeType
-		output, err := s.addAudioTrack(mimeType)
+		output, err := s.addAudioTrack()
 		if err != nil {
 			s.logger.Errorw("could not add audio track", err)
 			return nil, err
@@ -201,8 +199,7 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 		bin = output.bin
 
 	case Video:
-		mimeType = s.videoOptions.MimeType
-		outputs, err := s.addVideoTrack(mimeType)
+		outputs, err := s.addVideoTrack()
 		if err != nil {
 			s.logger.Errorw("could not add video track", err)
 			return nil, err
