@@ -48,5 +48,5 @@ func NewInvalidVideoParamsError(s string) InvalidVideoParamsError {
 }
 
 func (s InvalidVideoParamsError) Error() string {
-	return string(s)
+	return "Invalid video parameters: " + string(s)
 }
