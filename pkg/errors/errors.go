@@ -40,7 +40,7 @@ func NewInvalidIngressError(s string) InvalidIngressError {
 }
 
 func (s InvalidIngressError) Error() string {
-	return string(s)
+	return "invalid ingress parameters: " + string(s)
 }
 
 func NewInvalidVideoParamsError(s string) InvalidVideoParamsError {
@@ -48,5 +48,5 @@ func NewInvalidVideoParamsError(s string) InvalidVideoParamsError {
 }
 
 func (s InvalidVideoParamsError) Error() string {
-	return "Invalid video parameters: " + string(s)
+	return "invalid video parameters: " + string(s)
 }
