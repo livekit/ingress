@@ -97,7 +97,9 @@ func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, 
 	}
 
 	if err != nil {
-		info := params.IngressInfo
+		if params != nil {
+			info = params.IngressInfo
+		}
 
 		info.State.Error = err.Error()
 		info.State.Status = livekit.IngressState_ENDPOINT_ERROR

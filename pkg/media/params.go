@@ -62,11 +62,16 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		}
 	}
 
-	if !isValidAudioParams(infoCopy.Audio) {
+	if isNilAudioParams(infoCopy.Audio) {
 		infoCopy.Audio = getDefaultAudioParams()
 	}
-	if !isValidVideoParams(infoCopy.Video) {
+	if isNilVideoParams(infoCopy.Video) {
 		infoCopy.Video = getDefaultVideoParams()
+	}
+
+	err = validateVideoParams(infoCopy.Video)
+	if err != nil {
+		return nil, err
 	}
 
 	if wsUrl == "" {
@@ -96,24 +101,24 @@ func getRelayUrl(conf *config.Config, streamKey string) string {
 	return fmt.Sprintf("http://localhost:%d/%s", conf.HTTPRelayPort, streamKey)
 }
 
-func isValidAudioParams(options *livekit.IngressAudioOptions) bool {
+func isNilAudioParams(options *livekit.IngressAudioOptions) bool {
 	if options == nil {
-		return false
+		return true
 	}
 
 	if options.MimeType == "" {
-		return false
+		return true
 	}
 
 	if options.Bitrate == 0 {
-		return false
+		return true
 	}
 
 	if options.Channels == 0 {
-		return false
+		return true
 	}
 
-	return true
+	return false
 }
 
 func getDefaultAudioParams() *livekit.IngressAudioOptions {
@@ -127,16 +132,51 @@ func getDefaultAudioParams() *livekit.IngressAudioOptions {
 	}
 }
 
-func isValidVideoParams(options *livekit.IngressVideoOptions) bool {
+func isNilVideoParams(options *livekit.IngressVideoOptions) bool {
 	if options == nil {
-		return false
+		return true
 	}
 
 	if len(options.Layers) == 0 {
-		return false
+		return true
 	}
 
-	return true
+	return false
+}
+
+func validateVideoParams(options *livekit.IngressVideoOptions) error {
+	layersByQuality := make(map[livekit.VideoQuality]*livekit.VideoLayer)
+
+	for _, layer := range options.Layers {
+		if layer.Height == 0 || layer.Width == 0 {
+			return errors.ErrInvalidOutputDimensions
+		}
+
+		if layer.Bitrate == 0 {
+			return errors.NewInvalidVideoParamsError("invalid bitrate")
+		}
+
+		if _, ok := layersByQuality[layer.Quality]; ok {
+			return errors.NewInvalidVideoParamsError("more than one layer with the same quality level")
+		}
+		layersByQuality[layer.Quality] = layer
+	}
+
+	var oldLayerArea uint32
+	for q := livekit.VideoQuality_LOW; q <= livekit.VideoQuality_HIGH; q++ {
+		layer, ok := layersByQuality[q]
+		if !ok {
+			continue
+		}
+		layerArea := layer.Width * layer.Height
+
+		if layerArea <= oldLayerArea {
+			return errors.NewInvalidVideoParamsError("video layers do not have increasing pixel count with increasing quality")
+		}
+		oldLayerArea = layerArea
+	}
+
+	return nil
 }
 
 func getDefaultVideoParams() *livekit.IngressVideoOptions {
@@ -150,6 +190,18 @@ func getDefaultVideoParams() *livekit.IngressVideoOptions {
 				Width:   1280,
 				Height:  720,
 				Bitrate: 3000,
+			},
+			{
+				Quality: livekit.VideoQuality_MEDIUM,
+				Width:   960,
+				Height:  540,
+				Bitrate: 1500,
+			},
+			{
+				Quality: livekit.VideoQuality_LOW,
+				Width:   640,
+				Height:  320,
+				Bitrate: 750,
 			},
 		},
 	}

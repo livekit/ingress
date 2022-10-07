@@ -14,12 +14,14 @@ var (
 	ErrUnableToAddPad          = errors.New("could not add pads to bin")
 	ErrInvalidInputDimensions  = errors.New("invalid input media dimensions")
 	ErrInvalidInputFPS         = errors.New("invalid input media FPS")
-	ErrInvalidOutputDimensions = errors.New("invalid output media dimensions")
 	ErrIngressNotFound         = errors.New("ingress not found")
 	ErrServerCapacityExceeded  = errors.New("server capacity exceeded")
+	ErrInvalidOutputDimensions = NewInvalidVideoParamsError("invalid output media dimensions")
 )
 
 type InvalidIngressError string
+
+type InvalidVideoParamsError string
 
 func New(err string) error {
 	return errors.New(err)
@@ -38,5 +40,13 @@ func NewInvalidIngressError(s string) InvalidIngressError {
 }
 
 func (s InvalidIngressError) Error() string {
-	return string(s)
+	return "invalid ingress parameters: " + string(s)
+}
+
+func NewInvalidVideoParamsError(s string) InvalidVideoParamsError {
+	return InvalidVideoParamsError(s)
+}
+
+func (s InvalidVideoParamsError) Error() string {
+	return "invalid video parameters: " + string(s)
 }

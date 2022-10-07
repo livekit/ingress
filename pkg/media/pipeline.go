@@ -67,7 +67,6 @@ func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, e
 }
 
 func (p *Pipeline) onOutputReady(pad *gst.Pad, kind StreamKind) {
-	var bin *gst.Bin
 	var err error
 
 	defer func() {
@@ -84,7 +83,7 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind StreamKind) {
 		}
 	}()
 
-	bin, err = p.sink.AddTrack(kind)
+	bin, err := p.sink.AddTrack(kind)
 	if err != nil {
 		return
 	}
