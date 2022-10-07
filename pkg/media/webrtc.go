@@ -184,7 +184,6 @@ func (s *WebRTCSink) createTee(outputs []*Output) (*gst.Bin, error) {
 	return bin, nil
 }
 
-// This may return more than 1 bin if simulcast is enabled
 func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 	var bin *gst.Bin
 
