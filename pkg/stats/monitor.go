@@ -69,7 +69,7 @@ func (m *Monitor) Start(conf *config.Config) error {
 	prometheus.MustRegister(m.promCPULoad, promNodeAvailable, m.requestGauge)
 
 	cpuStats, err := utils.NewCPUStats(func(idle float64) {
-		m.promCPULoad.Set(1 - idle)
+		m.promCPULoad.Set(1 - idle/m.numCPUs)
 	})
 	if err != nil {
 		return err
