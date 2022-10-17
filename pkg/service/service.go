@@ -128,7 +128,7 @@ func (s *Service) Run() error {
 		}()
 	}
 
-	if err := s.monitor.Start(s.conf, s.shutdown, func() float64 {
+	if err := s.monitor.Start(s.conf, func() float64 {
 		if s.isIdle() {
 			return 1
 		}
@@ -262,6 +262,10 @@ func (s *Service) Stop(kill bool) {
 	case <-s.shutdown:
 	default:
 		close(s.shutdown)
+	}
+
+	if s.monitor != nil {
+		s.monitor.Stop()
 	}
 
 	if kill {

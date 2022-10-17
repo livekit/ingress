@@ -2,13 +2,13 @@ module github.com/livekit/ingress
 
 go 1.17
 
+replace github.com/livekit/protocol => ../protocol
+
 require (
-	github.com/frostbyte73/go-throttle v0.0.0-20210621200530-8018c891361d
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/zapr v1.2.3
 	github.com/livekit/protocol v1.1.3-0.20221003181058-44a5ed6b4d13
 	github.com/livekit/server-sdk-go v0.10.5-0.20220714205315-505cb6a6ce71
-	github.com/mackerelio/go-osstat v0.2.2
 	github.com/pion/rtcp v1.2.9
 	github.com/pion/webrtc/v3 v3.1.44
 	github.com/prometheus/client_golang v1.13.0
@@ -34,6 +34,7 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/eapache/channels v1.1.0 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
+	github.com/frostbyte73/go-throttle v0.0.0-20210621200530-8018c891361d // indirect
 	github.com/go-logr/stdr v1.0.0 // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
@@ -44,6 +45,7 @@ require (
 	github.com/jxskiss/base62 v1.1.0 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
+	github.com/mackerelio/go-osstat v0.2.3 // indirect
 	github.com/magefile/mage v1.13.0 // indirect
 	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
@@ -80,7 +82,7 @@ require (
 	golang.org/x/sys v0.0.0-20220622161953-175b2fd9d664 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/genproto v0.0.0-20200825200019-8632dd797987 // indirect
-	google.golang.org/grpc v1.49.0 // indirect
+	google.golang.org/grpc v1.50.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 )

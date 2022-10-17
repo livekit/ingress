@@ -40,7 +40,6 @@ type Config struct {
 
 type CPUCostConfig struct {
 	RTMPCpuCost float64 `yaml:"rtmp_cpu_cost"`
-	CPUMargin   float64 `yaml:"cpu_margin"` // Available CPU percentage below which the instance stops being available
 }
 
 func NewConfig(confString string) (*Config, error) {
