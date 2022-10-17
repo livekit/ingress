@@ -2,6 +2,7 @@ package stats
 
 import (
 	"errors"
+	"fmt"
 	"runtime"
 	"sort"
 	"time"
@@ -103,6 +104,8 @@ func (m *Monitor) checkCPUConfig(costConfig config.CPUCostConfig) error {
 		)
 	}
 
+	logger.Infow(fmt.Sprintf("available CPU cores: %f max cost: %f", m.numCPUs, m.maxCost))
+
 	return nil
 }
 
@@ -123,7 +126,7 @@ func (m *Monitor) monitorCPULoad(close chan struct{}) {
 			m.promCPULoad.Set(1 - idlePercent)
 
 			if idlePercent < 0.1 {
-				m.warningThrottle(func() { logger.Infow("high cpu load", "load", 100-idlePercent) })
+				m.warningThrottle(func() { logger.Infow("high cpu load", "load", 1-idlePercent) })
 			}
 
 			prev = next
@@ -138,7 +141,7 @@ func (m *Monitor) GetCPULoad() float64 {
 func (m *Monitor) CanAcceptIngress() bool {
 	available := m.idleCPUs.Load() - m.pendingCPUs.Load()
 
-	return available > m.maxCost
+	return available > 1.2*m.maxCost
 }
 
 func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {

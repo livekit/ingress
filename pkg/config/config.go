@@ -32,7 +32,7 @@ type Config struct {
 	LogLevel       string `yaml:"log_level"`
 
 	// CPU costs for various ingress types
-	CPUCost CPUCostConfig `yaml"cpu_cost"`
+	CPUCost CPUCostConfig `yaml:"cpu_cost"`
 
 	// internal
 	NodeID string `yaml:"-"`
@@ -40,6 +40,7 @@ type Config struct {
 
 type CPUCostConfig struct {
 	RTMPCpuCost float64 `yaml:"rtmp_cpu_cost"`
+	CPUMargin   float64 `yaml:"cpu_margin"` // Available CPU percentage below which the instance stops being available
 }
 
 func NewConfig(confString string) (*Config, error) {
