@@ -80,6 +80,12 @@ func (m *Monitor) Start(conf *config.Config) error {
 	return nil
 }
 
+func (m *Monitor) Stop() {
+	if m.cpuStats != nil {
+		m.cpuStats.Stop()
+	}
+}
+
 func (m *Monitor) checkCPUConfig(costConfig config.CPUCostConfig) error {
 	if costConfig.RTMPCpuCost < 1 {
 		logger.Warnw("rtmp input requirement too low", nil,

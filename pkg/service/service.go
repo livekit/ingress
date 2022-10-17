@@ -128,12 +128,7 @@ func (s *Service) Run() error {
 		}()
 	}
 
-	if err := s.monitor.Start(s.conf, func() float64 {
-		if s.isIdle() {
-			return 1
-		}
-		return 0
-	}); err != nil {
+	if err := s.monitor.Start(s.conf); err != nil {
 		return err
 	}
 
