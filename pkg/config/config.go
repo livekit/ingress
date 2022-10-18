@@ -32,7 +32,7 @@ type Config struct {
 	LogLevel       string `yaml:"log_level"`
 
 	// CPU costs for various ingress types
-	CPUCost CPUCostConfig `yaml"cpu_cost"`
+	CPUCost CPUCostConfig `yaml:"cpu_cost"`
 
 	// internal
 	NodeID string `yaml:"-"`

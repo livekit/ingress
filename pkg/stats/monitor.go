@@ -2,18 +2,18 @@ package stats
 
 import (
 	"errors"
+	"fmt"
 	"runtime"
 	"sort"
 	"time"
 
-	"github.com/frostbyte73/go-throttle"
-	"github.com/mackerelio/go-osstat/cpu"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/utils"
 )
 
 type Monitor struct {
@@ -23,20 +23,20 @@ type Monitor struct {
 	promCPULoad  prometheus.Gauge
 	requestGauge *prometheus.GaugeVec
 
-	idleCPUs        atomic.Float64
-	pendingCPUs     atomic.Float64
-	numCPUs         float64
-	warningThrottle func(func())
+	cpuStats *utils.CPUStats
+
+	pendingCPUs atomic.Float64
+	numCPUs     float64
 }
 
 func NewMonitor() *Monitor {
 	return &Monitor{
-		numCPUs:         float64(runtime.NumCPU()),
-		warningThrottle: throttle.New(time.Minute),
+		numCPUs: float64(runtime.NumCPU()),
 	}
 }
 
-func (m *Monitor) Start(conf *config.Config, close chan struct{}, isAvailable func() float64) error {
+func (m *Monitor) Start(conf *config.Config) error {
+
 	if err := m.checkCPUConfig(conf.CPUCost); err != nil {
 		return err
 	}
@@ -52,7 +52,13 @@ func (m *Monitor) Start(conf *config.Config, close chan struct{}, isAvailable fu
 		Subsystem:   "ingress",
 		Name:        "available",
 		ConstLabels: prometheus.Labels{"node_id": conf.NodeID},
-	}, isAvailable)
+	}, func() float64 {
+		c := m.CanAcceptIngress()
+		if c {
+			return 1
+		}
+		return 0
+	})
 	m.requestGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Namespace:   "livekit",
 		Subsystem:   "ingress",
@@ -62,8 +68,22 @@ func (m *Monitor) Start(conf *config.Config, close chan struct{}, isAvailable fu
 
 	prometheus.MustRegister(m.promCPULoad, promNodeAvailable, m.requestGauge)
 
-	go m.monitorCPULoad(close)
+	cpuStats, err := utils.NewCPUStats(func(idle float64) {
+		m.promCPULoad.Set(1 - idle/m.numCPUs)
+	})
+	if err != nil {
+		return err
+	}
+
+	m.cpuStats = cpuStats
+
 	return nil
+}
+
+func (m *Monitor) Stop() {
+	if m.cpuStats != nil {
+		m.cpuStats.Stop()
+	}
 }
 
 func (m *Monitor) checkCPUConfig(costConfig config.CPUCostConfig) error {
@@ -103,40 +123,17 @@ func (m *Monitor) checkCPUConfig(costConfig config.CPUCostConfig) error {
 		)
 	}
 
+	logger.Infow(fmt.Sprintf("available CPU cores: %f max cost: %f", m.numCPUs, m.maxCost))
+
 	return nil
 }
 
-func (m *Monitor) monitorCPULoad(close chan struct{}) {
-	prev, _ := cpu.Get()
-
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-close:
-			return
-		case <-ticker.C:
-			next, _ := cpu.Get()
-			idlePercent := float64(next.Idle-prev.Idle) / float64(next.Total-prev.Total)
-			m.idleCPUs.Store(m.numCPUs * idlePercent)
-			m.promCPULoad.Set(1 - idlePercent)
-
-			if idlePercent < 0.1 {
-				m.warningThrottle(func() { logger.Infow("high cpu load", "load", 100-idlePercent) })
-			}
-
-			prev = next
-		}
-	}
-}
-
 func (m *Monitor) GetCPULoad() float64 {
-	return (m.numCPUs - m.idleCPUs.Load()) / m.numCPUs * 100
+	return (m.numCPUs - m.cpuStats.GetCPUIdle()) / m.numCPUs * 100
 }
 
 func (m *Monitor) CanAcceptIngress() bool {
-	available := m.idleCPUs.Load() - m.pendingCPUs.Load()
+	available := m.cpuStats.GetCPUIdle() - m.pendingCPUs.Load()
 
 	return available > m.maxCost
 }
@@ -144,7 +141,7 @@ func (m *Monitor) CanAcceptIngress() bool {
 func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 	var cpuHold float64
 	var accept bool
-	available := m.idleCPUs.Load() - m.pendingCPUs.Load()
+	available := m.cpuStats.GetCPUIdle() - m.pendingCPUs.Load()
 
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
