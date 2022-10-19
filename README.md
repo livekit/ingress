@@ -142,3 +142,29 @@ Then to run the service:
 ingress --config=config.yaml
 ```
 
+#### Running with Docker
+
+To run against a local livekit server, a redis server must be running locally. The Ingress service must be instructed to connect to livekit server and redis on the host. The host network is accessible from within the container on IP:
+- 192.168.65.2 on MacOS and Windows
+- 172.17.0.1 on linux
+
+Create a file named `config.yaml` with the following content:
+
+```yaml
+log_level: debug
+api_key: <your-api-key>
+api_secret: <your-api-secret>
+ws_url: ws://192.168.65.2:7880 (or ws://172.17.0.1:7880 on linux)
+redis:
+  address: 192.168.65.2:6379 (or 172.17.0.1:6379 on linux)
+```
+
+Then to run the service:
+
+```shell
+docker run --rm \
+    -e INGRESS_CONFIG_BODY=`cat config.yaml` \
+    -p 1935:1935 \
+    livekit/ingress
+```
+
