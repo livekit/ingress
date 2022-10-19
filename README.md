@@ -77,7 +77,7 @@ The first step in order to use the ingress service is to create an ingress sessi
 
 The request creation JSON file uses the following syntax:
 
-```json
+```
 {
     "name": Name of the Ingress,
     "room_name": Name of the room to connect to,
