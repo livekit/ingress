@@ -205,8 +205,8 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 		}
 
 		bin, err = s.createTee(outputs)
-		s.logger.Errorw("could not create tee", err)
 		if err != nil {
+			s.logger.Errorw("could not create tee", err)
 			return nil, err
 		}
 	}
