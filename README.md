@@ -118,7 +118,7 @@ Build the Ingress service by running:
 
 `mage build`
 
-##### Running th service
+##### Running the service
 
 To run against a local livekit server, a redis server must be running locally. All servers must be configured to communicate over localhost. Create a file named `config.yaml` with the following content:
 
