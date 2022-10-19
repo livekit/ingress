@@ -1,6 +1,6 @@
 # LiveKit Ingress
 
-WebRTC is proving to be a versatile and scalable transport protocol both for media ingestion and delivery. However, some applications may require integrating with existing workflows or equiment that do not support WebRTC. Universal ingress provides a way to send media that was generated using such workflows to a LiveKit room. 
+WebRTC is proving to be a versatile and scalable transport protocol both for media ingestion and delivery. However, some applications may require integrating with existing workflows or equipment that do not support WebRTC. Universal ingress provides a way to send media that was generated using such workflows to a LiveKit room. 
 
 ## Capabilities
 
@@ -21,7 +21,7 @@ The ingress serice will transcode the source media to ensure compatibility with 
 
 ### Service Architecture
 
-The ingress service and the livekit server communicate over redis. Redis is also used as storage for the ingress session state. The ingress service must also expose a public IP address for the publishing endpoint streamers will connect to. In a tyical cluster setup, this IP address would be assigned to a load balancer to would forward incoming connection to an available ingress service instance. The targetted ingress instance will then validate the incoming request with the livekit server using redis as RPC transport. 
+The ingress service and the livekit server communicate over redis. Redis is also used as storage for the ingress session state. The ingress service must also expose a public IP address for the publishing endpoint streamers will connect to. In a typical cluster setup, this IP address would be assigned to a load balancer that would forward incoming connection to an available ingress service instance. The targeted ingress instance will then validate the incoming request with the livekit server using redis as RPC transport. 
 
 ### Config
 
@@ -52,37 +52,37 @@ cpu_cost:
 
 The config file can be added to a mounted volume with its location passed in the INGRESS_CONFIG_FILE env var, or its body can be passed in the INGRESS_CONFIG_BODY env var.
 
-In order for the livekit server to be able to create ingress sessions, an `ingress` secrtion must also be added to the livekit-server configuration:
+In order for the livekit server to be able to create ingress sessions, an `ingress` section must also be added to the livekit-server configuration:
 
-```
+```yaml
 ingress:
-  rtmp_base_url: <rtmp url prefix pointing to the ingress external IP address or load balancer>
+  rtmp_base_url: rtmp url prefix pointing to the ingress external IP address or load balancer
 ```
 
 For instance:
-```
+```yaml
 ingress:
   rtmp_base_url: rtmp://my.domain.com/x
 ```
 
-A stream key will be appended to this prefix to geneerate the ingress session specific rtmp publishing endpoint.
+A stream key will be appended to this prefix to generate the ingress session specific rtmp publishing endpoint.
 
 ### Using the ingress service
 
 #### RTMP
 
-The first step in order to use the ingress service is to create an ingress session and associate it with a room. This can be done with any of the server SDK or with the [livekit-cli](https://github.com/livekit/livekit-cli). The syntax with the livekit-cli is as follow:
+The first step in order to use the ingress service is to create an ingress session and associate it with a room. This can be done with any of the server SDKs or with the [livekit-cli](https://github.com/livekit/livekit-cli). The syntax with the livekit-cli is as follow:
 
-`livekit-cli create-ingress --url <livekit server websocket ur> --api-key <livekit server api key> --api-secret <livekit server api secret> --request <path to ingress creation request JSON file>`
+`livekit-cli create-ingress --url <livekit server websocket url> --api-key <livekit server api key> --api-secret <livekit server api secret> --request <path to ingress creation request JSON file>`
 
 The request creation JSON file uses the following syntax:
 
-```
+```json
 {
-    "name": <Name of the Ingress>,
-    "room_name": <Name of the room to connect to>,
-    "participant_identity": <Unique identity for the room participant the ingress service will connect as>,
-    "participant_name": <Name displayed in the room for the participant>
+    "name": Name of the Ingress,
+    "room_name": Name of the room to connect to,
+    "participant_identity": Unique identity for the room participant the ingress service will connect as,
+    "participant_name": Name displayed in the room for the participant
 }
 ```
 
