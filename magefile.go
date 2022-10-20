@@ -4,17 +4,22 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"go/build"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/livekit/mageutil"
 )
 
 var Default = Test
 
 const (
 	rtspServerVersion = "v0.19.2"
+	imageName         = "livekit/egress"
+	gstVersion        = "1.20.4"
 )
 
 var plugins = []string{"gstreamer", "gst-plugins-base", "gst-plugins-good", "gst-plugins-bad", "gst-plugins-ugly", "gst-libav"}
@@ -61,6 +66,14 @@ func Build() error {
 	}
 
 	return run(fmt.Sprintf("go build -a -o %s/bin/ingress ./cmd/server", gopath))
+}
+
+func BuildDocker() error {
+	return mageutil.Run(context.Background(),
+		fmt.Sprintf("docker pull livekit/gstreamer:%s-dev", gstVersion),
+		fmt.Sprintf("docker pull livekit/gstreamer:%s-prod", gstVersion),
+		fmt.Sprintf("docker build --no-cache -t %s:latest -f build/Dockerfile .", imageName),
+	)
 }
 
 func Test() error {
