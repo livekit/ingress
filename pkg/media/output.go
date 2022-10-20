@@ -17,8 +17,7 @@ import (
 )
 
 const (
-	opusFrameSize  = 20
-	videoFrameRate = 30
+	opusFrameSize = 20
 )
 
 // Output manages GStreamer elements that converts & encodes video to the specification that's
@@ -273,6 +272,8 @@ func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 		return gst.FlowError
 	}
 
+	duration := buffer.Duration()
+
 	switch e.mimeType {
 	case webrtc.MimeTypeH264:
 		data := buffer.Bytes()
@@ -295,7 +296,7 @@ func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 					h264reader.NalUnitTypeCodedSliceDataPartitionC,
 					h264reader.NalUnitTypeCodedSliceIdr,
 					h264reader.NalUnitTypeCodedSliceNonIdr:
-					duration = time.Second / time.Duration(videoFrameRate)
+					duration = duration
 					break duration_loop
 				}
 			}
@@ -321,13 +322,13 @@ func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 		// untested
 		e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
-			Duration: time.Second / time.Duration(videoFrameRate),
+			Duration: duration,
 		})
 
 	case webrtc.MimeTypeOpus:
 		e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
-			Duration: opusFrameSize * time.Millisecond,
+			Duration: duration,
 		})
 	}
 
