@@ -54,8 +54,7 @@ func NewVideoOutput(mimeType string, layer *livekit.VideoLayer) (*Output, error)
 	}
 	err = inputCaps.SetProperty("caps", gst.NewCapsFromString(
 		fmt.Sprintf(
-			"video/x-raw,framerate=%d/1,width=%d,height=%d",
-			videoFrameRate, // TODO: get actual framerate
+			"video/x-raw,width=%d,height=%d",
 			layer.Width,
 			layer.Height,
 		),
