@@ -18,7 +18,7 @@ var Default = Test
 
 const (
 	rtspServerVersion = "v0.19.2"
-	imageName         = "livekit/egress"
+	imageName         = "livekit/ingress"
 	gstVersion        = "1.20.4"
 )
 
