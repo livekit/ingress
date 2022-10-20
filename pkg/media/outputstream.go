@@ -4,6 +4,7 @@ import (
 	"sort"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 )
 
@@ -84,7 +85,7 @@ func computeSimulcastLayers(inputLayer *livekit.VideoLayer, outputLayers []*live
 	} else {
 		for _, l := range outputLayers {
 			if l.Width == 0 || l.Height == 0 {
-				return nil, errors.ErrInvalidOutputDimensions
+				return nil, ingress.ErrInvalidOutputDimensions
 			}
 		}
 		// sort by resolution (high to low) and only keep first 3 layers
