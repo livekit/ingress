@@ -63,6 +63,10 @@ func NewConfig(confString string) (*Config, error) {
 		conf.HTTPRelayPort = DefaultHTTPRelayPort
 	}
 
+	if conf.Redis == nil {
+		return nil, errors.New("redis configuration is required")
+	}
+
 	conf.InitLogger()
 	return conf, nil
 }
