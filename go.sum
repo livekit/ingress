@@ -220,6 +220,8 @@ github.com/livekit/mageutil v0.0.0-20221002073820-d9198083cfdc/go.mod h1:Rs3MhFw
 github.com/livekit/protocol v0.13.3/go.mod h1:BLtSeVmn2rLP37xjzw7gHgaAmkWl3L/L9bPvgSbaOfo=
 github.com/livekit/protocol v1.1.3-0.20221019182440-2a4be2998832 h1:Eq6HDrgnY77se7zJX9eSnVeDVTBqwpWvW206BM6lE9Q=
 github.com/livekit/protocol v1.1.3-0.20221019182440-2a4be2998832/go.mod h1:2xNj9tUehjGYkptvCF7r0vgx3+D7kawK+a8rTsaLelY=
+github.com/livekit/protocol v1.1.3-0.20221020162442-f69b436be81e h1:JCJn2NWOn/uWZp/mssZqMGl5ZUgga6hLjQ3WEUf199c=
+github.com/livekit/protocol v1.1.3-0.20221020162442-f69b436be81e/go.mod h1:2xNj9tUehjGYkptvCF7r0vgx3+D7kawK+a8rTsaLelY=
 github.com/livekit/server-sdk-go v0.10.5-0.20220714205315-505cb6a6ce71 h1:Ao/W58NK5IpoKp1i5mo6uQc7BLe1PzLN9KMkRqxMiU8=
 github.com/livekit/server-sdk-go v0.10.5-0.20220714205315-505cb6a6ce71/go.mod h1:hcM4YgHm96fNGSkFQRjfbExDmbBGYPGDr7bj/zC837g=
 github.com/mackerelio/go-osstat v0.2.3 h1:jAMXD5erlDE39kdX2CU7YwCGRcxIO33u/p8+Fhe5dJw=
