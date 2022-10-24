@@ -76,6 +76,14 @@ func BuildDocker() error {
 	)
 }
 
+func BuildDockerLinux() error {
+	return mageutil.Run(context.Background(),
+		fmt.Sprintf("docker pull livekit/gstreamer:%s-dev", gstVersion),
+		fmt.Sprintf("docker pull livekit/gstreamer:%s-prod", gstVersion),
+		fmt.Sprintf("docker build --no-cache --platform linux/amd64 -t %s:latest -f build/Dockerfile .", imageName),
+	)
+}
+
 func Test() error {
 	if err := Build(); err != nil {
 		return err
