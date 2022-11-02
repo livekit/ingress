@@ -3,7 +3,6 @@ package media
 import (
 	"fmt"
 	"io"
-	"time"
 
 	"github.com/pion/webrtc/v3"
 	"github.com/pion/webrtc/v3/pkg/media"
@@ -280,7 +279,6 @@ func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 
 		var (
 			currentNalType h264reader.NalUnitType
-			duration       time.Duration
 		)
 		nalStart := -1
 		zeroes := 0
@@ -296,7 +294,6 @@ func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 					h264reader.NalUnitTypeCodedSliceDataPartitionC,
 					h264reader.NalUnitTypeCodedSliceIdr,
 					h264reader.NalUnitTypeCodedSliceNonIdr:
-					duration = duration
 					break duration_loop
 				}
 			}
