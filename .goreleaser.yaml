@@ -1,0 +1,45 @@
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - id: ingress
+    env:
+      - CGO_ENABLED=0
+    main: ./cmd/server
+    binary: ingress
+    goarm:
+      - "7"
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goos:
+      - linux
+      - windows
+archives:
+  - format_overrides:
+      - goos: windows
+        format: zip
+    replacements:
+      darwin: mac
+    files:
+      - LICENSE
+      - 'autocomplete/*'
+release:
+  github:
+    owner: livekit
+    name: ingress
+  draft: true
+  prerelease: auto
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+gomod:
+  proxy: false
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
