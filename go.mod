@@ -6,7 +6,7 @@ require (
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/zapr v1.2.3
 	github.com/livekit/mageutil v0.0.0-20221002073820-d9198083cfdc
-	github.com/livekit/protocol v1.2.0
+	github.com/livekit/protocol v1.2.1
 	github.com/livekit/server-sdk-go v1.0.5
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/webrtc/v3 v3.1.47
@@ -42,7 +42,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
 	github.com/jxskiss/base62 v1.1.0 // indirect
-	github.com/kr/pretty v0.3.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/livekit/mediatransportutil v0.0.0-20221007030528-7440725c362b // indirect
 	github.com/mackerelio/go-osstat v0.2.3 // indirect
@@ -84,6 +84,5 @@ require (
 	golang.org/x/text v0.3.7 // indirect
 	google.golang.org/genproto v0.0.0-20200825200019-8632dd797987 // indirect
 	google.golang.org/grpc v1.50.0 // indirect
-	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 )
