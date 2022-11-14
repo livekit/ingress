@@ -6,11 +6,11 @@ require (
 	github.com/go-logr/logr v1.2.3
 	github.com/go-logr/zapr v1.2.3
 	github.com/livekit/mageutil v0.0.0-20221002073820-d9198083cfdc
-	github.com/livekit/protocol v1.2.1
+	github.com/livekit/protocol v1.2.3-0.20221111192145-b1eab0ff3832
 	github.com/livekit/server-sdk-go v1.0.5
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/webrtc/v3 v3.1.47
-	github.com/prometheus/client_golang v1.13.1
+	github.com/prometheus/client_golang v1.14.0
 	github.com/sirupsen/logrus v1.7.0
 	github.com/stretchr/testify v1.8.1
 	github.com/tinyzimmer/go-glib v0.0.24
@@ -67,7 +67,7 @@ require (
 	github.com/pion/udp v0.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_model v0.2.0 // indirect
+	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/rogpeppe/go-internal v1.8.0 // indirect
