@@ -38,6 +38,7 @@ func (m *Monitor) Start(conf *config.Config) error {
 	if err != nil {
 		return err
 	}
+	m.cpuStats = cpuStats
 
 	if err := m.checkCPUConfig(conf.CPUCost); err != nil {
 		return err
@@ -69,8 +70,6 @@ func (m *Monitor) Start(conf *config.Config) error {
 	}, []string{"type"})
 
 	prometheus.MustRegister(m.promCPULoad, promNodeAvailable, m.requestGauge)
-
-	m.cpuStats = cpuStats
 
 	return nil
 }
@@ -118,7 +117,7 @@ func (m *Monitor) checkCPUConfig(costConfig config.CPUCostConfig) error {
 		)
 	}
 
-	logger.Infow(fmt.Sprintf("available CPU cores: %f max cost: %f", m.cpuStats.NumCPU(), m.maxCost))
+	logger.Infow(fmt.Sprintf("available CPU cores: %d max cost: %f", m.cpuStats.NumCPU(), m.maxCost))
 
 	return nil
 }
