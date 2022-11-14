@@ -3,7 +3,6 @@ package stats
 import (
 	"errors"
 	"fmt"
-	"runtime"
 	"sort"
 	"time"
 
@@ -26,16 +25,19 @@ type Monitor struct {
 	cpuStats *utils.CPUStats
 
 	pendingCPUs atomic.Float64
-	numCPUs     float64
 }
 
 func NewMonitor() *Monitor {
-	return &Monitor{
-		numCPUs: float64(runtime.NumCPU()),
-	}
+	return &Monitor{}
 }
 
 func (m *Monitor) Start(conf *config.Config) error {
+	cpuStats, err := utils.NewCPUStats(func(idle float64) {
+		m.promCPULoad.Set(1 - idle/float64(m.cpuStats.NumCPU()))
+	})
+	if err != nil {
+		return err
+	}
 
 	if err := m.checkCPUConfig(conf.CPUCost); err != nil {
 		return err
@@ -68,13 +70,6 @@ func (m *Monitor) Start(conf *config.Config) error {
 
 	prometheus.MustRegister(m.promCPULoad, promNodeAvailable, m.requestGauge)
 
-	cpuStats, err := utils.NewCPUStats(func(idle float64) {
-		m.promCPULoad.Set(1 - idle/m.numCPUs)
-	})
-	if err != nil {
-		return err
-	}
-
 	m.cpuStats = cpuStats
 
 	return nil
@@ -106,30 +101,30 @@ func (m *Monitor) checkCPUConfig(costConfig config.CPUCostConfig) error {
 		recommendedMinimum = 3
 	}
 
-	if m.numCPUs < requirements[0] {
+	if float64(m.cpuStats.NumCPU()) < requirements[0] {
 		logger.Errorw("not enough cpu", nil,
 			"minimum cpu", requirements[0],
 			"recommended", recommendedMinimum,
-			"available", m.numCPUs,
+			"available", float64(m.cpuStats.NumCPU()),
 		)
 		return errors.New("not enough cpu")
 	}
 
-	if m.numCPUs < m.maxCost {
+	if float64(m.cpuStats.NumCPU()) < m.maxCost {
 		logger.Errorw("not enough cpu for some ingress types", nil,
 			"minimum cpu", m.maxCost,
 			"recommended", recommendedMinimum,
-			"available", m.numCPUs,
+			"available", m.cpuStats.NumCPU(),
 		)
 	}
 
-	logger.Infow(fmt.Sprintf("available CPU cores: %f max cost: %f", m.numCPUs, m.maxCost))
+	logger.Infow(fmt.Sprintf("available CPU cores: %f max cost: %f", m.cpuStats.NumCPU(), m.maxCost))
 
 	return nil
 }
 
 func (m *Monitor) GetCPULoad() float64 {
-	return (m.numCPUs - m.cpuStats.GetCPUIdle()) / m.numCPUs * 100
+	return (float64(m.cpuStats.NumCPU()) - m.cpuStats.GetCPUIdle()) / float64(m.cpuStats.NumCPU()) * 100
 }
 
 func (m *Monitor) CanAcceptIngress() bool {
@@ -156,7 +151,7 @@ func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 		time.AfterFunc(time.Second, func() { m.pendingCPUs.Sub(cpuHold) })
 	}
 
-	logger.Debugw("cpu request", "accepted", accept, "availableCPUs", available, "numCPUs", runtime.NumCPU())
+	logger.Debugw("cpu request", "accepted", accept, "availableCPUs", available, "numCPUs", m.cpuStats.NumCPU())
 	return accept
 }
 
