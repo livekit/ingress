@@ -7,7 +7,7 @@ require (
 	github.com/go-logr/zapr v1.2.3
 	github.com/livekit/mageutil v0.0.0-20221002073820-d9198083cfdc
 	github.com/livekit/protocol v1.2.3-0.20221111192145-b1eab0ff3832
-	github.com/livekit/server-sdk-go v1.0.5
+	github.com/livekit/server-sdk-go v1.0.6-0.20221116181222-88e5e9ff11c6
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/webrtc/v3 v3.1.47
 	github.com/prometheus/client_golang v1.14.0
