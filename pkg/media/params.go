@@ -156,18 +156,18 @@ func getDefaultVideoParams() *livekit.IngressVideoOptions {
 				Height:  720,
 				Bitrate: 3000,
 			},
-			{
-				Quality: livekit.VideoQuality_MEDIUM,
-				Width:   960,
-				Height:  540,
-				Bitrate: 1500,
-			},
-			{
-				Quality: livekit.VideoQuality_LOW,
-				Width:   640,
-				Height:  320,
-				Bitrate: 750,
-			},
+			/*			{
+							Quality: livekit.VideoQuality_MEDIUM,
+							Width:   960,
+							Height:  540,
+							Bitrate: 1500,
+						},
+						{
+							Quality: livekit.VideoQuality_LOW,
+							Width:   640,
+							Height:  320,
+							Bitrate: 750,
+						},*/
 		},
 	}
 }
