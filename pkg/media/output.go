@@ -71,7 +71,7 @@ func NewVideoOutput(mimeType string, layer *livekit.VideoLayer) (*Output, error)
 			return nil, err
 		}
 
-		if err = e.enc.SetProperty("bitrate", uint(layer.Bitrate)); err != nil {
+		if err = e.enc.SetProperty("bitrate", uint(layer.Bitrate/1000)); err != nil {
 			return nil, err
 		}
 		if err = e.enc.SetProperty("byte-stream", true); err != nil {
