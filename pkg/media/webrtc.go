@@ -3,7 +3,6 @@ package media
 import (
 	"context"
 
-	"github.com/go-logr/logr"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst"
@@ -30,7 +29,7 @@ func NewWebRTCSink(ctx context.Context, p *Params) (*WebRTCSink, error) {
 	ctx, span := tracer.Start(ctx, "media.NewWebRTCSink")
 	defer span.End()
 
-	lksdk.SetLogger(logr.Logger(p.Logger))
+	lksdk.SetLogger(p.Logger)
 	room, err := lksdk.ConnectToRoomWithToken(
 		p.WsUrl,
 		p.Token,
