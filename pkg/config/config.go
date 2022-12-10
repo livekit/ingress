@@ -3,9 +3,6 @@ package config
 import (
 	"os"
 
-	"github.com/go-logr/zapr"
-	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 	"gopkg.in/yaml.v3"
 
 	"github.com/livekit/ingress/pkg/errors"
@@ -29,7 +26,7 @@ type Config struct {
 	PrometheusPort int    `yaml:"prometheus_port"`
 	RTMPPort       int    `yaml:"rtmp_port"`
 	HTTPRelayPort  int    `yaml:"http_relay_port"`
-	LogLevel       string `yaml:"log_level"`
+	Logging logger.Config `yaml:"logging"`
 
 	// CPU costs for various ingress types
 	CPUCost CPUCostConfig `yaml:"cpu_cost"`
@@ -44,7 +41,6 @@ type CPUCostConfig struct {
 
 func NewConfig(confString string) (*Config, error) {
 	conf := &Config{
-		LogLevel:  "info",
 		ApiKey:    os.Getenv("LIVEKIT_API_KEY"),
 		ApiSecret: os.Getenv("LIVEKIT_API_SECRET"),
 		WsUrl:     os.Getenv("LIVEKIT_WS_URL"),
@@ -72,14 +68,10 @@ func NewConfig(confString string) (*Config, error) {
 }
 
 func (c *Config) InitLogger() {
-	conf := zap.NewProductionConfig()
-	if c.LogLevel != "" {
-		lvl := zapcore.Level(0)
-		if err := lvl.UnmarshalText([]byte(c.LogLevel)); err == nil {
-			conf.Level = zap.NewAtomicLevelAt(lvl)
-		}
+	zl, err := logger.NewZapLogger(&c.Logging)
+	if err != nil {
+		return
 	}
-
-	l, _ := conf.Build()
-	logger.SetLogger(zapr.NewLogger(l).WithValues("nodeID", c.NodeID), "ingress")
+	l := zl.WithValues("nodeID", c.NodeID)
+	logger.SetLogger(l, "ingress")
 }
