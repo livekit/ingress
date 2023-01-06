@@ -22,6 +22,7 @@ import (
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/redis"
 	"github.com/livekit/protocol/tracer"
+	"github.com/livekit/psrpc"
 )
 
 func main() {
@@ -46,6 +47,9 @@ func main() {
 					},
 					&cli.StringFlag{
 						Name: "token",
+					},
+					&cli.IntFlag{
+						Name: "version",
 					},
 				},
 				Action: runHandler,
@@ -83,8 +87,14 @@ func runService(c *cli.Context) error {
 		return err
 	}
 
+	bus := psrpc.NewRedisMessageBus(rc)
+	psrpcServer, err := ingress.NewInternalServer(livekit.NodeID(conf.NodeID), bus)
+	if err != nil {
+		return err
+	}
+
 	rpcServer := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
-	svc := service.NewService(conf, rpcServer)
+	svc := service.NewService(conf, psrpcServer, rpcServer)
 
 	err = setupHealthHandlers(conf, svc)
 	if err != nil {
@@ -139,12 +149,7 @@ func setupHealthHandlers(conf *config.Config, svc *service.Service) error {
 	}
 
 	availabilityHttpHandler := func(w http.ResponseWriter, _ *http.Request) {
-		_, canAccept, err := svc.Status()
-		if err != nil {
-			logger.Errorw("failed to read status", err)
-		}
-
-		if !canAccept {
+		if !svc.CanAccept() {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_, _ = w.Write([]byte("No availability"))
 		}
@@ -190,8 +195,23 @@ func runHandler(c *cli.Context) error {
 	wsUrl := c.String("ws_url")
 	token := c.String("token")
 
-	rpcHandler := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
-	handler := service.NewHandler(conf, rpcHandler)
+	var handler interface {
+		Kill()
+		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string)
+	}
+
+	v := c.Int("version")
+	if v == 0 {
+		rpcHandler := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
+		handler = service.NewHandlerV0(conf, rpcHandler)
+	} else {
+		bus := psrpc.NewRedisMessageBus(rc)
+		rpcServer := ingress.NewHandlerServer(livekit.NodeID(conf.NodeID), bus)
+		handler, err = service.NewHandler(conf, rpcServer)
+		if err != nil {
+			return err
+		}
+	}
 
 	killChan := make(chan os.Signal, 1)
 	signal.Notify(killChan, syscall.SIGINT)

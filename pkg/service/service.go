@@ -6,19 +6,18 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
-	"os/exec"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"google.golang.org/protobuf/encoding/protojson"
-	"gopkg.in/yaml.v3"
 
+	"github.com/livekit/cloud/version"
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media"
 	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/livekit-server/pkg/service/rpc"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -30,8 +29,10 @@ const shutdownTimer = time.Second * 30
 type Service struct {
 	conf    *config.Config
 	monitor *stats.Monitor
+	manager *ProcessManager
 
-	rpcServer ingress.RPCServer
+	rpcServer   ingress.RPCServer
+	psrpcServer ingress.InternalServer
 
 	promServer *http.Server
 
@@ -40,24 +41,20 @@ type Service struct {
 	shutdown            chan struct{}
 }
 
-type process struct {
-	info *livekit.IngressInfo
-	cmd  *exec.Cmd
-}
+func NewService(conf *config.Config, psrpcServer ingress.InternalServer, rpcServer ingress.RPCServer) *Service {
+	monitor := stats.NewMonitor()
 
-type rtmpPublishRequest struct {
-	streamKey string
-	result    chan<- error
-}
-
-func NewService(conf *config.Config, rpcServer ingress.RPCServer) *Service {
 	s := &Service{
 		conf:                conf,
-		monitor:             stats.NewMonitor(),
+		monitor:             monitor,
+		manager:             NewProcessManager(conf, monitor),
 		rpcServer:           rpcServer,
+		psrpcServer:         psrpcServer,
 		rtmpPublishRequests: make(chan rtmpPublishRequest),
 		shutdown:            make(chan struct{}),
 	}
+
+	s.manager.onFatalError(func() { s.Stop(false) })
 
 	if conf.PrometheusPort > 0 {
 		s.promServer = &http.Server{
@@ -86,10 +83,9 @@ func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 }
 
 func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) (*livekit.IngressInfo, error) {
-	req := &livekit.GetIngressInfoRequest{
+	version, resp, err := s.getIngressInfo(ctx, &livekit.GetIngressInfoRequest{
 		StreamKey: streamKey,
-	}
-	resp, err := s.rpcServer.SendGetIngressInfoRequest(ctx, req)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -110,13 +106,13 @@ func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) 
 		StartedAt: time.Now().UnixNano(),
 	}
 
-	go s.launchHandler(ctx, resp)
+	go s.launchHandler(ctx, resp, version)
 
 	return resp.Info, nil
 }
 
 func (s *Service) Run() error {
-	logger.Debugw("starting service")
+	logger.Debugw("starting service", "version", version.Version)
 
 	if s.promServer != nil {
 		promListener, err := net.Listen("tcp", s.promServer.Addr)
@@ -126,6 +122,10 @@ func (s *Service) Run() error {
 		go func() {
 			_ = s.promServer.Serve(promListener)
 		}()
+	}
+
+	if err := s.psrpcServer.SetServerImpl(s); err != nil {
+		return err
 	}
 
 	if err := s.monitor.Start(s.conf); err != nil {
@@ -138,7 +138,7 @@ func (s *Service) Run() error {
 		select {
 		case <-s.shutdown:
 			logger.Infow("shutting down")
-			for !s.isIdle() {
+			for !s.manager.isIdle() {
 				time.Sleep(shutdownTimer)
 			}
 			return nil
@@ -160,96 +160,40 @@ func (s *Service) Run() error {
 	}
 }
 
-func (s *Service) isIdle() bool {
-	idle := true
-	s.processes.Range(func(key, value interface{}) bool {
-		idle = false
-		return false
-	})
-	return idle
-}
-
-func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {
-	if err != nil {
-		info.State.Status = livekit.IngressState_ENDPOINT_ERROR
-		info.State.Error = err.Error()
-		logger.Errorw("ingress failed", errors.New(info.State.Error))
+func (s *Service) getIngressInfo(ctx context.Context, req *livekit.GetIngressInfoRequest) (int, *livekit.GetIngressInfoResponse, error) {
+	type result struct {
+		version int
+		resp    *livekit.GetIngressInfoResponse
+		err     error
 	}
+	var res atomic.Pointer[result]
 
-	if err := s.rpcServer.SendUpdate(ctx, info.IngressId, info.State); err != nil {
-		logger.Errorw("failed to send update", err)
-	}
-}
-
-func (s *Service) launchHandler(ctx context.Context, resp *livekit.GetIngressInfoResponse) {
-	// TODO send update on failure
-	ctx, span := tracer.Start(ctx, "Service.launchHandler")
-	defer span.End()
-
-	confString, err := yaml.Marshal(s.conf)
-	if err != nil {
-		span.RecordError(err)
-		logger.Errorw("could not marshal config", err)
-		return
-	}
-
-	infoString, err := protojson.Marshal(resp.Info)
-	if err != nil {
-		span.RecordError(err)
-		logger.Errorw("could not marshal request", err)
-		return
-	}
-
-	args := []string{
-		"run-handler",
-		"--config-body", string(confString),
-		"--info", string(infoString),
-	}
-
-	if resp.WsUrl != "" {
-		args = append(args, "--ws-url", resp.WsUrl)
-	}
-	if resp.Token != "" {
-		args = append(args, "--token", resp.Token)
-	}
-
-	cmd := exec.Command("ingress",
-		args...,
-	)
-
-	cmd.Dir = "/"
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	s.monitor.IngressStarted(resp.Info)
-	s.processes.Store(resp.Info.IngressId, &process{
-		info: resp.Info,
-		cmd:  cmd,
-	})
-	defer func() {
-		s.monitor.IngressEnded(resp.Info)
-		s.processes.Delete(resp.Info.IngressId)
+	// race the legacy/psrpc apis and use whichever returns first
+	ctx, cancel := context.WithCancel(ctx)
+	go func() {
+		defer cancel()
+		resp, err := s.rpcServer.SendGetIngressInfoRequest(ctx, req)
+		res.CompareAndSwap(nil, &result{0, resp, err})
 	}()
+	go func() {
+		defer cancel()
+		resp, err := s.psrpcServer.GetIngressInfo(ctx, req)
+		res.CompareAndSwap(nil, &result{1, resp, err})
+	}()
+	<-ctx.Done()
 
-	err = cmd.Run()
-	if err != nil {
-		logger.Errorw("could not launch handler", err)
+	if r := res.Load(); r != nil {
+		return r.version, r.resp, r.err
 	}
+	return 0, nil, ctx.Err()
 }
 
-func (s *Service) Status() ([]byte, bool, error) {
-	info := map[string]interface{}{
-		"CpuLoad": s.monitor.GetCPULoad(),
-	}
-	s.processes.Range(func(key, value interface{}) bool {
-		p := value.(*process)
-		info[key.(string)] = p.info
-		return true
-	})
+func (s *Service) Status() ([]byte, error) {
+	return json.Marshal(s.manager.status())
+}
 
-	b, err := json.Marshal(info)
-
-	return b, s.monitor.CanAcceptIngress(), err
+func (s *Service) CanAccept() bool {
+	return s.monitor.CanAcceptIngress()
 }
 
 func (s *Service) Stop(kill bool) {
@@ -264,23 +208,19 @@ func (s *Service) Stop(kill bool) {
 	}
 
 	if kill {
-		s.processes.Range(func(key, value interface{}) bool {
-			p := value.(*process)
-			if err := p.cmd.Process.Kill(); err != nil {
-				logger.Errorw("failed to kill process", err, "ingressID", key.(string))
-			}
-			return true
-		})
+		s.manager.killAll()
 	}
 }
 
 func (s *Service) ListIngress() []string {
-	res := make([]string, 0)
+	return s.manager.listIngress()
+}
 
-	s.processes.Range(func(key, value interface{}) bool {
-		res = append(res, key.(string))
-		return true
-	})
+func (s *Service) ListActiveIngress(ctx context.Context, _ *rpc.ListActiveIngressRequest) (*rpc.ListActiveIngressResponse, error) {
+	ctx, span := tracer.Start(ctx, "Service.ListActiveIngress")
+	defer span.End()
 
-	return res
+	return &rpc.ListActiveIngressResponse{
+		IngressIds: s.ListIngress(),
+	}, nil
 }

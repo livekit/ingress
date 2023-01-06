@@ -21,6 +21,7 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/redis"
+	"github.com/livekit/psrpc"
 )
 
 type TestConfig struct {
@@ -45,10 +46,14 @@ func TestIngress(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, rc, "redis required")
 
+	bus := psrpc.NewRedisMessageBus(rc)
+	psrpcServer, err := ingress.NewInternalServer("ingress_test_service", bus)
+	require.NoError(t, err)
+
 	rpcServer := ingress.NewRedisRPC("ingress_test_service", rc)
 	rpcClient := ingress.NewRedisRPC("ingress_test_client", rc)
 
-	svc := service.NewService(conf, rpcServer)
+	svc := service.NewService(conf, psrpcServer, rpcServer)
 
 	rtmpsrv := rtmp.NewRTMPServer()
 	relay := rtmp.NewRTMPRelay(rtmpsrv)

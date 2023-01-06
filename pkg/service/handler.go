@@ -3,11 +3,10 @@ package service
 import (
 	"context"
 
-	"google.golang.org/protobuf/proto"
-
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media"
+	"github.com/livekit/livekit-server/pkg/service/rpc"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -16,16 +15,21 @@ import (
 
 type Handler struct {
 	conf      *config.Config
-	rpcServer ingress.RPCServer
+	pipeline  *media.Pipeline
+	rpcServer ingress.HandlerServer
 	kill      chan struct{}
 }
 
-func NewHandler(conf *config.Config, rpcServer ingress.RPCServer) *Handler {
-	return &Handler{
+func NewHandler(conf *config.Config, rpcServer ingress.HandlerServer) (*Handler, error) {
+	h := &Handler{
 		conf:      conf,
 		rpcServer: rpcServer,
 		kill:      make(chan struct{}),
 	}
+
+	h.rpcServer.SetServerImpl(h)
+
+	return h, nil
 }
 
 func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl string, token string) {
@@ -37,19 +41,12 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 		span.RecordError(err)
 		return
 	}
+	h.pipeline = p
 
-	// subscribe to request channel
-	requests, err := h.rpcServer.IngressSubscription(context.Background(), p.GetInfo().IngressId)
-	if err != nil {
+	if err = h.rpcServer.RegisterHangUpIngressTopic(p.GetInfo().IngressId); err != nil {
 		span.RecordError(err)
 		return
 	}
-	defer func() {
-		err := requests.Close()
-		if err != nil {
-			logger.Errorw("failed to unsubscribe from request channel", err)
-		}
-	}()
 
 	// start ingress
 	result := make(chan *livekit.IngressInfo, 1)
@@ -66,22 +63,18 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 		case res := <-result:
 			// recording finished
 			h.sendUpdate(ctx, res)
+			h.rpcServer.Shutdown()
 			return
-
-		case msg := <-requests.Channel():
-			// request received
-			request := &livekit.IngressRequest{}
-			err = proto.Unmarshal(requests.Payload(msg), request)
-			if err != nil {
-				logger.Errorw("failed to read request", err, "ingressID", p.GetInfo().IngressId)
-				continue
-			}
-			logger.Debugw("handling request", "ingressID", p.GetInfo().IngressId, "requestID", request.RequestId)
-
-			p.SendEOS(ctx)
-			h.sendResponse(ctx, request, p.GetInfo(), err)
 		}
 	}
+}
+
+func (h *Handler) HangUpIngress(ctx context.Context, req *rpc.HangUpIngressRequest) (*rpc.HangUpIngressResponse, error) {
+	ctx, span := tracer.Start(ctx, "Handler.HangUpIngress")
+	defer span.End()
+
+	h.pipeline.SendEOS(ctx)
+	return &rpc.HangUpIngressResponse{}, nil
 }
 
 func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl string, token string) (*media.Pipeline, error) {
@@ -112,30 +105,23 @@ func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, 
 }
 
 func (h *Handler) sendUpdate(ctx context.Context, info *livekit.IngressInfo) {
-	if info.State.Status == livekit.IngressState_ENDPOINT_ERROR {
-		logger.Errorw("ingress failed", errors.New(info.State.Error))
+	switch info.State.Status {
+	case livekit.IngressState_ENDPOINT_ERROR:
+		logger.Errorw("ingress failed", errors.New(info.State.Error),
+			"ingressID", info.IngressId,
+		)
+	case livekit.IngressState_ENDPOINT_INACTIVE:
+		logger.Infow("ingress complete", "ingressID", info.IngressId)
+	default:
+		logger.Infow("ingress update", "ingressID", info.IngressId)
 	}
 
-	if err := h.rpcServer.SendUpdate(ctx, info.IngressId, info.State); err != nil {
-		logger.Errorw("failed to send update", err)
-	}
-}
-
-func (h *Handler) sendResponse(ctx context.Context, req *livekit.IngressRequest, info *livekit.IngressInfo, err error) {
-	args := []interface{}{
-		"ingressID", info.IngressId,
-		"requestID", req.RequestId,
-		"senderID", req.SenderId,
-	}
-
+	err := h.rpcServer.PublishStateUpdate(ctx, &livekit.UpdateIngressStateRequest{
+		IngressId: info.IngressId,
+		State:     info.State,
+	})
 	if err != nil {
-		logger.Errorw("request failed", err, args...)
-	} else {
-		logger.Debugw("request handled", args...)
-	}
-
-	if err := h.rpcServer.SendResponse(ctx, req, info.State, err); err != nil {
-		logger.Errorw("failed to send response", err, args...)
+		logger.Errorw("failed to send update", err)
 	}
 }
 
