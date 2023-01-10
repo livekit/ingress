@@ -34,7 +34,6 @@ type ProcessManager struct {
 	monitor *stats.Monitor
 
 	mu             sync.RWMutex
-	handlingWeb    bool
 	activeHandlers map[string]*process
 	onFatal        func()
 }

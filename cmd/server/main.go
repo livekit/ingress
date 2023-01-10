@@ -17,6 +17,7 @@ import (
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
 	"github.com/livekit/ingress/version"
+	"github.com/livekit/livekit-server/pkg/service/rpc"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -88,13 +89,18 @@ func runService(c *cli.Context) error {
 	}
 
 	bus := psrpc.NewRedisMessageBus(rc)
-	psrpcServer, err := ingress.NewInternalServer(livekit.NodeID(conf.NodeID), bus)
+	psrpcClient, err := rpc.NewIOInfoClient(conf.NodeID, bus)
 	if err != nil {
 		return err
 	}
 
 	rpcServer := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
-	svc := service.NewService(conf, psrpcServer, rpcServer)
+	svc := service.NewService(conf, psrpcClient, rpcServer)
+
+	_, err = rpc.NewIngressInternalServer(conf.NodeID, svc, bus)
+	if err != nil {
+		return err
+	}
 
 	err = setupHealthHandlers(conf, svc)
 	if err != nil {
@@ -192,7 +198,7 @@ func runHandler(c *cli.Context) error {
 		return err
 	}
 
-	wsUrl := c.String("ws_url")
+	wsUrl := c.String("ws-url")
 	token := c.String("token")
 
 	var handler interface {
@@ -206,9 +212,17 @@ func runHandler(c *cli.Context) error {
 		handler = service.NewHandlerV0(conf, rpcHandler)
 	} else {
 		bus := psrpc.NewRedisMessageBus(rc)
-		rpcServer := ingress.NewHandlerServer(livekit.NodeID(conf.NodeID), bus)
-		handler, err = service.NewHandler(conf, rpcServer)
+		rpcClient, err := rpc.NewIOInfoClient(conf.NodeID, bus)
 		if err != nil {
+			return err
+		}
+		handler = service.NewHandler(conf, rpcClient)
+
+		rpcServer, err := rpc.NewIngressHandlerServer(conf.NodeID, handler.(*service.Handler), bus)
+		if err != nil {
+			return err
+		}
+		if err := rpcServer.RegisterHangUpIngressTopic(info.IngressId); err != nil {
 			return err
 		}
 	}

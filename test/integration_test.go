@@ -17,6 +17,7 @@ import (
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
+	"github.com/livekit/livekit-server/pkg/service/rpc"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -47,13 +48,13 @@ func TestIngress(t *testing.T) {
 	require.NotNil(t, rc, "redis required")
 
 	bus := psrpc.NewRedisMessageBus(rc)
-	psrpcServer, err := ingress.NewInternalServer("ingress_test_service", bus)
+	psrpcClient, err := rpc.NewIOInfoClient("ingress_test_service", bus)
 	require.NoError(t, err)
 
 	rpcServer := ingress.NewRedisRPC("ingress_test_service", rc)
 	rpcClient := ingress.NewRedisRPC("ingress_test_client", rc)
 
-	svc := service.NewService(conf, psrpcServer, rpcServer)
+	svc := service.NewService(conf, psrpcClient, rpcServer)
 
 	rtmpsrv := rtmp.NewRTMPServer()
 	relay := rtmp.NewRTMPRelay(rtmpsrv)

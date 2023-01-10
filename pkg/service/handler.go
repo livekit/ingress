@@ -7,7 +7,6 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media"
 	"github.com/livekit/livekit-server/pkg/service/rpc"
-	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
@@ -16,20 +15,16 @@ import (
 type Handler struct {
 	conf      *config.Config
 	pipeline  *media.Pipeline
-	rpcServer ingress.HandlerServer
+	rpcClient rpc.IOInfoClient
 	kill      chan struct{}
 }
 
-func NewHandler(conf *config.Config, rpcServer ingress.HandlerServer) (*Handler, error) {
-	h := &Handler{
+func NewHandler(conf *config.Config, rpcClient rpc.IOInfoClient) *Handler {
+	return &Handler{
 		conf:      conf,
-		rpcServer: rpcServer,
+		rpcClient: rpcClient,
 		kill:      make(chan struct{}),
 	}
-
-	h.rpcServer.SetServerImpl(h)
-
-	return h, nil
 }
 
 func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl string, token string) {
@@ -42,11 +37,6 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 		return
 	}
 	h.pipeline = p
-
-	if err = h.rpcServer.RegisterHangUpIngressTopic(p.GetInfo().IngressId); err != nil {
-		span.RecordError(err)
-		return
-	}
 
 	// start ingress
 	result := make(chan *livekit.IngressInfo, 1)
@@ -63,17 +53,16 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 		case res := <-result:
 			// recording finished
 			h.sendUpdate(ctx, res)
-			h.rpcServer.Shutdown()
 			return
 		}
 	}
 }
 
 func (h *Handler) HangUpIngress(ctx context.Context, req *rpc.HangUpIngressRequest) (*rpc.HangUpIngressResponse, error) {
-	ctx, span := tracer.Start(ctx, "Handler.HangUpIngress")
+	_, span := tracer.Start(ctx, "Handler.HangUpIngress")
 	defer span.End()
 
-	h.pipeline.SendEOS(ctx)
+	h.Kill()
 	return &rpc.HangUpIngressResponse{}, nil
 }
 
@@ -116,7 +105,7 @@ func (h *Handler) sendUpdate(ctx context.Context, info *livekit.IngressInfo) {
 		logger.Infow("ingress update", "ingressID", info.IngressId)
 	}
 
-	err := h.rpcServer.PublishStateUpdate(ctx, &livekit.UpdateIngressStateRequest{
+	_, err := h.rpcClient.UpdateIngressState(ctx, &livekit.UpdateIngressStateRequest{
 		IngressId: info.IngressId,
 		State:     info.State,
 	})
