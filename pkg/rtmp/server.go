@@ -135,7 +135,9 @@ type RTMPHandler struct {
 }
 
 func NewRTMPHandler() *RTMPHandler {
-	h := &RTMPHandler{}
+	h := &RTMPHandler{
+		log: logger.GetLogger(),
+	}
 
 	h.mediaBuffer = newPrerollBuffer(func() error {
 		h.log.Infow("preroll buffer reset event")
@@ -164,7 +166,7 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 	// TODO check in store that PublishingName == stream key belongs to a valid ingress
 
 	_, h.streamKey = path.Split(cmd.PublishingName)
-	h.log = logger.Logger(logger.GetLogger().WithValues("streamKey", h.streamKey))
+	h.log = logger.GetLogger().WithValues("streamKey", h.streamKey)
 	if h.onPublish != nil {
 		err := h.onPublish(h.streamKey)
 		if err != nil {
