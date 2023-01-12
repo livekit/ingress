@@ -222,7 +222,10 @@ func runHandler(c *cli.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := rpcServer.RegisterHangUpIngressTopic(info.IngressId); err != nil {
+		if err := rpcServer.RegisterUpdateIngressTopic(info.IngressId); err != nil {
+			return err
+		}
+		if err := rpcServer.RegisterDeleteIngressTopic(info.IngressId); err != nil {
 			return err
 		}
 	}

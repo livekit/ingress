@@ -6,17 +6,15 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"sync/atomic"
 	"time"
-	"unsafe"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/livekit/cloud/version"
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media"
 	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/ingress/version"
 	"github.com/livekit/livekit-server/pkg/service/rpc"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
@@ -156,31 +154,14 @@ func (s *Service) Run() error {
 }
 
 func (s *Service) getIngressInfo(ctx context.Context, req *livekit.GetIngressInfoRequest) (int, *livekit.GetIngressInfoResponse, error) {
-	type result struct {
-		version int
-		resp    *livekit.GetIngressInfoResponse
-		err     error
-	}
-	var res unsafe.Pointer
-
-	// race the legacy/psrpc apis and use whichever returns first
-	ctx, cancel := context.WithCancel(ctx)
-	go func() {
-		defer cancel()
-		resp, err := s.rpcServer.SendGetIngressInfoRequest(ctx, req)
-		atomic.CompareAndSwapPointer(&res, nil, (unsafe.Pointer)(&result{0, resp, err}))
-	}()
-	go func() {
-		defer cancel()
-		resp, err := s.psrpcClient.GetIngressInfo(ctx, req)
-		atomic.CompareAndSwapPointer(&res, nil, (unsafe.Pointer)(&result{1, resp, err}))
-	}()
-	<-ctx.Done()
-
-	if r := (*result)(atomic.LoadPointer(&res)); r != nil {
-		return r.version, r.resp, r.err
-	}
-	return 0, nil, ctx.Err()
+	race := rpc.NewRace[livekit.GetIngressInfoResponse](ctx)
+	race.Go(func(ctx context.Context) (*livekit.GetIngressInfoResponse, error) {
+		return s.rpcServer.SendGetIngressInfoRequest(ctx, req)
+	})
+	race.Go(func(ctx context.Context) (*livekit.GetIngressInfoResponse, error) {
+		return s.psrpcClient.GetIngressInfo(ctx, req)
+	})
+	return race.Wait()
 }
 
 func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, version int, err error) {

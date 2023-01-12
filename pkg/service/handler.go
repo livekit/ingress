@@ -17,6 +17,7 @@ type Handler struct {
 	pipeline  *media.Pipeline
 	rpcClient rpc.IOInfoClient
 	kill      chan struct{}
+	done      chan struct{}
 }
 
 func NewHandler(conf *config.Config, rpcClient rpc.IOInfoClient) *Handler {
@@ -24,6 +25,7 @@ func NewHandler(conf *config.Config, rpcClient rpc.IOInfoClient) *Handler {
 		conf:      conf,
 		rpcClient: rpcClient,
 		kill:      make(chan struct{}),
+		done:      make(chan struct{}),
 	}
 }
 
@@ -42,6 +44,7 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	result := make(chan *livekit.IngressInfo, 1)
 	go func() {
 		result <- p.Run(ctx)
+		close(h.done)
 	}()
 
 	for {
@@ -58,12 +61,26 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	}
 }
 
-func (h *Handler) HangUpIngress(ctx context.Context, req *rpc.HangUpIngressRequest) (*rpc.HangUpIngressResponse, error) {
-	_, span := tracer.Start(ctx, "Handler.HangUpIngress")
-	defer span.End()
-
+func (h *Handler) killAndReturnState(ctx context.Context) (*livekit.IngressState, error) {
 	h.Kill()
-	return &rpc.HangUpIngressResponse{}, nil
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-h.done:
+		return h.pipeline.State, nil
+	}
+}
+
+func (h *Handler) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
+	_, span := tracer.Start(ctx, "Handler.UpdateIngress")
+	defer span.End()
+	return h.killAndReturnState(ctx)
+}
+
+func (h *Handler) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
+	_, span := tracer.Start(ctx, "Handler.DeleteIngress")
+	defer span.End()
+	return h.killAndReturnState(ctx)
 }
 
 func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl string, token string) (*media.Pipeline, error) {
