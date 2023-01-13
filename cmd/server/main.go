@@ -17,11 +17,13 @@ import (
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
 	"github.com/livekit/ingress/version"
+	"github.com/livekit/livekit-server/pkg/service/rpc"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/redis"
 	"github.com/livekit/protocol/tracer"
+	"github.com/livekit/psrpc"
 )
 
 func main() {
@@ -42,10 +44,10 @@ func main() {
 						Name: "config-body",
 					},
 					&cli.StringFlag{
-						Name: "ws-url",
-					},
-					&cli.StringFlag{
 						Name: "token",
+					},
+					&cli.IntFlag{
+						Name: "version",
 					},
 				},
 				Action: runHandler,
@@ -83,8 +85,19 @@ func runService(c *cli.Context) error {
 		return err
 	}
 
+	bus := psrpc.NewRedisMessageBus(rc)
+	psrpcClient, err := rpc.NewIOInfoClient(conf.NodeID, bus)
+	if err != nil {
+		return err
+	}
+
 	rpcServer := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
-	svc := service.NewService(conf, rpcServer)
+	svc := service.NewService(conf, psrpcClient, rpcServer)
+
+	_, err = rpc.NewIngressInternalServer(conf.NodeID, svc, bus)
+	if err != nil {
+		return err
+	}
 
 	err = setupHealthHandlers(conf, svc)
 	if err != nil {
@@ -139,12 +152,7 @@ func setupHealthHandlers(conf *config.Config, svc *service.Service) error {
 	}
 
 	availabilityHttpHandler := func(w http.ResponseWriter, _ *http.Request) {
-		_, canAccept, err := svc.Status()
-		if err != nil {
-			logger.Errorw("failed to read status", err)
-		}
-
-		if !canAccept {
+		if !svc.CanAccept() {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_, _ = w.Write([]byte("No availability"))
 		}
@@ -187,11 +195,36 @@ func runHandler(c *cli.Context) error {
 		return err
 	}
 
-	wsUrl := c.String("ws_url")
 	token := c.String("token")
 
-	rpcHandler := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
-	handler := service.NewHandler(conf, rpcHandler)
+	var handler interface {
+		Kill()
+		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string)
+	}
+
+	v := c.Int("version")
+	if v == 0 {
+		rpcHandler := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
+		handler = service.NewHandlerV0(conf, rpcHandler)
+	} else {
+		bus := psrpc.NewRedisMessageBus(rc)
+		rpcClient, err := rpc.NewIOInfoClient(conf.NodeID, bus)
+		if err != nil {
+			return err
+		}
+		handler = service.NewHandler(conf, rpcClient)
+
+		rpcServer, err := rpc.NewIngressHandlerServer(conf.NodeID, handler.(*service.Handler), bus)
+		if err != nil {
+			return err
+		}
+		if err := rpcServer.RegisterUpdateIngressTopic(info.IngressId); err != nil {
+			return err
+		}
+		if err := rpcServer.RegisterDeleteIngressTopic(info.IngressId); err != nil {
+			return err
+		}
+	}
 
 	killChan := make(chan os.Signal, 1)
 	signal.Notify(killChan, syscall.SIGINT)
@@ -202,7 +235,7 @@ func runHandler(c *cli.Context) error {
 		handler.Kill()
 	}()
 
-	handler.HandleIngress(ctx, info, wsUrl, token)
+	handler.HandleIngress(ctx, info, conf.WsUrl, token)
 	return nil
 }
 
