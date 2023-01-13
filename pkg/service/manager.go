@@ -129,21 +129,6 @@ func (s *ProcessManager) isIdle() bool {
 	return len(s.activeHandlers) == 0
 }
 
-func (s *ProcessManager) status() map[string]interface{} {
-	info := map[string]interface{}{
-		"CpuLoad": s.monitor.GetCPULoad(),
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for _, h := range s.activeHandlers {
-		info[h.info.IngressId] = h.info
-	}
-
-	return info
-}
-
 func (s *ProcessManager) listIngress() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

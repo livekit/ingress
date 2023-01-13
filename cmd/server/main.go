@@ -44,9 +44,6 @@ func main() {
 						Name: "config-body",
 					},
 					&cli.StringFlag{
-						Name: "ws-url",
-					},
-					&cli.StringFlag{
 						Name: "token",
 					},
 					&cli.IntFlag{
@@ -198,7 +195,6 @@ func runHandler(c *cli.Context) error {
 		return err
 	}
 
-	wsUrl := c.String("ws-url")
 	token := c.String("token")
 
 	var handler interface {
@@ -239,7 +235,7 @@ func runHandler(c *cli.Context) error {
 		handler.Kill()
 	}()
 
-	handler.HandleIngress(ctx, info, wsUrl, token)
+	handler.HandleIngress(ctx, info, conf.WsUrl, token)
 	return nil
 }
 

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -184,10 +183,6 @@ func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, ver
 			logger.Errorw("failed to send update", err)
 		}
 	}
-}
-
-func (s *Service) Status() ([]byte, error) {
-	return json.Marshal(s.manager.status())
 }
 
 func (s *Service) CanAccept() bool {

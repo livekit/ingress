@@ -11,6 +11,7 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/pion/webrtc/v3"
+	"google.golang.org/protobuf/proto"
 )
 
 type Params struct {
@@ -52,7 +53,7 @@ func Validate(ctx context.Context, info *livekit.IngressInfo) error {
 func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressInfo, wsUrl string, token string) (*Params, error) {
 	var err error
 
-	infoCopy := *info
+	infoCopy := proto.Clone(info).(*livekit.IngressInfo)
 
 	// The state should have been created by the service, before launching the hander, but be defensive here.
 	if infoCopy.State == nil {
@@ -74,10 +75,6 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		return nil, err
 	}
 
-	if wsUrl == "" {
-		wsUrl = conf.WsUrl
-	}
-
 	if token == "" {
 		token, err = ingress.BuildIngressToken(conf.ApiKey, conf.ApiSecret, info.RoomName, info.ParticipantIdentity, info.ParticipantName)
 		if err != nil {
@@ -86,7 +83,7 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 	}
 
 	p := &Params{
-		IngressInfo: &infoCopy,
+		IngressInfo: infoCopy,
 		Logger:      logger.Logger(logger.GetLogger().WithValues("ingressID", info.IngressId)),
 		Token:       token,
 		WsUrl:       wsUrl,
