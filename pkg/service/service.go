@@ -21,7 +21,7 @@ import (
 	"github.com/livekit/protocol/tracer"
 )
 
-const shutdownTimer = time.Second * 30
+const shutdownTimer = time.Second * 5
 
 type Service struct {
 	conf    *config.Config

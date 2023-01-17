@@ -33,9 +33,7 @@ func (r *RTMPRelay) Start(conf *config.Config) error {
 
 	go func() {
 		err := r.server.ListenAndServe()
-		if err != nil {
-			logger.Errorw("failed to start RTMP relay", err)
-		}
+		logger.Debugw("RTMP relay stopped", "error", err)
 	}()
 
 	return nil

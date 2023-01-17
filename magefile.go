@@ -17,9 +17,8 @@ import (
 var Default = Test
 
 const (
-	rtspServerVersion = "v0.19.2"
-	imageName         = "livekit/ingress"
-	gstVersion        = "1.20.4"
+	imageName  = "livekit/ingress"
+	gstVersion = "1.20.4"
 )
 
 var plugins = []string{"gstreamer", "gst-plugins-base", "gst-plugins-good", "gst-plugins-bad", "gst-plugins-ugly", "gst-libav"}
@@ -35,24 +34,6 @@ func Bootstrap() error {
 			if err = run(fmt.Sprintf("brew install %s", plugin)); err != nil {
 				return err
 			}
-		}
-	}
-
-	if _, err := os.Stat("bin/rtsp-simple-server"); err != nil {
-		if _, err := os.Stat("bin"); err != nil {
-			os.Mkdir("bin", 0755)
-		}
-
-		filename := fmt.Sprintf("rtsp-simple-server_%s_darwin_amd64.tar.gz", rtspServerVersion)
-		err = run(
-			fmt.Sprintf("wget https://github.com/aler9/rtsp-simple-server/releases/download/%s/%s", rtspServerVersion, filename),
-			fmt.Sprintf("tar -zxvf %s", filename),
-			fmt.Sprintf("rm %s", filename),
-			"mv rtsp-simple-server bin/",
-			"mv rtsp-simple-server.yml bin/",
-		)
-		if err != nil {
-			return err
 		}
 	}
 
@@ -116,15 +97,8 @@ func Retest() error {
 	return cmd.Run()
 }
 
-func Publish() error {
-	cmd := exec.Command("./rtsp-simple-server")
-	cmd.Dir = "bin"
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	return run("gst-launch-1.0 -v flvmux name=mux ! rtmp2sink location=rtmp://localhost:1935/live/myStream  audiotestsrc freq=200 ! faac ! mux.  videotestsrc pattern=ball is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 ! mux.")
+func Publish(ingressId string) error {
+	return run(fmt.Sprintf("gst-launch-1.0 -v flvmux name=mux ! rtmp2sink location=rtmp://localhost:1935/live/%s  audiotestsrc freq=200 ! faac ! mux.  videotestsrc pattern=ball is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 ! mux.", ingressId))
 }
 
 // helpers
