@@ -73,6 +73,7 @@ func (s *HTTPRelaySource) Start(ctx context.Context) error {
 		_, err := io.Copy(s.writer, resp.Body)
 		switch err {
 		case nil, io.EOF:
+			err = nil
 		default:
 			s.logger.Errorw("error while copying media from relay", err)
 		}

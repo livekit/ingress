@@ -164,6 +164,8 @@ func TestIngress(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	time.Sleep(time.Second * 2)
+
 	close(shutdown)
 
 	msg := <-updates.Channel()
