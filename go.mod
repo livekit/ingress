@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/livekit/livekit-server v1.3.4-0.20230112190043-a052ebd64497
-	github.com/livekit/mageutil v0.0.0-20221221221243-f361fbe40290
+	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/protocol v1.3.2-0.20230111195642-abfad31c5f93
 	github.com/livekit/psrpc v0.2.3
 	github.com/livekit/server-sdk-go v1.0.7-0.20230111075737-5a18e7796cec
