@@ -80,8 +80,8 @@ github.com/livekit/mediatransportutil v0.0.0-20230111071722-904079e94a7c h1:wdzw
 github.com/livekit/mediatransportutil v0.0.0-20230111071722-904079e94a7c/go.mod h1:1Dlx20JPoIKGP45eo+yuj0HjeE25zmyeX/EWHiPCjFw=
 github.com/livekit/protocol v1.3.2-0.20230111195642-abfad31c5f93 h1:KBW2Puv2tdZELD+zCtGLw/X9vLe9975jEFMFOOpSRGI=
 github.com/livekit/protocol v1.3.2-0.20230111195642-abfad31c5f93/go.mod h1:gwCG03nKlHlC9hTjL4pXQpn783ALhmbyhq65UZxqbb8=
-github.com/livekit/psrpc v0.2.3 h1:M8B/BdrrpRUj3Uj2MeOIDvJDFqiydoN2yeW4P0EF4ZQ=
-github.com/livekit/psrpc v0.2.3/go.mod h1:+nJvbKx9DCZ6PSAsMHJPRAKjmRJ5WiyyhEmbKYqMKto=
+github.com/livekit/psrpc v0.2.5 h1:+EZS78MGdBZxzCUwinDQ6pOeqPDURisrGtfyyqwUDSI=
+github.com/livekit/psrpc v0.2.5/go.mod h1:DyphtRRWvcIuCaldYg9VGpwGhu/HiKmNcysgpN6xKrM=
 github.com/livekit/server-sdk-go v1.0.7-0.20230111075737-5a18e7796cec h1:54MEhBBCGueHabs7gWLHP03ftTqmLHTVpg8wM/ictqI=
 github.com/livekit/server-sdk-go v1.0.7-0.20230111075737-5a18e7796cec/go.mod h1:7iuW/2RhKoyNpDFQFB6J77KLw1QqkNLpR7aLWFZ2ZfM=
 github.com/mackerelio/go-osstat v0.2.3 h1:jAMXD5erlDE39kdX2CU7YwCGRcxIO33u/p8+Fhe5dJw=
