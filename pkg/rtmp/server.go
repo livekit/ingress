@@ -66,6 +66,7 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey string)
 
 			return conn, &rtmp.ConnConfig{
 				Handler: h,
+				SkipHandshakeVerification: true,
 
 				ControlState: rtmp.StreamControlStateConfig{
 					DefaultBandwidthWindowSize: 6 * 1024 * 1024 / 8,
