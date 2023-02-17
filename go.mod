@@ -3,7 +3,6 @@ module github.com/livekit/ingress
 go 1.18
 
 require (
-	github.com/livekit/livekit-server v1.3.4-0.20230112190043-a052ebd64497
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/protocol v1.4.2-0.20230215235903-8a6b0e05628f
 	github.com/livekit/psrpc v0.2.7
@@ -11,13 +10,13 @@ require (
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/webrtc/v3 v3.1.55
 	github.com/prometheus/client_golang v1.14.0
-	github.com/sirupsen/logrus v1.7.0
+	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.1
-	github.com/tinyzimmer/go-glib v0.0.24
-	github.com/tinyzimmer/go-gst v0.2.32
-	github.com/urfave/cli/v2 v2.23.7
+	github.com/tinyzimmer/go-glib v0.0.25
+	github.com/tinyzimmer/go-gst v0.2.33
+	github.com/urfave/cli/v2 v2.24.4
 	github.com/yutopp/go-flv v0.2.0
-	github.com/yutopp/go-rtmp v0.0.2-0.20210218160027-ece21675a185
+	github.com/yutopp/go-rtmp v0.0.4
 	go.uber.org/atomic v1.10.0
 	google.golang.org/protobuf v1.28.1
 	gopkg.in/yaml.v3 v3.0.1
