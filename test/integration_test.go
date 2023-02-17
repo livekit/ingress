@@ -11,14 +11,12 @@ import (
 
 	"github.com/pion/webrtc/v3"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/proto"
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
-	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/redis"
@@ -69,9 +67,10 @@ func TestIngress(t *testing.T) {
 	psrpcClient, err := rpc.NewIOInfoClient("ingress_test_service", bus)
 	require.NoError(t, err)
 
-	rpcClient := ingress.NewRedisRPC("ingress_test_client", rc)
-
 	svc := service.NewService(conf, psrpcClient)
+
+	commandPsrpcClient, err := rpc.NewIngressHandlerClient("ingress_test_client", bus)
+	require.NoError(t, err)
 
 	rtmpsrv := rtmp.NewRTMPServer()
 	relay := rtmp.NewRTMPRelay(rtmpsrv)
@@ -86,21 +85,16 @@ func TestIngress(t *testing.T) {
 		rtmpsrv.Stop()
 	})
 
-	go func() {
-		err := svc.Run()
-		require.NoError(t, err)
-	}()
-	time.Sleep(time.Second)
-	t.Cleanup(func() { svc.Stop(true) })
-
 	ctx := context.Background()
-	updates := make(chan *livekit.UpdateIngressStateRequest, 1)
+	updates := make(chan *rpc.UpdateIngressStateRequest, 10)
 	ios := &ioServer{}
 	ios.updateIngressState = func(req *rpc.UpdateIngressStateRequest) error {
 		updates <- req
+		return nil
 	}
 
 	info := &livekit.IngressInfo{
+		IngressId:           "ingress_id",
 		InputType:           livekit.IngressInput_RTMP_INPUT,
 		Name:                "ingress-test",
 		RoomName:            tc.RoomName,
@@ -135,8 +129,15 @@ func TestIngress(t *testing.T) {
 		return &rpc.GetIngressInfoResponse{Info: info}, nil
 	}
 
+	_, err = rpc.NewIOInfoServer("ingress_test_server", ios, bus)
 	require.NoError(t, err)
-	require.NotEmpty(t, info.Url)
+
+	go func() {
+		err := svc.Run()
+		require.NoError(t, err)
+	}()
+	time.Sleep(time.Second)
+	t.Cleanup(func() { svc.Stop(true) })
 
 	logger.Infow("rtmp url", "url", info.Url)
 
@@ -152,15 +153,11 @@ func TestIngress(t *testing.T) {
 
 	time.Sleep(time.Second * 45)
 
-	_, err = rpcClient.SendRequest(ctx, &livekit.IngressRequest{
-		IngressId: info.IngressId,
-		Request:   &livekit.IngressRequest_Delete{Delete: &livekit.DeleteIngressRequest{IngressId: info.IngressId}},
-	})
+	_, err = commandPsrpcClient.DeleteIngress(ctx, info.IngressId, &livekit.DeleteIngressRequest{IngressId: info.IngressId})
 	require.NoError(t, err)
 
 	time.Sleep(time.Second * 2)
 
 	final := <-updates
-	require.NoError(t, proto.Unmarshal(b, final))
 	require.NotEqual(t, final.State.Status, livekit.IngressState_ENDPOINT_ERROR)
 }
