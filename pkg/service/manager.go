@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/exec"
 	"sync"
@@ -15,6 +14,7 @@ import (
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
 )
 
@@ -50,7 +50,7 @@ func (s *ProcessManager) onFatalError(f func()) {
 	s.onFatal = f
 }
 
-func (s *ProcessManager) launchHandler(ctx context.Context, resp *livekit.GetIngressInfoResponse, version int) {
+func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngressInfoResponse) {
 	// TODO send update on failure
 	_, span := tracer.Start(ctx, "Service.launchHandler")
 	defer span.End()
@@ -73,7 +73,6 @@ func (s *ProcessManager) launchHandler(ctx context.Context, resp *livekit.GetIng
 		"run-handler",
 		"--config-body", string(confString),
 		"--info", string(infoString),
-		"--version", fmt.Sprint(version),
 	}
 
 	if resp.WsUrl != "" {

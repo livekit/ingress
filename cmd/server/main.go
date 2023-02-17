@@ -17,11 +17,10 @@ import (
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
 	"github.com/livekit/ingress/version"
-	"github.com/livekit/livekit-server/pkg/service/rpc"
-	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/redis"
+	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/psrpc"
 )
@@ -45,9 +44,6 @@ func main() {
 					},
 					&cli.StringFlag{
 						Name: "token",
-					},
-					&cli.IntFlag{
-						Name: "version",
 					},
 				},
 				Action: runHandler,
@@ -91,8 +87,7 @@ func runService(c *cli.Context) error {
 		return err
 	}
 
-	rpcServer := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
-	svc := service.NewService(conf, psrpcClient, rpcServer)
+	svc := service.NewService(conf, psrpcClient)
 
 	_, err = rpc.NewIngressInternalServer(conf.NodeID, svc, bus)
 	if err != nil {
@@ -202,28 +197,22 @@ func runHandler(c *cli.Context) error {
 		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string)
 	}
 
-	v := c.Int("version")
-	if v == 0 {
-		rpcHandler := ingress.NewRedisRPC(livekit.NodeID(conf.NodeID), rc)
-		handler = service.NewHandlerV0(conf, rpcHandler)
-	} else {
-		bus := psrpc.NewRedisMessageBus(rc)
-		rpcClient, err := rpc.NewIOInfoClient(conf.NodeID, bus)
-		if err != nil {
-			return err
-		}
-		handler = service.NewHandler(conf, rpcClient)
+	bus := psrpc.NewRedisMessageBus(rc)
+	rpcClient, err := rpc.NewIOInfoClient(conf.NodeID, bus)
+	if err != nil {
+		return err
+	}
+	handler = service.NewHandler(conf, rpcClient)
 
-		rpcServer, err := rpc.NewIngressHandlerServer(conf.NodeID, handler.(*service.Handler), bus)
-		if err != nil {
-			return err
-		}
-		if err := rpcServer.RegisterUpdateIngressTopic(info.IngressId); err != nil {
-			return err
-		}
-		if err := rpcServer.RegisterDeleteIngressTopic(info.IngressId); err != nil {
-			return err
-		}
+	rpcServer, err := rpc.NewIngressHandlerServer(conf.NodeID, handler.(*service.Handler), bus)
+	if err != nil {
+		return err
+	}
+	if err := rpcServer.RegisterUpdateIngressTopic(info.IngressId); err != nil {
+		return err
+	}
+	if err := rpcServer.RegisterDeleteIngressTopic(info.IngressId); err != nil {
+		return err
 	}
 
 	killChan := make(chan os.Signal, 1)
