@@ -12,22 +12,40 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
-	"github.com/livekit/livekit-server/pkg/service/rpc"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/redis"
+	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/psrpc"
 )
 
 type TestConfig struct {
 	*config.Config `yaml:",inline"`
 	RoomName       string `yaml:"room_name"`
+}
+
+type ioServer struct {
+	getIngressInfo     func(*rpc.GetIngressInfoRequest) (*rpc.GetIngressInfoResponse, error)
+	updateIngressState func(*rpc.UpdateIngressStateRequest) error
+}
+
+func (s *ioServer) UpdateEgressInfo(context.Context, *livekit.EgressInfo) (*google_protobuf2.Empty, error) {
+	return &google_protobuf2.Empty{}, nil
+}
+
+func (s *ioServer) GetIngressInfo(ctx context.Context, req *rpc.GetIngressInfoRequest) (*rpc.GetIngressInfoResponse, error) {
+	return s.getIngressInfo(req)
+}
+
+func (s *ioServer) UpdateIngressState(ctx context.Context, req *rpc.UpdateIngressStateRequest) (*google_protobuf2.Empty, error) {
+	return &google_protobuf2.Empty{}, s.updateIngressState(req)
 }
 
 func TestIngress(t *testing.T) {
@@ -51,10 +69,9 @@ func TestIngress(t *testing.T) {
 	psrpcClient, err := rpc.NewIOInfoClient("ingress_test_service", bus)
 	require.NoError(t, err)
 
-	rpcServer := ingress.NewRedisRPC("ingress_test_service", rc)
 	rpcClient := ingress.NewRedisRPC("ingress_test_client", rc)
 
-	svc := service.NewService(conf, psrpcClient, rpcServer)
+	svc := service.NewService(conf, psrpcClient)
 
 	rtmpsrv := rtmp.NewRTMPServer()
 	relay := rtmp.NewRTMPRelay(rtmpsrv)
@@ -77,8 +94,11 @@ func TestIngress(t *testing.T) {
 	t.Cleanup(func() { svc.Stop(true) })
 
 	ctx := context.Background()
-	updates, err := rpcClient.GetUpdateChannel(ctx)
-	require.NoError(t, err)
+	updates := make(chan *livekit.UpdateIngressStateRequest, 1)
+	ios := &ioServer{}
+	ios.updateIngressState = func(req *rpc.UpdateIngressStateRequest) error {
+		updates <- req
+	}
 
 	info := &livekit.IngressInfo{
 		InputType:           livekit.IngressInput_RTMP_INPUT,
@@ -111,35 +131,9 @@ func TestIngress(t *testing.T) {
 			},
 		},
 	}
-
-	shutdown := make(chan struct{})
-	go func() {
-		pubSub, err := rpcClient.GetEntityChannel(context.Background())
-		require.NoError(t, err)
-
-		for {
-			select {
-			case msg := <-pubSub.Channel():
-				b := pubSub.Payload(msg)
-
-				req := &livekit.GetIngressInfoRequest{}
-				if err = proto.Unmarshal(b, req); err != nil {
-					logger.Errorw("failed to read request", err)
-					continue
-				}
-
-				resp := &livekit.GetIngressInfoResponse{Info: info}
-				err = rpcClient.SendGetIngressInfoResponse(context.Background(), req, resp, err)
-				if err != nil {
-					logger.Errorw("could not send response", err)
-				}
-
-			case <-shutdown:
-				_ = pubSub.Close()
-				return
-			}
-		}
-	}()
+	ios.getIngressInfo = func(req *rpc.GetIngressInfoRequest) (*rpc.GetIngressInfoResponse, error) {
+		return &rpc.GetIngressInfoResponse{Info: info}, nil
+	}
 
 	require.NoError(t, err)
 	require.NotEmpty(t, info.Url)
@@ -166,12 +160,7 @@ func TestIngress(t *testing.T) {
 
 	time.Sleep(time.Second * 2)
 
-	close(shutdown)
-
-	msg := <-updates.Channel()
-	b := updates.Payload(msg)
-
-	final := &livekit.UpdateIngressStateRequest{}
+	final := <-updates
 	require.NoError(t, proto.Unmarshal(b, final))
 	require.NotEqual(t, final.State.Status, livekit.IngressState_ENDPOINT_ERROR)
 }

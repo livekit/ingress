@@ -14,10 +14,9 @@ import (
 	"github.com/livekit/ingress/pkg/media"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/version"
-	"github.com/livekit/livekit-server/pkg/service/rpc"
-	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
 )
 
@@ -28,7 +27,6 @@ type Service struct {
 	monitor *stats.Monitor
 	manager *ProcessManager
 
-	rpcServer   ingress.RPCServer
 	psrpcClient rpc.IOInfoClient
 
 	promServer *http.Server
@@ -37,14 +35,13 @@ type Service struct {
 	shutdown            chan struct{}
 }
 
-func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, rpcServer ingress.RPCServer) *Service {
+func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient) *Service {
 	monitor := stats.NewMonitor()
 
 	s := &Service{
 		conf:                conf,
 		monitor:             monitor,
 		manager:             NewProcessManager(conf, monitor),
-		rpcServer:           rpcServer,
 		psrpcClient:         psrpcClient,
 		rtmpPublishRequests: make(chan rtmpPublishRequest),
 		shutdown:            make(chan struct{}),
@@ -78,23 +75,23 @@ func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 	}
 }
 
-func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) (*livekit.IngressInfo, int, error) {
-	version, resp, err := s.getIngressInfo(ctx, &livekit.GetIngressInfoRequest{
+func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) (*livekit.IngressInfo, error) {
+	resp, err := s.psrpcClient.GetIngressInfo(ctx, &rpc.GetIngressInfoRequest{
 		StreamKey: streamKey,
 	})
 	if err != nil {
-		return nil, 0, err
+		return nil, err
 	}
 
 	err = media.Validate(ctx, resp.Info)
 	if err != nil {
-		return resp.Info, version, err
+		return resp.Info, err
 	}
 
 	// check cpu load
 	if !s.monitor.AcceptIngress(resp.Info) {
 		logger.Debugw("rejecting ingress")
-		return nil, version, errors.ErrServerCapacityExceeded
+		return nil, errors.ErrServerCapacityExceeded
 	}
 
 	resp.Info.State = &livekit.IngressState{
@@ -102,9 +99,9 @@ func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) 
 		StartedAt: time.Now().UnixNano(),
 	}
 
-	go s.manager.launchHandler(ctx, resp, version)
+	go s.manager.launchHandler(ctx, resp)
 
-	return resp.Info, version, nil
+	return resp.Info, nil
 }
 
 func (s *Service) Run() error {
@@ -137,9 +134,9 @@ func (s *Service) Run() error {
 		case req := <-s.rtmpPublishRequests:
 			go func() {
 				ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
-				info, version, err := s.handleNewRTMPPublisher(ctx, req.streamKey)
+				info, err := s.handleNewRTMPPublisher(ctx, req.streamKey)
 				if info != nil {
-					s.sendUpdate(ctx, info, version, err)
+					s.sendUpdate(ctx, info, err)
 				}
 				if err != nil {
 					span.RecordError(err)
@@ -152,36 +149,19 @@ func (s *Service) Run() error {
 	}
 }
 
-func (s *Service) getIngressInfo(ctx context.Context, req *livekit.GetIngressInfoRequest) (int, *livekit.GetIngressInfoResponse, error) {
-	race := rpc.NewRace[livekit.GetIngressInfoResponse](ctx)
-	race.Go(func(ctx context.Context) (*livekit.GetIngressInfoResponse, error) {
-		return s.rpcServer.SendGetIngressInfoRequest(ctx, req)
-	})
-	race.Go(func(ctx context.Context) (*livekit.GetIngressInfoResponse, error) {
-		return s.psrpcClient.GetIngressInfo(ctx, req)
-	})
-	return race.Wait()
-}
-
-func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, version int, err error) {
+func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {
 	if err != nil {
 		info.State.Status = livekit.IngressState_ENDPOINT_ERROR
 		info.State.Error = err.Error()
 		logger.Errorw("ingress failed", errors.New(info.State.Error))
 	}
 
-	if version == 0 {
-		if err := s.rpcServer.SendUpdate(ctx, info.IngressId, info.State); err != nil {
-			logger.Errorw("failed to send update", err)
-		}
-	} else {
-		_, err = s.psrpcClient.UpdateIngressState(ctx, &livekit.UpdateIngressStateRequest{
-			IngressId: info.IngressId,
-			State:     info.State,
-		})
-		if err != nil {
-			logger.Errorw("failed to send update", err)
-		}
+	_, err = s.psrpcClient.UpdateIngressState(ctx, &rpc.UpdateIngressStateRequest{
+		IngressId: info.IngressId,
+		State:     info.State,
+	})
+	if err != nil {
+		logger.Errorw("failed to send update", err)
 	}
 }
 

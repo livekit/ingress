@@ -6,9 +6,9 @@ import (
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media"
-	"github.com/livekit/livekit-server/pkg/service/rpc"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
 )
 
@@ -122,7 +122,7 @@ func (h *Handler) sendUpdate(ctx context.Context, info *livekit.IngressInfo) {
 		logger.Infow("ingress update", "ingressID", info.IngressId)
 	}
 
-	_, err := h.rpcClient.UpdateIngressState(ctx, &livekit.UpdateIngressStateRequest{
+	_, err := h.rpcClient.UpdateIngressState(ctx, &rpc.UpdateIngressStateRequest{
 		IngressId: info.IngressId,
 		State:     info.State,
 	})
