@@ -117,7 +117,11 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 	tracks := make([]*lksdk.LocalSampleTrack, 0)
 	for _, layer := range s.videoOptions.Layers {
 		output, err := NewVideoOutput(s.videoOptions.MimeType, layer)
-
+		
+		if err != nil {
+			continue
+		}
+		
 		onRTCP := func(pkt rtcp.Packet) {
 			switch pkt.(type) {
 			case *rtcp.PictureLossIndication:
