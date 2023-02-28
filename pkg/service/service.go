@@ -47,7 +47,11 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient) *Service {
 		shutdown:            make(chan struct{}),
 	}
 
-	s.manager.onFatalError(func() { s.Stop(false) })
+	s.manager.onFatalError(func(info *livekit.IngressInfo, err error) {
+		s.sendUpdate(context.Background(), info, err)
+
+		s.Stop(false)
+	})
 
 	if conf.PrometheusPort > 0 {
 		s.promServer = &http.Server{

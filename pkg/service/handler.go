@@ -54,7 +54,7 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 			p.SendEOS(ctx)
 
 		case res := <-result:
-			// recording finished
+			// ingress finished
 			h.sendUpdate(ctx, res)
 			return
 		}
