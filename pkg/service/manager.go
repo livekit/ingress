@@ -35,7 +35,7 @@ type ProcessManager struct {
 
 	mu             sync.RWMutex
 	activeHandlers map[string]*process
-	onFatal        func()
+	onFatal        func(info *livekit.IngressInfo, err error)
 }
 
 func NewProcessManager(conf *config.Config, monitor *stats.Monitor) *ProcessManager {
@@ -46,7 +46,7 @@ func NewProcessManager(conf *config.Config, monitor *stats.Monitor) *ProcessMana
 	}
 }
 
-func (s *ProcessManager) onFatalError(f func()) {
+func (s *ProcessManager) onFatalError(f func(info *livekit.IngressInfo, err error)) {
 	s.onFatal = f
 }
 
@@ -108,7 +108,7 @@ func (s *ProcessManager) awaitCleanup(h *process) {
 	if err := h.cmd.Run(); err != nil {
 		logger.Errorw("could not launch handler", err)
 		if s.onFatal != nil {
-			s.onFatal()
+			s.onFatal(h.info, err)
 		}
 	}
 
