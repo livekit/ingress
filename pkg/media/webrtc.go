@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"sync/atomic"
 
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
@@ -66,28 +67,28 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 
 	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: s.audioOptions.MimeType})
 	if err != nil {
-		s.logger.Errorw("could not create track", err)
+		s.logger.Errorw("could not create audio track", err)
 		return nil, err
 	}
 
 	var pub *lksdk.LocalTrackPublication
 	onComplete := func() {
-		s.logger.Debugw("write complete")
+		s.logger.Debugw("audio track write complete, unpublishing audio track")
 		if pub != nil {
 			if err := s.room.LocalParticipant.UnpublishTrack(pub.SID()); err != nil {
-				s.logger.Errorw("could not unpublish track", err)
+				s.logger.Errorw("could not unpublish audio track", err)
 			}
 		}
 	}
 	track.OnBind(func() {
 		if err := track.StartWrite(output, onComplete); err != nil {
-			s.logger.Errorw("could not start writing", err)
+			s.logger.Errorw("could not start writing audio track", err)
 		}
 	})
 
 	pub, err = s.room.LocalParticipant.PublishTrack(track, opts)
 	if err != nil {
-		s.logger.Errorw("could not publish track", err)
+		s.logger.Errorw("could not publish audio track", err)
 		return nil, err
 	}
 
@@ -104,11 +105,15 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 
 	var pub *lksdk.LocalTrackPublication
 	var err error
+	var activeLayerCount int32
 	onComplete := func() {
-		s.logger.Debugw("write complete")
+		s.logger.Debugw("video track layer write complete")
 		if pub != nil {
-			if err := s.room.LocalParticipant.UnpublishTrack(pub.SID()); err != nil {
-				s.logger.Errorw("could not unpublish track", err)
+			if atomic.AddInt32(&activeLayerCount, -1) == 0 {
+				s.logger.Debugw("unpublishing video track")
+				if err := s.room.LocalParticipant.UnpublishTrack(pub.SID()); err != nil {
+					s.logger.Errorw("could not unpublish video track", err)
+				}
 			}
 		}
 	}
@@ -129,13 +134,13 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 		}
 		track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: s.videoOptions.MimeType}, lksdk.WithRTCPHandler(onRTCP), lksdk.WithSimulcast(s.ingressId, layer))
 		if err != nil {
-			s.logger.Errorw("could not create track", err)
+			s.logger.Errorw("could not create video track", err)
 			return nil, err
 		}
 
 		track.OnBind(func() {
 			if err := track.StartWrite(output, onComplete); err != nil {
-				s.logger.Errorw("could not start writing", err)
+				s.logger.Errorw("could not start writing video track", err)
 			}
 		})
 		tracks = append(tracks, track)
@@ -144,9 +149,12 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 
 	pub, err = s.room.LocalParticipant.PublishSimulcastTrack(tracks, opts)
 	if err != nil {
-		s.logger.Errorw("could not publish track", err)
+		s.logger.Errorw("could not publish video track", err)
 		return nil, err
 	}
+	activeLayerCount = int32(len(tracks))
+
+	s.logger.Debugw("published video track")
 
 	return outputs, nil
 }
