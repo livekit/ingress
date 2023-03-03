@@ -9,6 +9,7 @@ import (
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/redis"
 	"github.com/livekit/protocol/utils"
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -22,11 +23,11 @@ type Config struct {
 	ApiSecret string             `yaml:"api_secret"` // required (env LIVEKIT_API_SECRET)
 	WsUrl     string             `yaml:"ws_url"`     // required (env LIVEKIT_WS_URL)
 
-	HealthPort     int    `yaml:"health_port"`
-	PrometheusPort int    `yaml:"prometheus_port"`
-	RTMPPort       int    `yaml:"rtmp_port"`
-	HTTPRelayPort  int    `yaml:"http_relay_port"`
-	Logging logger.Config `yaml:"logging"`
+	HealthPort     int           `yaml:"health_port"`
+	PrometheusPort int           `yaml:"prometheus_port"`
+	RTMPPort       int           `yaml:"rtmp_port"`
+	HTTPRelayPort  int           `yaml:"http_relay_port"`
+	Logging        logger.Config `yaml:"logging"`
 
 	// CPU costs for various ingress types
 	CPUCost CPUCostConfig `yaml:"cpu_cost"`
@@ -72,6 +73,24 @@ func (c *Config) InitLogger() {
 	if err != nil {
 		return
 	}
-	l := zl.WithValues("nodeID", c.NodeID)
+	l := zl.WithValues(c.GetLoggerValues()...)
 	logger.SetLogger(l, "ingress")
+}
+
+// To use with zap logger
+func (c *Config) GetLoggerValues() []interface{} {
+	return []interface{}{"nodeID", c.NodeID}
+}
+
+// To use with logrus
+func (c *Config) GetLoggerFields() logrus.Fields {
+	fields := logrus.Fields{
+		"logger": "ingress",
+	}
+	v := c.GetLoggerValues()
+	for i := 0; i < len(v); i += 2 {
+		fields[v[i].(string)] = v[i+1]
+	}
+
+	return fields
 }
