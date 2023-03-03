@@ -46,6 +46,10 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey string)
 		OnConnect: func(conn net.Conn) (io.ReadWriteCloser, *rtmp.ConnConfig) {
 			// Should we find a way to use our own logger?
 			l := log.StandardLogger()
+			if conf.Logging.JSON {
+				l.SetFormatter(&log.JSONFormatter{})
+			}
+			lf := l.WithFields(conf.GetLoggerFields())
 
 			h := NewRTMPHandler()
 			h.OnPublishCallback(func(streamKey string) error {
@@ -71,7 +75,7 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey string)
 					DefaultBandwidthWindowSize: 6 * 1024 * 1024 / 8,
 				},
 
-				Logger: l,
+				Logger: lf,
 			}
 		},
 	})
