@@ -121,13 +121,11 @@ func runService(c *cli.Context) error {
 	go func() {
 		select {
 		case sig := <-stopChan:
-			logger.Infow("exit requested, finishing recording then shutting down", "signal", sig)
+			logger.Infow("exit requested, finishing all ingress then shutting down", "signal", sig)
 			svc.Stop(false)
-			relay.Stop()
-			rtmpsrv.Stop()
 
 		case sig := <-killChan:
-			logger.Infow("exit requested, stopping recording and shutting down", "signal", sig)
+			logger.Infow("exit requested, stopping all ingress and shutting down", "signal", sig)
 			svc.Stop(true)
 			relay.Stop()
 			rtmpsrv.Stop()
@@ -220,7 +218,7 @@ func runHandler(c *cli.Context) error {
 
 	go func() {
 		sig := <-killChan
-		logger.Infow("exit requested, stopping recording and shutting down", "signal", sig)
+		logger.Infow("exit requested, stopping all ingress and shutting down", "signal", sig)
 		handler.Kill()
 	}()
 

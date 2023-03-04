@@ -178,10 +178,9 @@ func (s *Service) Stop(kill bool) {
 	case <-s.shutdown:
 	default:
 		close(s.shutdown)
-	}
-
-	if s.monitor != nil {
-		s.monitor.Stop()
+		if s.monitor != nil {
+			s.monitor.Stop()
+		}
 	}
 
 	if kill {
