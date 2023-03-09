@@ -1,5 +1,9 @@
 module github.com/livekit/ingress
 
+replace github.com/livekit/protocol => ../protocol
+
+replace github.com/livekit/psrpc => ../psrpc
+
 go 1.18
 
 require (
