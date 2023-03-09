@@ -10,7 +10,6 @@ import (
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
-	"github.com/pion/webrtc/v3"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -103,10 +102,6 @@ func isNilAudioParams(options *livekit.IngressAudioOptions) bool {
 		return true
 	}
 
-	if options.MimeType == "" {
-		return true
-	}
-
 	if options.Bitrate == 0 {
 		return true
 	}
@@ -122,7 +117,7 @@ func getDefaultAudioParams() *livekit.IngressAudioOptions {
 	return &livekit.IngressAudioOptions{
 		Name:       "audio",
 		Source:     0,
-		MimeType:   webrtc.MimeTypeOpus,
+		AudioCodec: livekit.AudioCodec_OPUS,
 		Bitrate:    64000,
 		DisableDtx: false,
 		Channels:   2,
@@ -143,9 +138,9 @@ func isNilVideoParams(options *livekit.IngressVideoOptions) bool {
 
 func getDefaultVideoParams() *livekit.IngressVideoOptions {
 	return &livekit.IngressVideoOptions{
-		Name:     "video",
-		Source:   0,
-		MimeType: webrtc.MimeTypeH264,
+		Name:       "video",
+		Source:     0,
+		VideoCodec: livekit.VideoCodec_H264_BASELINE,
 		Layers: []*livekit.VideoLayer{
 			{
 				Quality: livekit.VideoQuality_HIGH,

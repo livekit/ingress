@@ -10,6 +10,13 @@ import (
 	"github.com/livekit/protocol/logger"
 )
 
+type StreamKind string
+
+const (
+	Audio StreamKind = "audio"
+	Video StreamKind = "video"
+)
+
 type Input struct {
 	lock sync.Mutex
 

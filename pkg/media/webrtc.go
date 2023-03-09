@@ -12,6 +12,7 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
+	"github.com/livekit/protocol/utils"
 	lksdk "github.com/livekit/server-sdk-go"
 )
 
@@ -65,7 +66,7 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 		return nil, err
 	}
 
-	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: s.audioOptions.MimeType})
+	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: utils.GetMimeTypeForAudioCodec(s.audioOptions.AudioCodec)})
 	if err != nil {
 		s.logger.Errorw("could not create audio track", err)
 		return nil, err
@@ -92,7 +93,7 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 		return nil, err
 	}
 
-	return output, nil
+	return output.Output, nil
 }
 
 func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
@@ -121,7 +122,7 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 	outputs := make([]*Output, 0)
 	tracks := make([]*lksdk.LocalSampleTrack, 0)
 	for _, layer := range s.videoOptions.Layers {
-		output, err := NewVideoOutput(s.videoOptions.MimeType, layer)
+		output, err := NewVideoOutput(s.videoOptions.VideoCodec, layer)
 
 		onRTCP := func(pkt rtcp.Packet) {
 			switch pkt.(type) {
@@ -132,7 +133,10 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 				}
 			}
 		}
-		track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: s.videoOptions.MimeType}, lksdk.WithRTCPHandler(onRTCP), lksdk.WithSimulcast(s.ingressId, layer))
+		track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{
+			MimeType: utils.GetMimeTypeForVideoCodec(s.videoOptions.VideoCodec),
+		},
+			lksdk.WithRTCPHandler(onRTCP), lksdk.WithSimulcast(s.ingressId, layer))
 		if err != nil {
 			s.logger.Errorw("could not create video track", err)
 			return nil, err
@@ -144,7 +148,7 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 			}
 		})
 		tracks = append(tracks, track)
-		outputs = append(outputs, output)
+		outputs = append(outputs, output.Output)
 	}
 
 	pub, err = s.room.LocalParticipant.PublishSimulcastTrack(tracks, opts)
