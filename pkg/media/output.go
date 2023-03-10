@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/pion/webrtc/v3"
 	"github.com/pion/webrtc/v3/pkg/media"
 	"github.com/pion/webrtc/v3/pkg/media/h264reader"
 	"github.com/tinyzimmer/go-gst/gst"
@@ -24,7 +23,6 @@ const (
 type Output struct {
 	bin *gst.Bin
 
-	mimeType string
 	elements []*gst.Element
 	enc      *gst.Element
 	sink     *app.Sink
@@ -32,8 +30,21 @@ type Output struct {
 	samples chan *media.Sample
 }
 
-func NewVideoOutput(mimeType string, layer *livekit.VideoLayer) (*Output, error) {
-	e, err := newOutput(mimeType)
+// FIXME Use generics instead?
+type VideoOutput struct {
+	*Output
+
+	codec livekit.VideoCodec
+}
+
+type AudioOutput struct {
+	*Output
+
+	codec livekit.AudioCodec
+}
+
+func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*VideoOutput, error) {
+	e, err := newVideoOutput(codec)
 	if err != nil {
 		return nil, err
 	}
@@ -64,8 +75,8 @@ func NewVideoOutput(mimeType string, layer *livekit.VideoLayer) (*Output, error)
 		videoConvert, videoScale, inputCaps,
 	}
 
-	switch mimeType {
-	case webrtc.MimeTypeH264:
+	switch codec {
+	case livekit.VideoCodec_H264_BASELINE:
 		e.enc, err = gst.NewElement("x264enc")
 		if err != nil {
 			return nil, err
@@ -94,7 +105,7 @@ func NewVideoOutput(mimeType string, layer *livekit.VideoLayer) (*Output, error)
 			return nil, err
 		}
 
-	case webrtc.MimeTypeVP8:
+	case livekit.VideoCodec_VP8:
 		e.enc, err = gst.NewElement("vp8enc")
 		if err != nil {
 			return nil, err
@@ -129,8 +140,8 @@ func NewVideoOutput(mimeType string, layer *livekit.VideoLayer) (*Output, error)
 	return e, nil
 }
 
-func NewAudioOutput(options *livekit.IngressAudioOptions) (*Output, error) {
-	e, err := newOutput(options.MimeType)
+func NewAudioOutput(options *livekit.IngressAudioOptions) (*AudioOutput, error) {
+	e, err := newAudioOutput(options.AudioCodec)
 	if err != nil {
 		return nil, err
 	}
@@ -161,8 +172,8 @@ func NewAudioOutput(options *livekit.IngressAudioOptions) (*Output, error) {
 		return nil, err
 	}
 
-	switch options.MimeType {
-	case webrtc.MimeTypeOpus:
+	switch options.AudioCodec {
+	case livekit.AudioCodec_OPUS:
 		e.enc, err = gst.NewElement("opusenc")
 		if err != nil {
 			return nil, err
@@ -206,22 +217,54 @@ func NewAudioOutput(options *livekit.IngressAudioOptions) (*Output, error) {
 	return e, nil
 }
 
-func newOutput(mimeType string) (*Output, error) {
+func newVideoOutput(codec livekit.VideoCodec) (*VideoOutput, error) {
+	e, err := newOutput()
+	if err != nil {
+		return nil, err
+	}
+
+	o := &VideoOutput{
+		Output: e,
+		codec:  codec,
+	}
+
+	o.sink.SetCallbacks(&app.SinkCallbacks{
+		EOSFunc:       o.handleEOS,
+		NewSampleFunc: o.handleSample,
+	})
+
+	return o, nil
+}
+
+func newAudioOutput(codec livekit.AudioCodec) (*AudioOutput, error) {
+	e, err := newOutput()
+	if err != nil {
+		return nil, err
+	}
+
+	o := &AudioOutput{
+		Output: e,
+		codec:  codec,
+	}
+
+	o.sink.SetCallbacks(&app.SinkCallbacks{
+		EOSFunc:       o.handleEOS,
+		NewSampleFunc: o.handleSample,
+	})
+
+	return o, nil
+}
+
+func newOutput() (*Output, error) {
 	sink, err := app.NewAppSink()
 	if err != nil {
 		return nil, err
 	}
 
 	e := &Output{
-		mimeType: mimeType,
-		sink:     sink,
-		samples:  make(chan *media.Sample, 1000),
+		sink:    sink,
+		samples: make(chan *media.Sample, 1000),
 	}
-
-	sink.SetCallbacks(&app.SinkCallbacks{
-		EOSFunc:       e.handleEOS,
-		NewSampleFunc: e.handleSample,
-	})
 
 	return e, nil
 }
@@ -258,7 +301,34 @@ func (e *Output) handleEOS(_ *app.Sink) {
 	close(e.samples)
 }
 
-func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
+func (e *Output) writeSample(sample *media.Sample) {
+	select {
+	case e.samples <- sample:
+		// continue
+	default:
+		logger.Warnw("sample channel full", nil)
+		e.samples <- sample
+	}
+}
+
+func (e *Output) NextSample() (media.Sample, error) {
+	sample := <-e.samples
+	if sample == nil {
+		return media.Sample{}, io.EOF
+	}
+
+	return *sample, nil
+}
+
+func (e *Output) OnBind() error {
+	return nil
+}
+
+func (e *Output) OnUnbind() error {
+	return nil
+}
+
+func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 	// Pull the sample that triggered this callback
 	s := sink.PullSample()
 	if s == nil {
@@ -273,8 +343,8 @@ func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 
 	duration := buffer.Duration()
 
-	switch e.mimeType {
-	case webrtc.MimeTypeH264:
+	switch e.codec {
+	case livekit.VideoCodec_H264_BASELINE:
 		data := buffer.Bytes()
 
 		var (
@@ -315,14 +385,8 @@ func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 			Duration: duration,
 		})
 
-	case webrtc.MimeTypeVP8:
+	case livekit.VideoCodec_VP8:
 		// untested
-		e.writeSample(&media.Sample{
-			Data:     buffer.Bytes(),
-			Duration: duration,
-		})
-
-	case webrtc.MimeTypeOpus:
 		e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
 			Duration: duration,
@@ -332,29 +396,28 @@ func (e *Output) handleSample(sink *app.Sink) gst.FlowReturn {
 	return gst.FlowOK
 }
 
-func (e *Output) writeSample(sample *media.Sample) {
-	select {
-	case e.samples <- sample:
-		// continue
-	default:
-		logger.Warnw("sample channel full", nil)
-		e.samples <- sample
-	}
-}
-
-func (e *Output) NextSample() (media.Sample, error) {
-	sample := <-e.samples
-	if sample == nil {
-		return media.Sample{}, io.EOF
+func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
+	// Pull the sample that triggered this callback
+	s := sink.PullSample()
+	if s == nil {
+		return gst.FlowEOS
 	}
 
-	return *sample, nil
-}
+	// Retrieve the buffer from the sample
+	buffer := s.GetBuffer()
+	if buffer == nil {
+		return gst.FlowError
+	}
 
-func (e *Output) OnBind() error {
-	return nil
-}
+	duration := buffer.Duration()
 
-func (e *Output) OnUnbind() error {
-	return nil
+	switch e.codec {
+	case livekit.AudioCodec_OPUS:
+		e.writeSample(&media.Sample{
+			Data:     buffer.Bytes(),
+			Duration: duration,
+		})
+	}
+
+	return gst.FlowOK
 }

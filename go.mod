@@ -4,8 +4,8 @@ go 1.18
 
 require (
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
-	github.com/livekit/protocol v1.4.2
-	github.com/livekit/psrpc v0.2.7
+	github.com/livekit/protocol v1.5.1-0.20230310174619-c3e5be2aff9d
+	github.com/livekit/psrpc v0.2.10-0.20230303054701-5853a56b4643
 	github.com/livekit/server-sdk-go v1.0.7
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/webrtc/v3 v3.1.56
@@ -31,7 +31,7 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/eapache/channels v1.1.0 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
-	github.com/frostbyte73/go-throttle v0.0.0-20210621200530-8018c891361d // indirect
+	github.com/frostbyte73/core v0.0.4 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
@@ -49,7 +49,7 @@ require (
 	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/mitchellh/mapstructure v1.4.1 // indirect
-	github.com/nats-io/nats.go v1.22.1 // indirect
+	github.com/nats-io/nats.go v1.24.0 // indirect
 	github.com/nats-io/nkeys v0.3.0 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pion/datachannel v1.5.5 // indirect
@@ -82,12 +82,13 @@ require (
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.6.0 // indirect
+	golang.org/x/exp v0.0.0-20230224173230-c95f2b4c22f2 // indirect
 	golang.org/x/net v0.7.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect
 	golang.org/x/text v0.7.0 // indirect
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba // indirect
-	google.golang.org/genproto v0.0.0-20230112194545-e10362b5ecf9 // indirect
+	google.golang.org/genproto v0.0.0-20230227214838-9b19f0bdc514 // indirect
 	google.golang.org/grpc v1.53.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
 )

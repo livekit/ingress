@@ -47,11 +47,14 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 		close(h.done)
 	}()
 
+	kill := h.kill
+
 	for {
 		select {
-		case <-h.kill:
+		case <-kill:
 			// kill signal received
 			p.SendEOS(ctx)
+			kill = nil
 
 		case res := <-result:
 			// ingress finished

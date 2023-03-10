@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pion/webrtc/v3"
 	"github.com/stretchr/testify/require"
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
@@ -69,7 +68,7 @@ func TestIngress(t *testing.T) {
 
 	svc := service.NewService(conf, psrpcClient)
 
-	commandPsrpcClient, err := rpc.NewIngressHandlerClient("ingress_test_client", bus)
+	commandPsrpcClient, err := rpc.NewIngressHandlerClient("ingress_test_client", bus, psrpc.WithClientTimeout(5*time.Second))
 	require.NoError(t, err)
 
 	rtmpsrv := rtmp.NewRTMPServer()
@@ -85,7 +84,6 @@ func TestIngress(t *testing.T) {
 		rtmpsrv.Stop()
 	})
 
-	ctx := context.Background()
 	updates := make(chan *rpc.UpdateIngressStateRequest, 10)
 	ios := &ioServer{}
 	ios.updateIngressState = func(req *rpc.UpdateIngressStateRequest) error {
@@ -106,15 +104,15 @@ func TestIngress(t *testing.T) {
 		Audio: &livekit.IngressAudioOptions{
 			Name:       "audio",
 			Source:     0,
-			MimeType:   webrtc.MimeTypeOpus,
+			AudioCodec: livekit.AudioCodec_OPUS,
 			Bitrate:    64000,
 			DisableDtx: false,
 			Channels:   2,
 		},
 		Video: &livekit.IngressVideoOptions{
-			Name:     "video",
-			Source:   0,
-			MimeType: webrtc.MimeTypeH264,
+			Name:       "video",
+			Source:     0,
+			VideoCodec: livekit.VideoCodec_H264_BASELINE,
 			Layers: []*livekit.VideoLayer{
 				{
 					Quality: livekit.VideoQuality_HIGH,
@@ -153,7 +151,7 @@ func TestIngress(t *testing.T) {
 
 	time.Sleep(time.Second * 45)
 
-	_, err = commandPsrpcClient.DeleteIngress(ctx, info.IngressId, &livekit.DeleteIngressRequest{IngressId: info.IngressId})
+	_, err = commandPsrpcClient.DeleteIngress(context.Background(), info.IngressId, &livekit.DeleteIngressRequest{IngressId: info.IngressId})
 	require.NoError(t, err)
 
 	time.Sleep(time.Second * 2)
