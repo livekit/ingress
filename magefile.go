@@ -14,7 +14,7 @@ import (
 	"github.com/livekit/mageutil"
 )
 
-var Default = Test
+var Default = Build
 
 const (
 	imageName  = "livekit/ingress"
@@ -74,7 +74,7 @@ func Test() error {
 }
 
 func Retest() error {
-	cmd := exec.Command("go", "test", "-v", "-count=1", "./test/...")
+	cmd := exec.Command("go", "test", "-v", "-count=1", "--tags=integration", "./test/...")
 
 	brewPrefix, err := getBrewPrefix()
 	if err != nil {
@@ -91,7 +91,7 @@ func Retest() error {
 		sb.WriteString(plugin)
 	}
 
-	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=3")
+	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=3", "INGRESS_CONFIG_FILE=config.yaml")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
