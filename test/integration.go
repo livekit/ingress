@@ -47,7 +47,20 @@ func (s *ioServer) UpdateIngressState(ctx context.Context, req *rpc.UpdateIngres
 	return &google_protobuf2.Empty{}, s.updateIngressState(req)
 }
 
+func getDefaultConfig(t *testing.T) *TestConfig {
+	tc := &TestConfig{Config: &config.Config{}}
+	// Defaults
+	tc.RTMPPort = 1935
+	tc.HTTPRelayPort = 9090
+
+	tc.NodeID = "INGRESS_TEST"
+
+	return tc
+}
+
 func getConfig(t *testing.T) *TestConfig {
+	tc := getDefaultConfig()
+
 	confString := os.Getenv("INGRESS_CONFIG_STRING")
 	if confString == "" {
 		confFile := os.Getenv("INGRESS_CONFIG_FILE")
@@ -57,16 +70,8 @@ func getConfig(t *testing.T) *TestConfig {
 		confString = string(b)
 	}
 
-	tc := &TestConfig{Config: &config.Config{}}
-	// Defaults
-	tc.RTMPPort = 1935
-	tc.HTTPRelayPort = 9090
-
 	require.NoError(t, yaml.Unmarshal([]byte(confString), tc))
-	tc.NodeID = "INGRESS_TEST"
 	tc.InitLogger()
-
-	return tc
 }
 
 func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
