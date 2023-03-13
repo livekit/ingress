@@ -65,15 +65,15 @@ func BuildDockerLinux() error {
 	)
 }
 
-func Test() error {
+func Integration(configFile string) error {
 	if err := Build(); err != nil {
 		return err
 	}
 
-	return Retest()
+	return Retest(configFile)
 }
 
-func Retest() error {
+func Retest(configFile string) error {
 	cmd := exec.Command("go", "test", "-v", "-count=1", "--tags=integration", "./test/...")
 
 	brewPrefix, err := getBrewPrefix()
@@ -91,7 +91,7 @@ func Retest() error {
 		sb.WriteString(plugin)
 	}
 
-	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=3", "INGRESS_CONFIG_FILE=config.yaml")
+	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=3", fmt.Sprintf("INGRESS_CONFIG_FILE=%s", configFile))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

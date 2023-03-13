@@ -59,7 +59,7 @@ func getDefaultConfig(t *testing.T) *TestConfig {
 }
 
 func getConfig(t *testing.T) *TestConfig {
-	tc := getDefaultConfig()
+	tc := getDefaultConfig(t)
 
 	confString := os.Getenv("INGRESS_CONFIG_STRING")
 	if confString == "" {
@@ -72,6 +72,8 @@ func getConfig(t *testing.T) *TestConfig {
 
 	require.NoError(t, yaml.Unmarshal([]byte(confString), tc))
 	tc.InitLogger()
+
+	return tc
 }
 
 func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
