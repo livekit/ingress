@@ -47,7 +47,7 @@ func (s *ioServer) UpdateIngressState(ctx context.Context, req *rpc.UpdateIngres
 	return &google_protobuf2.Empty{}, s.updateIngressState(req)
 }
 
-func getDefaultConfig(t *testing.T) *TestConfig {
+func GetDefaultConfig(t *testing.T) *TestConfig {
 	tc := &TestConfig{Config: &config.Config{}}
 	// Defaults
 	tc.RTMPPort = 1935
@@ -59,7 +59,7 @@ func getDefaultConfig(t *testing.T) *TestConfig {
 }
 
 func getConfig(t *testing.T) *TestConfig {
-	tc := getDefaultConfig(t)
+	tc := GetDefaultConfig(t)
 
 	confString := os.Getenv("INGRESS_CONFIG_STRING")
 	if confString == "" {
