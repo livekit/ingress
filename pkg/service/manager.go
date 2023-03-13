@@ -97,6 +97,8 @@ func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngress
 		closed: make(chan struct{}),
 	}
 
+	h.info.State = &livekit.IngressState{}
+
 	s.mu.Lock()
 	s.activeHandlers[resp.Info.IngressId] = h
 	s.mu.Unlock()
