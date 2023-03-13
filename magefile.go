@@ -91,7 +91,12 @@ func Retest(configFile string) error {
 		sb.WriteString(plugin)
 	}
 
-	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=3", fmt.Sprintf("INGRESS_CONFIG_FILE=%s", configFile))
+	confStr, err := os.ReadFile(configFile)
+	if err != nil {
+		return err
+	}
+
+	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=3", fmt.Sprintf("INGRESS_CONFIG_BODY=%s", string(confStr)))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

@@ -61,7 +61,7 @@ func GetDefaultConfig(t *testing.T) *TestConfig {
 func getConfig(t *testing.T) *TestConfig {
 	tc := GetDefaultConfig(t)
 
-	confString := os.Getenv("INGRESS_CONFIG_STRING")
+	confString := os.Getenv("INGRESS_CONFIG_BODY")
 	if confString == "" {
 		confFile := os.Getenv("INGRESS_CONFIG_FILE")
 		require.NotEmpty(t, confFile)
