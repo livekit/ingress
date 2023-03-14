@@ -14,7 +14,7 @@ import (
 	"github.com/livekit/mageutil"
 )
 
-var Default = Test
+var Default = Build
 
 const (
 	imageName  = "livekit/ingress"
@@ -65,16 +65,16 @@ func BuildDockerLinux() error {
 	)
 }
 
-func Test() error {
+func Integration(configFile string) error {
 	if err := Build(); err != nil {
 		return err
 	}
 
-	return Retest()
+	return Retest(configFile)
 }
 
-func Retest() error {
-	cmd := exec.Command("go", "test", "-v", "-count=1", "./test/...")
+func Retest(configFile string) error {
+	cmd := exec.Command("go", "test", "-v", "-count=1", "--tags=integration", "./test/...")
 
 	brewPrefix, err := getBrewPrefix()
 	if err != nil {
@@ -91,7 +91,12 @@ func Retest() error {
 		sb.WriteString(plugin)
 	}
 
-	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=3")
+	confStr, err := os.ReadFile(configFile)
+	if err != nil {
+		return err
+	}
+
+	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=3", fmt.Sprintf("INGRESS_CONFIG_BODY=%s", string(confStr)))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
