@@ -59,6 +59,7 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 		Name:       s.audioOptions.Name,
 		Source:     s.audioOptions.Source,
 		DisableDTX: s.audioOptions.DisableDtx,
+		Stereo:     s.audioOptions.Channels > 1,
 	}
 
 	if err != nil {
