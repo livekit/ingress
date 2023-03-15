@@ -140,7 +140,7 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 	return e, nil
 }
 
-func NewAudioOutput(options *livekit.IngressAudioOptions) (*AudioOutput, error) {
+func NewAudioOutput(options *livekit.IngressAudioEncodingOptions) (*AudioOutput, error) {
 	e, err := newAudioOutput(options.AudioCodec)
 	if err != nil {
 		return nil, err

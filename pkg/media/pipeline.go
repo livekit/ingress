@@ -9,6 +9,7 @@ import (
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 )
 
@@ -32,7 +33,7 @@ func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, e
 	// initialize gst
 	gst.Init(nil)
 
-	params.Logger.Debugw("listening", "url", params.Url)
+	logger.Debugw("listening", "url", params.Url)
 
 	input, err := NewInput(params)
 	if err != nil {
@@ -89,14 +90,14 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind StreamKind) {
 	}
 
 	if err = p.pipeline.Add(bin.Element); err != nil {
-		p.Logger.Errorw("could not add bin", err)
+		logger.Errorw("could not add bin", err)
 		return
 	}
 
 	pad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
 		// link
 		if linkReturn := pad.Link(bin.GetStaticPad("sink")); linkReturn != gst.PadLinkOK {
-			p.Logger.Errorw("failed to link output bin", err)
+			logger.Errorw("failed to link output bin", err)
 		}
 
 		// sync state
@@ -125,7 +126,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 	// set state to playing (this does not start the pipeline)
 	if err := p.pipeline.Start(); err != nil {
 		span.RecordError(err)
-		p.Logger.Errorw("failed to set pipeline state", err)
+		logger.Errorw("failed to set pipeline state", err)
 		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
 		return p.GetInfo()
 	}
@@ -133,7 +134,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 	err := p.input.Start(ctx)
 	if err != nil {
 		span.RecordError(err)
-		p.Logger.Errorw("failed to start input", err)
+		logger.Errorw("failed to start input", err)
 		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
 		return p.GetInfo()
 	}
@@ -158,7 +159,7 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 	switch msg.Type() {
 	case gst.MessageEOS:
 		// EOS received - close and return
-		p.Logger.Debugw("EOS received, stopping pipeline")
+		logger.Debugw("EOS received, stopping pipeline")
 		_ = p.pipeline.BlockSetState(gst.StateNull)
 		p.loop.Quit()
 		return false
@@ -166,7 +167,7 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 	case gst.MessageError:
 		// handle error if possible, otherwise close and return
 		err := errors.New(msg.ParseError().Error())
-		p.Logger.Errorw("pipeline failure", err)
+		logger.Errorw("pipeline failure", err)
 		p.loop.Quit()
 		return false
 
@@ -174,7 +175,7 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 		// ignore
 
 	default:
-		p.Logger.Debugw(msg.String())
+		logger.Debugw(msg.String())
 	}
 
 	return true
@@ -193,7 +194,7 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 			p.onStatusUpdate(ctx, p.GetInfo())
 		}
 
-		p.Logger.Debugw("sending EOS to pipeline")
+		logger.Debugw("sending EOS to pipeline")
 		p.pipeline.SendEvent(gst.NewEOSEvent())
 	}
 }

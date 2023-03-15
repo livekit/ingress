@@ -1,5 +1,7 @@
 module github.com/livekit/ingress
 
+replace github.com/livekit/protocol => ../protocol
+
 go 1.18
 
 require (

@@ -20,7 +20,6 @@ const (
 )
 
 type HTTPRelaySource struct {
-	logger logger.Logger
 	params *Params
 
 	flvSrc *app.Source
@@ -33,13 +32,12 @@ func NewHTTPRelaySource(ctx context.Context, p *Params) (*HTTPRelaySource, error
 	defer span.End()
 
 	s := &HTTPRelaySource{
-		logger: p.Logger,
 		params: p,
 	}
 
 	elem, err := gst.NewElementWithName("appsrc", FlvAppSource)
 	if err != nil {
-		s.logger.Errorw("could not create appsrc", err)
+		logger.Errorw("could not create appsrc", err)
 		return nil, err
 	}
 	if err = elem.SetProperty("caps", gst.NewCapsFromString("video/x-flv")); err != nil {
@@ -75,7 +73,7 @@ func (s *HTTPRelaySource) Start(ctx context.Context) error {
 		case nil, io.EOF:
 			err = nil
 		default:
-			s.logger.Errorw("error while copying media from relay", err)
+			logger.Errorw("error while copying media from relay", err)
 		}
 
 		s.flvSrc.EndStream()
