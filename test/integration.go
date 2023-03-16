@@ -137,12 +137,13 @@ func RunRTMPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 			EncodingOptions: &livekit.IngressVideoOptions_Options{
 				Options: &livekit.IngressVideoEncodingOptions{
 					VideoCodec: livekit.VideoCodec_H264_BASELINE,
+					FrameRate:  20,
 					Layers: []*livekit.VideoLayer{
 						{
 							Quality: livekit.VideoQuality_HIGH,
 							Width:   1280,
 							Height:  720,
-							Bitrate: 3000,
+							Bitrate: 3000000,
 						},
 					},
 				},
