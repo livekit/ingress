@@ -72,7 +72,7 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		infoCopy.Video = getDefaultVideoParams()
 	}
 
-	err = ingress.ValidateVideoOptionsConsistency(infoCopy.Video.GetAdvanced())
+	err = ingress.ValidateVideoOptionsConsistency(infoCopy.Video.GetOptions())
 	if err != nil {
 		return nil, err
 	}
@@ -109,7 +109,7 @@ func isNilAudioParams(options *livekit.IngressAudioOptions) bool {
 		return true
 	}
 
-	advanced := options.GetAdvanced()
+	advanced := options.GetOptions()
 	if advanced == nil {
 		return true
 	}
@@ -121,8 +121,8 @@ func getDefaultAudioParams() *livekit.IngressAudioOptions {
 	return &livekit.IngressAudioOptions{
 		Name:   "audio",
 		Source: 0,
-		EncodingOptions: &livekit.IngressAudioOptions_Advanced{
-			Advanced: &livekit.IngressAudioEncodingOptions{
+		EncodingOptions: &livekit.IngressAudioOptions_Options{
+			Options: &livekit.IngressAudioEncodingOptions{
 				AudioCodec: livekit.AudioCodec_OPUS,
 				Bitrate:    64000,
 				DisableDtx: false,
@@ -142,7 +142,7 @@ func isNilVideoParams(options *livekit.IngressVideoOptions) bool {
 		return true
 	}
 
-	advanced := options.GetAdvanced()
+	advanced := options.GetOptions()
 	if advanced == nil {
 		return true
 	}
@@ -158,9 +158,10 @@ func getDefaultVideoParams() *livekit.IngressVideoOptions {
 	return &livekit.IngressVideoOptions{
 		Name:   "video",
 		Source: 0,
-		EncodingOptions: &livekit.IngressVideoOptions_Advanced{
-			Advanced: &livekit.IngressVideoEncodingOptions{
+		EncodingOptions: &livekit.IngressVideoOptions_Options{
+			Options: &livekit.IngressVideoEncodingOptions{
 				VideoCodec: livekit.VideoCodec_H264_BASELINE,
+				FrameRate:  30,
 				Layers: []*livekit.VideoLayer{
 					{
 						Quality: livekit.VideoQuality_HIGH,

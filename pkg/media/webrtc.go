@@ -51,7 +51,7 @@ func NewWebRTCSink(ctx context.Context, p *Params) (*WebRTCSink, error) {
 }
 
 func (s *WebRTCSink) addAudioTrack() (*Output, error) {
-	advanced := s.audioOptions.GetAdvanced()
+	advanced := s.audioOptions.GetOptions()
 	if advanced == nil {
 		return nil, psrpc.NewErrorf(psrpc.InvalidArgument, "missing audio encoding options")
 	}
@@ -99,7 +99,7 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 }
 
 func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
-	advanced := s.videoOptions.GetAdvanced()
+	advanced := s.videoOptions.GetOptions()
 	if advanced == nil {
 		return nil, psrpc.NewErrorf(psrpc.InvalidArgument, "missing video encoding options")
 	}
