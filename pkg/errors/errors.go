@@ -14,6 +14,8 @@ var (
 	ErrUnableToAddPad          = errors.New("could not add pads to bin")
 	ErrInvalidInputDimensions  = errors.New("invalid input media dimensions")
 	ErrInvalidInputFPS         = errors.New("invalid input media FPS")
+	ErrInvalidVideoPreset      = errors.New("invalid video encoding preset")
+	ErrInvalidAudioPreset      = errors.New("invalid audio encoding preset")
 	ErrIngressNotFound         = errors.New("ingress not found")
 	ErrServerCapacityExceeded  = errors.New("server capacity exceeded")
 )

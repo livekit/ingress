@@ -44,3 +44,16 @@ func computeVideoLayers(highLayer *livekit.VideoLayer, layerCount int) []*liveki
 
 	return layers
 }
+
+func getOptionsForAudioPreset(preset livekit.IngressAudioEncodingPreset) (*livekit.IngressAudioEncodingOptions, error) {
+	switch preset {
+	case livekit.IngressAudioEncodingPreset_OPUS_STEREO_96KBPS:
+		return &livekit.IngressAudioEncodingOptions{
+			AudioCodec: livekit.AudioCodec_OPUS,
+			Channels:   2,
+			Bitrate:    96000,
+		}, nil
+	default:
+		return nil, errors.ErrInvalidAudioPreset
+	}
+}
