@@ -16,8 +16,6 @@ import (
 type Params struct {
 	*livekit.IngressInfo
 
-	Logger logger.Logger
-
 	// connection info
 	WsUrl string
 	Token string
@@ -52,6 +50,11 @@ func Validate(ctx context.Context, info *livekit.IngressInfo) error {
 func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressInfo, wsUrl string, token string) (*Params, error) {
 	var err error
 
+	err = conf.InitLogger("ingressID", info.IngressId)
+	if err != nil {
+		return nil, err
+	}
+
 	infoCopy := proto.Clone(info).(*livekit.IngressInfo)
 
 	// The state should have been created by the service, before launching the hander, but be defensive here.
@@ -69,7 +72,7 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		infoCopy.Video = getDefaultVideoParams()
 	}
 
-	err = ingress.ValidateVideoOptionsConsistency(infoCopy.Video)
+	err = ingress.ValidateVideoOptionsConsistency(infoCopy.Video.GetOptions())
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +86,6 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 
 	p := &Params{
 		IngressInfo: infoCopy,
-		Logger:      logger.Logger(logger.GetLogger().WithValues("ingressID", info.IngressId)),
 		Token:       token,
 		WsUrl:       wsUrl,
 		RelayUrl:    getRelayUrl(conf, info.StreamKey),
@@ -102,11 +104,13 @@ func isNilAudioParams(options *livekit.IngressAudioOptions) bool {
 		return true
 	}
 
-	if options.Bitrate == 0 {
+	if _, ok := options.GetEncodingOptions().(*livekit.IngressAudioOptions_Preset); ok {
+		logger.Infow("presets unimplemented")
 		return true
 	}
 
-	if options.Channels == 0 {
+	advanced := options.GetOptions()
+	if advanced == nil {
 		return true
 	}
 
@@ -115,12 +119,16 @@ func isNilAudioParams(options *livekit.IngressAudioOptions) bool {
 
 func getDefaultAudioParams() *livekit.IngressAudioOptions {
 	return &livekit.IngressAudioOptions{
-		Name:       "audio",
-		Source:     0,
-		AudioCodec: livekit.AudioCodec_OPUS,
-		Bitrate:    64000,
-		DisableDtx: false,
-		Channels:   2,
+		Name:   "audio",
+		Source: 0,
+		EncodingOptions: &livekit.IngressAudioOptions_Options{
+			Options: &livekit.IngressAudioEncodingOptions{
+				AudioCodec: livekit.AudioCodec_OPUS,
+				Bitrate:    64000,
+				DisableDtx: false,
+				Channels:   2,
+			},
+		},
 	}
 }
 
@@ -129,7 +137,17 @@ func isNilVideoParams(options *livekit.IngressVideoOptions) bool {
 		return true
 	}
 
-	if len(options.Layers) == 0 {
+	if _, ok := options.GetEncodingOptions().(*livekit.IngressVideoOptions_Preset); ok {
+		logger.Infow("presets unimplemented")
+		return true
+	}
+
+	advanced := options.GetOptions()
+	if advanced == nil {
+		return true
+	}
+
+	if len(advanced.Layers) == 0 {
 		return true
 	}
 
@@ -138,27 +156,32 @@ func isNilVideoParams(options *livekit.IngressVideoOptions) bool {
 
 func getDefaultVideoParams() *livekit.IngressVideoOptions {
 	return &livekit.IngressVideoOptions{
-		Name:       "video",
-		Source:     0,
-		VideoCodec: livekit.VideoCodec_H264_BASELINE,
-		Layers: []*livekit.VideoLayer{
-			{
-				Quality: livekit.VideoQuality_HIGH,
-				Width:   1280,
-				Height:  720,
-				Bitrate: 3000000,
-			},
-			{
-				Quality: livekit.VideoQuality_MEDIUM,
-				Width:   960,
-				Height:  540,
-				Bitrate: 1500000,
-			},
-			{
-				Quality: livekit.VideoQuality_LOW,
-				Width:   480,
-				Height:  270,
-				Bitrate: 420000,
+		Name:   "video",
+		Source: 0,
+		EncodingOptions: &livekit.IngressVideoOptions_Options{
+			Options: &livekit.IngressVideoEncodingOptions{
+				VideoCodec: livekit.VideoCodec_H264_BASELINE,
+				FrameRate:  30,
+				Layers: []*livekit.VideoLayer{
+					{
+						Quality: livekit.VideoQuality_HIGH,
+						Width:   1280,
+						Height:  720,
+						Bitrate: 3000000,
+					},
+					{
+						Quality: livekit.VideoQuality_MEDIUM,
+						Width:   960,
+						Height:  540,
+						Bitrate: 1500000,
+					},
+					{
+						Quality: livekit.VideoQuality_LOW,
+						Width:   480,
+						Height:  270,
+						Bitrate: 420000,
+					},
+				},
 			},
 		},
 	}

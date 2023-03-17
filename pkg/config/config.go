@@ -3,13 +3,14 @@ package config
 import (
 	"os"
 
+	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/redis"
 	"github.com/livekit/protocol/utils"
-	"github.com/sirupsen/logrus"
+	lksdk "github.com/livekit/server-sdk-go"
 )
 
 const (
@@ -64,17 +65,25 @@ func NewConfig(confString string) (*Config, error) {
 		return nil, errors.New("redis configuration is required")
 	}
 
-	conf.InitLogger()
+	if err := conf.InitLogger(); err != nil {
+		return nil, err
+	}
+
 	return conf, nil
 }
 
-func (c *Config) InitLogger() {
+func (c *Config) InitLogger(values ...interface{}) error {
 	zl, err := logger.NewZapLogger(&c.Logging)
 	if err != nil {
-		return
+		return err
 	}
-	l := zl.WithValues(c.GetLoggerValues()...)
+
+	values = append(c.GetLoggerValues(), values...)
+	l := zl.WithValues(values...)
 	logger.SetLogger(l, "ingress")
+	lksdk.SetLogger(l)
+
+	return nil
 }
 
 // To use with zap logger
