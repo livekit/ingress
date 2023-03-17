@@ -3,10 +3,11 @@ module github.com/livekit/ingress
 go 1.18
 
 require (
+	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/protocol v1.5.1-0.20230316165531-6b747fe252cf
 	github.com/livekit/psrpc v0.2.10-0.20230303054701-5853a56b4643
-	github.com/livekit/server-sdk-go v1.0.7
+	github.com/livekit/server-sdk-go v1.0.9-0.20230314192457-52c28d42b5d4
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/webrtc/v3 v3.1.58
 	github.com/prometheus/client_golang v1.14.0
@@ -16,7 +17,6 @@ require (
 	github.com/tinyzimmer/go-gst v0.2.33
 	github.com/urfave/cli/v2 v2.24.4
 	github.com/yutopp/go-flv v0.2.0
-	github.com/yutopp/go-rtmp v0.0.4
 	go.uber.org/atomic v1.10.0
 	google.golang.org/protobuf v1.29.1
 	gopkg.in/yaml.v3 v3.0.1
@@ -43,7 +43,7 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lithammer/shortuuid/v3 v3.0.7 // indirect
 	github.com/lithammer/shortuuid/v4 v4.0.0 // indirect
-	github.com/livekit/mediatransportutil v0.0.0-20230111071722-904079e94a7c // indirect
+	github.com/livekit/mediatransportutil v0.0.0-20230130133657-96cfb115473a // indirect
 	github.com/mackerelio/go-osstat v0.2.4 // indirect
 	github.com/magefile/mage v1.14.0 // indirect
 	github.com/mattn/go-pointer v0.0.1 // indirect

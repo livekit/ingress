@@ -8,11 +8,11 @@ import (
 	"path"
 	"sync"
 
+	"github.com/livekit/go-rtmp"
+	rtmpmsg "github.com/livekit/go-rtmp/message"
 	log "github.com/sirupsen/logrus"
 	"github.com/yutopp/go-flv"
 	flvtag "github.com/yutopp/go-flv/tag"
-	"github.com/yutopp/go-rtmp"
-	rtmpmsg "github.com/yutopp/go-rtmp/message"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
