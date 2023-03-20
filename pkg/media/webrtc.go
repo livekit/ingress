@@ -18,8 +18,6 @@ type WebRTCSink struct {
 	room *lksdk.Room
 
 	params *Params
-
-	ingressId string
 }
 
 func NewWebRTCSink(ctx context.Context, p *Params) (*WebRTCSink, error) {
@@ -129,7 +127,7 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 		track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{
 			MimeType: utils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec),
 		},
-			lksdk.WithRTCPHandler(onRTCP), lksdk.WithSimulcast(s.ingressId, layer))
+			lksdk.WithRTCPHandler(onRTCP), lksdk.WithSimulcast(s.params.IngressId, layer))
 		if err != nil {
 			logger.Errorw("could not create video track", err)
 			return nil, err
