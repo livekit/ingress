@@ -3,6 +3,7 @@ module github.com/livekit/ingress
 go 1.18
 
 require (
+	github.com/frostbyte73/core v0.0.4
 	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/protocol v1.5.1-0.20230316165531-6b747fe252cf
@@ -31,7 +32,6 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/eapache/channels v1.1.0 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
-	github.com/frostbyte73/core v0.0.4 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
