@@ -15,8 +15,8 @@ import (
 type Params struct {
 	*livekit.IngressInfo
 
-	audioEncodingOptions *livekit.IngressAudioEncodingOptions
-	videoEncodingOptions *livekit.IngressVideoEncodingOptions
+	AudioEncodingOptions *livekit.IngressAudioEncodingOptions
+	VideoEncodingOptions *livekit.IngressVideoEncodingOptions
 
 	// connection info
 	WsUrl string
@@ -29,6 +29,8 @@ type Params struct {
 }
 
 func Validate(ctx context.Context, info *livekit.IngressInfo) error {
+	// TODO validate encoder settings
+
 	if info.InputType != livekit.IngressInput_RTMP_INPUT {
 		return errors.NewInvalidIngressError("unsupported input type")
 	}
@@ -67,6 +69,14 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		}
 	}
 
+	if infoCopy.Audio == nil {
+		infoCopy.Audio = &livekit.IngressAudioOptions{}
+	}
+
+	if infoCopy.Video == nil {
+		infoCopy.Video = &livekit.IngressVideoOptions{}
+	}
+
 	audioEncodingOptions, err := getAudioEncodingOptions(infoCopy.Audio)
 	if err != nil {
 		return nil, err
@@ -77,7 +87,7 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		return nil, err
 	}
 
-	err = ingress.ValidateVideoOptionsConsistency(infoCopy.Video.GetOptions())
+	err = ingress.ValidateVideoOptionsConsistency(videoEncodingOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -91,8 +101,8 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 
 	p := &Params{
 		IngressInfo:          infoCopy,
-		audioEncodingOptions: audioEncodingOptions,
-		videoEncodingOptions: videoEncodingOptions,
+		AudioEncodingOptions: audioEncodingOptions,
+		VideoEncodingOptions: videoEncodingOptions,
 		Token:                token,
 		WsUrl:                wsUrl,
 		RelayUrl:             getRelayUrl(conf, info.StreamKey),
