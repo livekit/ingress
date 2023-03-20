@@ -66,7 +66,7 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 }
 
 func (h *Handler) killAndReturnState(ctx context.Context) (*livekit.IngressState, error) {
-	h.kill.Break()
+	h.Kill()
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
@@ -133,4 +133,8 @@ func (h *Handler) sendUpdate(ctx context.Context, info *livekit.IngressInfo) {
 	if err != nil {
 		logger.Errorw("failed to send update", err)
 	}
+}
+
+func (h *Handler) Kill() {
+	h.kill.Break()
 }

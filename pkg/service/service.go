@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/frostbyte73/core"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/livekit/ingress/pkg/config"
@@ -32,7 +33,7 @@ type Service struct {
 	promServer *http.Server
 
 	rtmpPublishRequests chan rtmpPublishRequest
-	shutdown            chan struct{}
+	shutdown            core.Fuse
 }
 
 func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient) *Service {
@@ -44,7 +45,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient) *Service {
 		manager:             NewProcessManager(conf, monitor),
 		psrpcClient:         psrpcClient,
 		rtmpPublishRequests: make(chan rtmpPublishRequest),
-		shutdown:            make(chan struct{}),
+		shutdown:            core.NewFuse(),
 	}
 
 	s.manager.onFatalError(func(info *livekit.IngressInfo, err error) {
@@ -71,7 +72,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 	}
 
 	select {
-	case <-s.shutdown:
+	case <-s.shutdown.Watch():
 		return fmt.Errorf("server shutting down")
 	case s.rtmpPublishRequests <- r:
 		err := <-res
@@ -129,7 +130,7 @@ func (s *Service) Run() error {
 
 	for {
 		select {
-		case <-s.shutdown:
+		case <-s.shutdown.Watch():
 			logger.Infow("shutting down")
 			for !s.manager.isIdle() {
 				time.Sleep(shutdownTimer)
@@ -178,14 +179,11 @@ func (s *Service) CanAccept() bool {
 }
 
 func (s *Service) Stop(kill bool) {
-	select {
-	case <-s.shutdown:
-	default:
-		close(s.shutdown)
+	s.shutdown.Once(func() {
 		if s.monitor != nil {
 			s.monitor.Stop()
 		}
-	}
+	})
 
 	if kill {
 		s.manager.killAll()
