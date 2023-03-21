@@ -9,6 +9,7 @@ import (
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/psrpc"
 )
 
 type RTMPRelay struct {
@@ -56,10 +57,12 @@ func NewRTMPRelayHandler(rtmpServer *RTMPServer) *RTMPRelayHandler {
 func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var err error
 	defer func() {
-		switch err {
-		case errors.ErrIngressNotFound:
-			w.WriteHeader(http.StatusNotFound)
-		case nil:
+		var psrpcErr psrpc.Error
+
+		switch {
+		case errors.As(err, &psrpcErr):
+			w.WriteHeader(psrpcErr.ToHttp())
+		case nil
 			// Nothing, we already responded
 		default:
 			w.WriteHeader(http.StatusInternalServerError)
