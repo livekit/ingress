@@ -8,7 +8,6 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst"
 
-	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
@@ -171,38 +170,6 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 	return outputs, nil
 }
 
-func (s *WebRTCSink) createTee(outputs []*Output) (*gst.Bin, error) {
-	tee, err := gst.NewElement("tee")
-	if err != nil {
-		return nil, err
-	}
-
-	bin := gst.NewBin("tee")
-	err = bin.Add(tee)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, output := range outputs {
-		err := bin.Add(output.bin.Element)
-		if err != nil {
-			return nil, err
-		}
-
-		err = gst.ElementLinkMany(tee, output.bin.Element)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	binSink := gst.NewGhostPad("sink", tee.GetStaticPad("sink"))
-	if !bin.AddPad(binSink.Pad) {
-		return nil, errors.ErrUnableToAddPad
-	}
-
-	return bin, nil
-}
-
 func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 	var bin *gst.Bin
 
@@ -223,11 +190,13 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 			return nil, err
 		}
 
-		bin, err = s.createTee(outputs)
+		pp, err := NewVideoOutputBin(s.videoOptions.GetOptions(), outputs)
 		if err != nil {
 			logger.Errorw("could not create tee", err)
 			return nil, err
 		}
+
+		bin = pp.GetBin()
 	}
 
 	return bin, nil

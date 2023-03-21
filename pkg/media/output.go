@@ -49,10 +49,6 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 		return nil, err
 	}
 
-	videoConvert, err := gst.NewElement("videoconvert")
-	if err != nil {
-		return nil, err
-	}
 	videoScale, err := gst.NewElement("videoscale")
 	if err != nil {
 		return nil, err
@@ -72,7 +68,7 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 		return nil, err
 	}
 	e.elements = []*gst.Element{
-		videoConvert, videoScale, inputCaps,
+		videoScale, inputCaps,
 	}
 
 	switch codec {
