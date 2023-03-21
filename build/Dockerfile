@@ -23,6 +23,9 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then GOARCH=arm64; else GOARCH=amd
 
 FROM livekit/gstreamer:1.20.4-prod
 
+# install wget for health check
+RUN apt-get update && apt-get install -y wget
+
 # clean up
 RUN apt-get clean && \
     rm -rf /var/lib/apt/lists/* 
