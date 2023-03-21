@@ -7,10 +7,10 @@ import (
 	"github.com/tinyzimmer/go-gst/gst"
 
 	"github.com/livekit/ingress/pkg/config"
-	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
+	"github.com/livekit/psrpc"
 )
 
 type Pipeline struct {
@@ -166,7 +166,7 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 
 	case gst.MessageError:
 		// handle error if possible, otherwise close and return
-		err := errors.New(msg.ParseError().Error())
+		err := psrpc.NewError(psrpc.Internal, msg.ParseError())
 		logger.Errorw("pipeline failure", err)
 		p.loop.Quit()
 		return false
