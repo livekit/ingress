@@ -45,6 +45,9 @@ func main() {
 					&cli.StringFlag{
 						Name: "token",
 					},
+					&cli.StringFlag{
+						Name: "ws-url",
+					},
 				},
 				Action: runHandler,
 				Hidden: true,
@@ -222,7 +225,12 @@ func runHandler(c *cli.Context) error {
 		handler.Kill()
 	}()
 
-	handler.HandleIngress(ctx, info, conf.WsUrl, token)
+	wsUrl := conf.WsUrl
+	if c.String("ws-url") != "" {
+		wsUrl = c.String("ws-url")
+	}
+
+	handler.HandleIngress(ctx, info, wsUrl, token)
 	return nil
 }
 

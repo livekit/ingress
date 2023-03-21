@@ -120,23 +120,32 @@ func RunRTMPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 		StreamKey:           "ingress-test",
 		Url:                 "rtmp://localhost:1935/live/ingress-test",
 		Audio: &livekit.IngressAudioOptions{
-			Name:       "audio",
-			Source:     0,
-			AudioCodec: livekit.AudioCodec_OPUS,
-			Bitrate:    64000,
-			DisableDtx: false,
-			Channels:   2,
+			Name:   "audio",
+			Source: 0,
+			EncodingOptions: &livekit.IngressAudioOptions_Options{
+				Options: &livekit.IngressAudioEncodingOptions{
+					AudioCodec: livekit.AudioCodec_OPUS,
+					Bitrate:    64000,
+					DisableDtx: false,
+					Channels:   2,
+				},
+			},
 		},
 		Video: &livekit.IngressVideoOptions{
-			Name:       "video",
-			Source:     0,
-			VideoCodec: livekit.VideoCodec_H264_BASELINE,
-			Layers: []*livekit.VideoLayer{
-				{
-					Quality: livekit.VideoQuality_HIGH,
-					Width:   1280,
-					Height:  720,
-					Bitrate: 3000,
+			Name:   "video",
+			Source: 0,
+			EncodingOptions: &livekit.IngressVideoOptions_Options{
+				Options: &livekit.IngressVideoEncodingOptions{
+					VideoCodec: livekit.VideoCodec_H264_BASELINE,
+					FrameRate:  20,
+					Layers: []*livekit.VideoLayer{
+						{
+							Quality: livekit.VideoQuality_HIGH,
+							Width:   1280,
+							Height:  720,
+							Bitrate: 3000000,
+						},
+					},
 				},
 			},
 		},
