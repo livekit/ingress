@@ -28,20 +28,20 @@ type Params struct {
 
 func Validate(ctx context.Context, info *livekit.IngressInfo) error {
 	if info.InputType != livekit.IngressInput_RTMP_INPUT {
-		return errors.NewInvalidIngressError("unsupported input type")
+		return errors.ErrInvalidIngress("unsupported input type")
 	}
 
 	if info.StreamKey == "" {
-		return errors.NewInvalidIngressError("no stream key")
+		return errors.ErrInvalidIngress("no stream key")
 	}
 
 	// For now, require a room to be set. We should eventually allow changing the room on an active ingress
 	if info.RoomName == "" {
-		return errors.NewInvalidIngressError("no room name")
+		return errors.ErrInvalidIngress("no room name")
 	}
 
 	if info.ParticipantIdentity == "" {
-		return errors.NewInvalidIngressError("no participant identity")
+		return errors.ErrInvalidIngress("no participant identity")
 	}
 
 	return nil

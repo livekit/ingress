@@ -8,11 +8,11 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst"
 
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/protocol/utils"
-	"github.com/livekit/psrpc"
 	lksdk "github.com/livekit/server-sdk-go"
 )
 
@@ -52,7 +52,7 @@ func NewWebRTCSink(ctx context.Context, p *Params) (*WebRTCSink, error) {
 func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 	options := s.audioOptions.GetOptions()
 	if options == nil {
-		return nil, psrpc.NewErrorf(psrpc.InvalidArgument, "missing audio encoding options")
+		return nil, errors.ErrInvalidIngress("missing audio encoding options")
 	}
 
 	output, err := NewAudioOutput(options)
@@ -101,7 +101,7 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 	options := s.videoOptions.GetOptions()
 	if options == nil {
-		return nil, psrpc.NewErrorf(psrpc.InvalidArgument, "missing video encoding options")
+		return nil, errors.ErrInvalidIngress("missing video encoding options")
 	}
 
 	opts := &lksdk.TrackPublicationOptions{
