@@ -62,7 +62,7 @@ func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.As(err, &psrpcErr):
 			w.WriteHeader(psrpcErr.ToHttp())
-		case nil
+		case err == nil:
 			// Nothing, we already responded
 		default:
 			w.WriteHeader(http.StatusInternalServerError)

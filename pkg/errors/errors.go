@@ -34,7 +34,7 @@ func ErrCouldNotParseConfig(err error) psrpc.Error {
 	return psrpc.NewErrorf(psrpc.InvalidArgument, "could not parse config: %v", err)
 }
 
-func ErrFromGstFlowReturn(ret gst.FlowReturn) error {
+func ErrFromGstFlowReturn(ret gst.FlowReturn) psrpc.Error {
 	return psrpc.NewErrorf(psrpc.Internal, "GST Flow Error %d (%s)", ret, ret.String())
 }
 
@@ -42,8 +42,8 @@ func ErrInvalidIngress(s string) psrpc.Error {
 	return psrpc.NewErrorf(psrpc.InvalidArgument, "%s", s)
 }
 
-func ErrHttpRelayFailure(statusCode int) {
+func ErrHttpRelayFailure(statusCode int) psrpc.Error {
 	// Any failure in the relay between the handler and the service is treated as internal
 
-	psrpc.NewErrorf(psrpc.Internal, "HTTP request failed with code %d", statusCode)
+	return psrpc.NewErrorf(psrpc.Internal, "HTTP request failed with code %d", statusCode)
 }

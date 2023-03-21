@@ -1,7 +1,6 @@
 package stats
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"go.uber.org/atomic"
 
 	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/utils"
@@ -106,7 +106,7 @@ func (m *Monitor) checkCPUConfig(costConfig config.CPUCostConfig) error {
 			"recommended", recommendedMinimum,
 			"available", float64(m.cpuStats.NumCPU()),
 		)
-		return ErrServerCapacityExceeded
+		return errors.ErrServerCapacityExceeded
 	}
 
 	if float64(m.cpuStats.NumCPU()) < m.maxCost {
