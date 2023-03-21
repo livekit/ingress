@@ -106,7 +106,7 @@ func (m *Monitor) checkCPUConfig(costConfig config.CPUCostConfig) error {
 			"recommended", recommendedMinimum,
 			"available", float64(m.cpuStats.NumCPU()),
 		)
-		return errors.New("not enough cpu")
+		return ErrServerCapacityExceeded
 	}
 
 	if float64(m.cpuStats.NumCPU()) < m.maxCost {

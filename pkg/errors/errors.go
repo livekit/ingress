@@ -14,6 +14,8 @@ var (
 	ErrIngressNotFound         = psrpc.NewErrorf(psrpc.NotFound, "ingress not found")
 	ErrServerCapacityExceeded  = psrpc.NewErrorf(psrpc.ResourceExhausted, "server capacity exceeded")
 	ErrServerShuttingDown      = psrpc.NewErrorf(psrpc.Unavailable, "server shutting down")
+	ErrMissingStreamKey        = psrpc.NewErrorf(psrpc.InvalidArgument, "missing stream key")
+	ErrPrerollBufferReset      = psrpc.NewErrorf(psrpc.Internal, "preroll buffer reset")
 )
 
 func New(err string) error {
@@ -43,5 +45,5 @@ func ErrInvalidIngress(s string) psrpc.Error {
 func ErrHttpRelayFailure(statusCode int) {
 	// Any failure in the relay between the handler and the service is treated as internal
 
-	psrpc.Errorf(psrpc.Internal, "HTTP request failed with code %d", statusCode)
+	psrpc.NewErrorf(psrpc.Internal, "HTTP request failed with code %d", statusCode)
 }

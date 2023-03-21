@@ -164,7 +164,7 @@ func (h *RTMPHandler) OnCloseCallback(cb func(streamKey string)) {
 func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rtmpmsg.NetStreamPublish) error {
 	// Reject a connection when PublishingName is empty
 	if cmd.PublishingName == "" {
-		return errors.New("PublishingName is empty")
+		return ErrMissingStreamKey
 	}
 
 	// TODO check in store that PublishingName == stream key belongs to a valid ingress
