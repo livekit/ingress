@@ -175,7 +175,7 @@ func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err
 }
 
 func (s *Service) CanAccept() bool {
-	return s.shutdown.IsOpen() && s.monitor.CanAcceptIngress()
+	return !s.shutdown.IsBroken() && s.monitor.CanAcceptIngress()
 }
 
 func (s *Service) Stop(kill bool) {
