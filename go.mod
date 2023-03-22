@@ -3,7 +3,7 @@ module github.com/livekit/ingress
 go 1.18
 
 require (
-	github.com/frostbyte73/core v0.0.4
+	github.com/frostbyte73/core v0.0.5
 	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/protocol v1.5.1-0.20230316165531-6b747fe252cf
