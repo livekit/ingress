@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 
+	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media"
@@ -16,16 +17,16 @@ type Handler struct {
 	conf      *config.Config
 	pipeline  *media.Pipeline
 	rpcClient rpc.IOInfoClient
-	kill      chan struct{}
-	done      chan struct{}
+	kill      core.Fuse
+	done      core.Fuse
 }
 
 func NewHandler(conf *config.Config, rpcClient rpc.IOInfoClient) *Handler {
 	return &Handler{
 		conf:      conf,
 		rpcClient: rpcClient,
-		kill:      make(chan struct{}),
-		done:      make(chan struct{}),
+		kill:      core.NewFuse(),
+		done:      core.NewFuse(),
 	}
 }
 
@@ -44,10 +45,10 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	result := make(chan *livekit.IngressInfo, 1)
 	go func() {
 		result <- p.Run(ctx)
-		close(h.done)
+		h.done.Break()
 	}()
 
-	kill := h.kill
+	kill := h.kill.Watch()
 
 	for {
 		select {
@@ -69,7 +70,7 @@ func (h *Handler) killAndReturnState(ctx context.Context) (*livekit.IngressState
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
-	case <-h.done:
+	case <-h.done.Watch():
 		return h.pipeline.State, nil
 	}
 }
@@ -135,10 +136,5 @@ func (h *Handler) sendUpdate(ctx context.Context, info *livekit.IngressInfo) {
 }
 
 func (h *Handler) Kill() {
-	select {
-	case <-h.kill:
-		return
-	default:
-		close(h.kill)
-	}
+	h.kill.Break()
 }

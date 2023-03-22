@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 
+	"github.com/frostbyte73/core"
 	"github.com/tinyzimmer/go-glib/glib"
 	"github.com/tinyzimmer/go-gst/gst"
 
@@ -23,7 +24,7 @@ type Pipeline struct {
 	input    *Input
 
 	onStatusUpdate func(context.Context, *livekit.IngressInfo)
-	closed         chan struct{}
+	closed         core.Fuse
 }
 
 func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, error) {
@@ -59,7 +60,7 @@ func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, e
 		pipeline: pipeline,
 		sink:     sink,
 		input:    input,
-		closed:   make(chan struct{}),
+		closed:   core.NewFuse(),
 	}
 
 	input.OnOutputReady(p.onOutputReady)
@@ -185,16 +186,12 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 	ctx, span := tracer.Start(ctx, "Pipeline.SendEOS")
 	defer span.End()
 
-	select {
-	case <-p.closed:
-		return
-	default:
-		close(p.closed)
+	p.closed.Once(func() {
 		if p.onStatusUpdate != nil {
 			p.onStatusUpdate(ctx, p.GetInfo())
 		}
 
 		logger.Debugw("sending EOS to pipeline")
 		p.pipeline.SendEvent(gst.NewEOSEvent())
-	}
+	})
 }

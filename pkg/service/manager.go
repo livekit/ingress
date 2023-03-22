@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/yaml.v3"
 
+	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/protocol/livekit"
@@ -21,7 +22,7 @@ import (
 type process struct {
 	info   *livekit.IngressInfo
 	cmd    *exec.Cmd
-	closed chan struct{}
+	closed core.Fuse
 }
 
 type rtmpPublishRequest struct {
@@ -94,7 +95,7 @@ func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngress
 	h := &process{
 		info:   resp.Info,
 		cmd:    cmd,
-		closed: make(chan struct{}),
+		closed: core.NewFuse(),
 	}
 
 	s.mu.Lock()
@@ -112,7 +113,7 @@ func (s *ProcessManager) awaitCleanup(h *process) {
 		}
 	}
 
-	close(h.closed)
+	h.closed.Break()
 	s.monitor.IngressEnded(h.info)
 
 	s.mu.Lock()
@@ -144,9 +145,7 @@ func (s *ProcessManager) killAll() {
 	defer s.mu.RUnlock()
 
 	for _, h := range s.activeHandlers {
-		select {
-		case <-h.closed:
-		default:
+		if !h.closed.IsBroken() {
 			if err := h.cmd.Process.Signal(syscall.SIGINT); err != nil {
 				logger.Errorw("failed to kill process", err, "ingressID", h.info.IngressId)
 			}

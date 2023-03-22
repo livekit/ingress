@@ -24,8 +24,6 @@ type Params struct {
 
 	// relay info
 	RelayUrl string
-
-	GstReady chan struct{}
 }
 
 func Validate(ctx context.Context, info *livekit.IngressInfo) error {
@@ -106,7 +104,6 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		Token:                token,
 		WsUrl:                wsUrl,
 		RelayUrl:             getRelayUrl(conf, info.StreamKey),
-		GstReady:             make(chan struct{}),
 	}
 
 	return p, nil

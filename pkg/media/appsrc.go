@@ -54,7 +54,7 @@ func NewHTTPRelaySource(ctx context.Context, p *Params) (*HTTPRelaySource, error
 }
 
 func (s *HTTPRelaySource) Start(ctx context.Context) error {
-	s.result = make(chan error)
+	s.result = make(chan error, 1)
 
 	resp, err := http.Get(s.params.RelayUrl)
 	switch {
