@@ -10,6 +10,7 @@ import (
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/redis"
 	"github.com/livekit/protocol/utils"
+	"github.com/livekit/psrpc"
 	lksdk "github.com/livekit/server-sdk-go"
 )
 
@@ -62,7 +63,7 @@ func NewConfig(confString string) (*Config, error) {
 	}
 
 	if conf.Redis == nil {
-		return nil, errors.New("redis configuration is required")
+		return nil, psrpc.NewErrorf(psrpc.InvalidArgument, "redis configuration is required")
 	}
 
 	if err := conf.InitLogger(); err != nil {
