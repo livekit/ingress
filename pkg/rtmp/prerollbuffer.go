@@ -12,10 +12,6 @@ const (
 	maxBufferSize = 10000000
 )
 
-var (
-	errPreRollBufferReset = errors.New("Preroll buffer reset")
-)
-
 type prerollBuffer struct {
 	lock   sync.Mutex
 	buffer *bytes.Buffer
@@ -59,7 +55,7 @@ func (pb *prerollBuffer) Write(p []byte) (int, error) {
 					return 0, err
 				}
 			}
-			return 0, errPreRollBufferReset
+			return 0, errors.ErrPrerollBufferReset
 		}
 		return pb.buffer.Write(p)
 	}

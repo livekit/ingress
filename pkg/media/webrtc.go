@@ -43,7 +43,6 @@ func NewWebRTCSink(ctx context.Context, p *Params) (*WebRTCSink, error) {
 }
 
 func (s *WebRTCSink) addAudioTrack() (*Output, error) {
-
 	output, err := NewAudioOutput(s.params.AudioEncodingOptions)
 	opts := &lksdk.TrackPublicationOptions{
 		Name:       s.params.Audio.Name,
