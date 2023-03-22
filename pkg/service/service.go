@@ -73,7 +73,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 
 	select {
 	case <-s.shutdown.Watch():
-		return fmt.Errorf("server shutting down")
+		return errors.ErrServerShuttingDown
 	case s.rtmpPublishRequests <- r:
 		err := <-res
 		return err

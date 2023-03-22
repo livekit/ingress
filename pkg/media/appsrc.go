@@ -2,7 +2,6 @@ package media
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 
@@ -62,7 +61,7 @@ func (s *HTTPRelaySource) Start(ctx context.Context) error {
 	case err != nil:
 		return err
 	case resp != nil && (resp.StatusCode < 200 || resp.StatusCode >= 400):
-		return fmt.Errorf("HTTP request failed with code %d", resp.StatusCode)
+		return errors.ErrHttpRelayFailure(resp.StatusCode)
 	}
 
 	go func() {
