@@ -9,6 +9,10 @@ import (
 
 var (
 	ErrNoConfig                = psrpc.NewErrorf(psrpc.InvalidArgument, "missing config")
+	ErrInvalidAudioOptions     = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid audio options")
+	ErrInvalidVideoOptions     = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid video options")
+	ErrInvalidAudioPreset      = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid audio encoding preset")
+	ErrInvalidVideoPreset      = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid video encoding preset")
 	ErrUnsupportedEncodeFormat = psrpc.NewErrorf(psrpc.InvalidArgument, "unsupported mime type for encoder")
 	ErrUnableToAddPad          = psrpc.NewErrorf(psrpc.Internal, "could not add pads to bin")
 	ErrIngressNotFound         = psrpc.NewErrorf(psrpc.NotFound, "ingress not found")

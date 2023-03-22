@@ -9,12 +9,14 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
-	"github.com/livekit/protocol/logger"
 	"google.golang.org/protobuf/proto"
 )
 
 type Params struct {
 	*livekit.IngressInfo
+
+	AudioEncodingOptions *livekit.IngressAudioEncodingOptions
+	VideoEncodingOptions *livekit.IngressVideoEncodingOptions
 
 	// connection info
 	WsUrl string
@@ -27,6 +29,8 @@ type Params struct {
 }
 
 func Validate(ctx context.Context, info *livekit.IngressInfo) error {
+	// TODO validate encoder settings
+
 	if info.InputType != livekit.IngressInput_RTMP_INPUT {
 		return errors.ErrInvalidIngress("unsupported input type")
 	}
@@ -65,14 +69,25 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		}
 	}
 
-	if isNilAudioParams(infoCopy.Audio) {
-		infoCopy.Audio = getDefaultAudioParams()
-	}
-	if isNilVideoParams(infoCopy.Video) {
-		infoCopy.Video = getDefaultVideoParams()
+	if infoCopy.Audio == nil {
+		infoCopy.Audio = &livekit.IngressAudioOptions{}
 	}
 
-	err = ingress.ValidateVideoOptionsConsistency(infoCopy.Video.GetOptions())
+	if infoCopy.Video == nil {
+		infoCopy.Video = &livekit.IngressVideoOptions{}
+	}
+
+	audioEncodingOptions, err := getAudioEncodingOptions(infoCopy.Audio)
+	if err != nil {
+		return nil, err
+	}
+
+	videoEncodingOptions, err := getVideoEncodingOptions(infoCopy.Video)
+	if err != nil {
+		return nil, err
+	}
+
+	err = ingress.ValidateVideoOptionsConsistency(videoEncodingOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -85,11 +100,13 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 	}
 
 	p := &Params{
-		IngressInfo: infoCopy,
-		Token:       token,
-		WsUrl:       wsUrl,
-		RelayUrl:    getRelayUrl(conf, info.StreamKey),
-		GstReady:    make(chan struct{}),
+		IngressInfo:          infoCopy,
+		AudioEncodingOptions: audioEncodingOptions,
+		VideoEncodingOptions: videoEncodingOptions,
+		Token:                token,
+		WsUrl:                wsUrl,
+		RelayUrl:             getRelayUrl(conf, info.StreamKey),
+		GstReady:             make(chan struct{}),
 	}
 
 	return p, nil
@@ -99,91 +116,31 @@ func getRelayUrl(conf *config.Config, streamKey string) string {
 	return fmt.Sprintf("http://localhost:%d/%s", conf.HTTPRelayPort, streamKey)
 }
 
-func isNilAudioParams(options *livekit.IngressAudioOptions) bool {
-	if options == nil {
-		return true
-	}
-
-	if _, ok := options.GetEncodingOptions().(*livekit.IngressAudioOptions_Preset); ok {
-		logger.Infow("presets unimplemented")
-		return true
-	}
-
-	advanced := options.GetOptions()
-	if advanced == nil {
-		return true
-	}
-
-	return false
-}
-
-func getDefaultAudioParams() *livekit.IngressAudioOptions {
-	return &livekit.IngressAudioOptions{
-		Name:   "audio",
-		Source: 0,
-		EncodingOptions: &livekit.IngressAudioOptions_Options{
-			Options: &livekit.IngressAudioEncodingOptions{
-				AudioCodec: livekit.AudioCodec_OPUS,
-				Bitrate:    64000,
-				DisableDtx: false,
-				Channels:   2,
-			},
-		},
+func getAudioEncodingOptions(options *livekit.IngressAudioOptions) (*livekit.IngressAudioEncodingOptions, error) {
+	switch o := options.EncodingOptions.(type) {
+	case nil:
+		// default preset
+		return getOptionsForAudioPreset(livekit.IngressAudioEncodingPreset_OPUS_STEREO_96KBPS)
+	case *livekit.IngressAudioOptions_Preset:
+		return getOptionsForAudioPreset(o.Preset)
+	case *livekit.IngressAudioOptions_Options:
+		return o.Options, nil
+	default:
+		return nil, errors.ErrInvalidAudioOptions
 	}
 }
 
-func isNilVideoParams(options *livekit.IngressVideoOptions) bool {
-	if options == nil {
-		return true
-	}
-
-	if _, ok := options.GetEncodingOptions().(*livekit.IngressVideoOptions_Preset); ok {
-		logger.Infow("presets unimplemented")
-		return true
-	}
-
-	advanced := options.GetOptions()
-	if advanced == nil {
-		return true
-	}
-
-	if len(advanced.Layers) == 0 {
-		return true
-	}
-
-	return false
-}
-
-func getDefaultVideoParams() *livekit.IngressVideoOptions {
-	return &livekit.IngressVideoOptions{
-		Name:   "video",
-		Source: 0,
-		EncodingOptions: &livekit.IngressVideoOptions_Options{
-			Options: &livekit.IngressVideoEncodingOptions{
-				VideoCodec: livekit.VideoCodec_H264_BASELINE,
-				FrameRate:  30,
-				Layers: []*livekit.VideoLayer{
-					{
-						Quality: livekit.VideoQuality_HIGH,
-						Width:   1280,
-						Height:  720,
-						Bitrate: 3000000,
-					},
-					{
-						Quality: livekit.VideoQuality_MEDIUM,
-						Width:   960,
-						Height:  540,
-						Bitrate: 1500000,
-					},
-					{
-						Quality: livekit.VideoQuality_LOW,
-						Width:   480,
-						Height:  270,
-						Bitrate: 420000,
-					},
-				},
-			},
-		},
+func getVideoEncodingOptions(options *livekit.IngressVideoOptions) (*livekit.IngressVideoEncodingOptions, error) {
+	switch o := options.EncodingOptions.(type) {
+	case nil:
+		// default preset
+		return getOptionsForVideoPreset(livekit.IngressVideoEncodingPreset_H264_720P_30FPS_3_LAYERS)
+	case *livekit.IngressVideoOptions_Preset:
+		return getOptionsForVideoPreset(o.Preset)
+	case *livekit.IngressVideoOptions_Options:
+		return o.Options, nil
+	default:
+		return nil, errors.ErrInvalidVideoOptions
 	}
 }
 
