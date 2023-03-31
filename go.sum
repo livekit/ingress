@@ -77,8 +77,8 @@ github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1 h1:jm09419p0lqTkD
 github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1/go.mod h1:Rs3MhFwutWhGwmY1VQsygw28z5bWcnEYmS1OG9OxjOQ=
 github.com/livekit/mediatransportutil v0.0.0-20230130133657-96cfb115473a h1:5UkGQpskXp7HcBmyrCwWtO7ygDWbqtjN09Yva4l/nyE=
 github.com/livekit/mediatransportutil v0.0.0-20230130133657-96cfb115473a/go.mod h1:1Dlx20JPoIKGP45eo+yuj0HjeE25zmyeX/EWHiPCjFw=
-github.com/livekit/protocol v1.5.1-0.20230322011329-e78c5b18c0f3 h1:4MG8Wmnjohhjl6EWaxv6DfYQ47yY197TbSTQ8Eq1fcA=
-github.com/livekit/protocol v1.5.1-0.20230322011329-e78c5b18c0f3/go.mod h1:m5PkhcDT0EWdhatB0MpjmMaxyySjfE5NyZQC/LJWfEM=
+github.com/livekit/protocol v1.5.1 h1:K/p0ByfXuPv6yLeTcoQJn7pHI7bW4IKOSyb2ueG/qq0=
+github.com/livekit/protocol v1.5.1/go.mod h1:m5PkhcDT0EWdhatB0MpjmMaxyySjfE5NyZQC/LJWfEM=
 github.com/livekit/psrpc v0.2.10-0.20230303054701-5853a56b4643 h1:ftDwqesgXMu0hUXFxf4KWAqqDIXz8BBdNnit3xc6RQA=
 github.com/livekit/psrpc v0.2.10-0.20230303054701-5853a56b4643/go.mod h1:K0j8f1PgLShR7Lx80KbmwFkDH2BvOnycXGV0OSRURKc=
 github.com/livekit/server-sdk-go v1.0.9-0.20230314192457-52c28d42b5d4 h1:fSm7wr75fh6NcTtLKa6nsyFKb7z+kRt6YzgxpyFrym4=
