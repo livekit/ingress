@@ -19,13 +19,13 @@ func TestComputeVideoLayers(t *testing.T) {
 			Quality: livekit.VideoQuality_MEDIUM,
 			Width:   640,
 			Height:  360,
-			Bitrate: 425000,
+			Bitrate: 601040,
 		},
 		&livekit.VideoLayer{
 			Quality: livekit.VideoQuality_LOW,
 			Width:   320,
 			Height:  180,
-			Bitrate: 106250,
+			Bitrate: 212499,
 		},
 	}
 

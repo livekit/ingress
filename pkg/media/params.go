@@ -46,6 +46,16 @@ func Validate(ctx context.Context, info *livekit.IngressInfo) error {
 		return errors.ErrInvalidIngress("no participant identity")
 	}
 
+	err := ingress.ValidateVideoOptionsConsistency(info.Video)
+	if err != nil {
+		return err
+	}
+
+	err = ingress.ValidateAudioOptionsConsistency(info.Audio)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -53,6 +63,11 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 	var err error
 
 	err = conf.InitLogger("ingressID", info.IngressId)
+	if err != nil {
+		return nil, err
+	}
+
+	err = Validate(ctx, info)
 	if err != nil {
 		return nil, err
 	}
@@ -81,11 +96,6 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 	}
 
 	videoEncodingOptions, err := getVideoEncodingOptions(infoCopy.Video)
-	if err != nil {
-		return nil, err
-	}
-
-	err = ingress.ValidateVideoOptionsConsistency(videoEncodingOptions)
 	if err != nil {
 		return nil, err
 	}

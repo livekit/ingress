@@ -1,6 +1,8 @@
 package media
 
 import (
+	"math"
+
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
 )
@@ -43,7 +45,7 @@ func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livek
 	case livekit.IngressVideoEncodingPreset_H264_720P_30FPS_1_LAYER:
 		return &livekit.IngressVideoEncodingOptions{
 			VideoCodec: livekit.VideoCodec_H264_BASELINE,
-			FrameRate:  25,
+			FrameRate:  30,
 			Layers: computeVideoLayers(&livekit.VideoLayer{
 				Quality: livekit.VideoQuality_HIGH,
 				Width:   1280,
@@ -54,7 +56,7 @@ func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livek
 	case livekit.IngressVideoEncodingPreset_H264_1080P_30FPS_1_LAYER:
 		return &livekit.IngressVideoEncodingOptions{
 			VideoCodec: livekit.VideoCodec_H264_BASELINE,
-			FrameRate:  25,
+			FrameRate:  30,
 			Layers: computeVideoLayers(&livekit.VideoLayer{
 				Quality: livekit.VideoQuality_HIGH,
 				Width:   1920,
@@ -76,10 +78,12 @@ func computeVideoLayers(highLayer *livekit.VideoLayer, layerCount int) []*liveki
 	}
 
 	for i := 1; i < layerCount; i++ {
+		rateRatio := math.Pow(2*math.Sqrt2, float64(i))
+
 		layer := &livekit.VideoLayer{
 			Width:   layerCopy.Width >> i, // each layer has dimentions half of the previous one
 			Height:  layerCopy.Height >> i,
-			Bitrate: layerCopy.Bitrate >> (2 * i), // bitrate 1/4 of the previous layer
+			Bitrate: uint32(float64(layerCopy.Bitrate) / rateRatio),
 			Quality: livekit.VideoQuality(layerCount - 1 - i),
 		}
 
