@@ -162,7 +162,7 @@ func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err
 	if err != nil {
 		state.Status = livekit.IngressState_ENDPOINT_ERROR
 		state.Error = err.Error()
-		logger.Errorw("ingress failed", errors.New(state.Error))
+		logger.Warnw("ingress failed", errors.New(state.Error))
 	}
 
 	_, err = s.psrpcClient.UpdateIngressState(ctx, &rpc.UpdateIngressStateRequest{
