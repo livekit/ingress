@@ -42,10 +42,6 @@ func ErrFromGstFlowReturn(ret gst.FlowReturn) psrpc.Error {
 	return psrpc.NewErrorf(psrpc.Internal, "GST Flow Error %d (%s)", ret, ret.String())
 }
 
-func ErrInvalidIngress(s string) psrpc.Error {
-	return psrpc.NewErrorf(psrpc.InvalidArgument, "%s", s)
-}
-
 func ErrHttpRelayFailure(statusCode int) psrpc.Error {
 	// Any failure in the relay between the handler and the service is treated as internal
 
