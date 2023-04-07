@@ -49,11 +49,15 @@ func Build() error {
 	return run(fmt.Sprintf("go build -a -o %s/bin/ingress ./cmd/server", gopath))
 }
 
+func Test() error {
+	return run("go test -v ./pkg/...")
+}
+
 func BuildDocker() error {
 	return mageutil.Run(context.Background(),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-dev", gstVersion),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-prod", gstVersion),
-		fmt.Sprintf("docker build --no-cache -t %s:latest -f build/Dockerfile .", imageName),
+		fmt.Sprintf("docker build --no-cache -t %s:latest -f build/ingress/Dockerfile .", imageName),
 	)
 }
 
@@ -61,7 +65,7 @@ func BuildDockerLinux() error {
 	return mageutil.Run(context.Background(),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-dev", gstVersion),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-prod", gstVersion),
-		fmt.Sprintf("docker build --no-cache --platform linux/amd64 -t %s:latest -f build/Dockerfile .", imageName),
+		fmt.Sprintf("docker build --no-cache --platform linux/amd64 -t %s:latest -f build/ingress/Dockerfile .", imageName),
 	)
 }
 
