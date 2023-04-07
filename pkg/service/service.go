@@ -12,9 +12,9 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/ingress/pkg/media"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/version"
+	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
@@ -88,7 +88,7 @@ func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) 
 		return nil, err
 	}
 
-	err = media.Validate(ctx, resp.Info)
+	err = ingress.Validate(resp.Info)
 	if err != nil {
 		return resp.Info, err
 	}

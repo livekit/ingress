@@ -34,7 +34,7 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		return nil, err
 	}
 
-	err = Validate(ctx, info)
+	err = ingress.Validate(info)
 	if err != nil {
 		return nil, err
 	}
