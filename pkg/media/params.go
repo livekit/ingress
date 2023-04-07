@@ -27,8 +27,6 @@ type Params struct {
 }
 
 func Validate(ctx context.Context, info *livekit.IngressInfo) error {
-	// TODO validate encoder settings
-
 	if info.InputType != livekit.IngressInput_RTMP_INPUT {
 		return errors.ErrInvalidIngress("unsupported input type")
 	}
