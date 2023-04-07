@@ -50,13 +50,13 @@ func TestPopulateVideoEncodingOptionsDefaults(t *testing.T) {
 		&livekit.VideoLayer{
 			Width:   1920,
 			Height:  1080,
-			Bitrate: 1_783_810,
+			Bitrate: 2_081_112,
 			Quality: livekit.VideoQuality_HIGH,
 		},
 		&livekit.VideoLayer{
 			Width:   480,
 			Height:  270,
-			Bitrate: 222_976,
+			Bitrate: 260_139,
 			Quality: livekit.VideoQuality_LOW,
 		},
 	}
