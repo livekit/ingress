@@ -25,7 +25,7 @@ func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livek
 				Quality: livekit.VideoQuality_HIGH,
 				Width:   1280,
 				Height:  720,
-				Bitrate: 1700000,
+				Bitrate: 1_700_000,
 			}, 3),
 		}, nil
 	case livekit.IngressVideoEncodingPreset_H264_1080P_30FPS_3_LAYERS:
@@ -36,7 +36,7 @@ func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livek
 				Quality: livekit.VideoQuality_HIGH,
 				Width:   1920,
 				Height:  1080,
-				Bitrate: 3000000,
+				Bitrate: 3_000_000,
 			}, 3),
 		}, nil
 	case livekit.IngressVideoEncodingPreset_H264_540P_25FPS_2_LAYERS:
@@ -47,7 +47,7 @@ func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livek
 				Quality: livekit.VideoQuality_HIGH,
 				Width:   960,
 				Height:  540,
-				Bitrate: 600000,
+				Bitrate: 600_000,
 			}, 2),
 		}, nil
 	case livekit.IngressVideoEncodingPreset_H264_720P_30FPS_1_LAYER:
@@ -58,7 +58,7 @@ func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livek
 				Quality: livekit.VideoQuality_HIGH,
 				Width:   1280,
 				Height:  720,
-				Bitrate: 1700000,
+				Bitrate: 1_700_000,
 			}, 1),
 		}, nil
 	case livekit.IngressVideoEncodingPreset_H264_1080P_30FPS_1_LAYER:
@@ -69,7 +69,7 @@ func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livek
 				Quality: livekit.VideoQuality_HIGH,
 				Width:   1920,
 				Height:  1080,
-				Bitrate: 3000000,
+				Bitrate: 3_000_000,
 			}, 1),
 		}, nil
 	default:
