@@ -26,33 +26,15 @@ type Params struct {
 	RelayUrl string
 }
 
-func Validate(ctx context.Context, info *livekit.IngressInfo) error {
-	// TODO validate encoder settings
-
-	if info.InputType != livekit.IngressInput_RTMP_INPUT {
-		return errors.ErrInvalidIngress("unsupported input type")
-	}
-
-	if info.StreamKey == "" {
-		return errors.ErrInvalidIngress("no stream key")
-	}
-
-	// For now, require a room to be set. We should eventually allow changing the room on an active ingress
-	if info.RoomName == "" {
-		return errors.ErrInvalidIngress("no room name")
-	}
-
-	if info.ParticipantIdentity == "" {
-		return errors.ErrInvalidIngress("no participant identity")
-	}
-
-	return nil
-}
-
 func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressInfo, wsUrl string, token string) (*Params, error) {
 	var err error
 
 	err = conf.InitLogger("ingressID", info.IngressId)
+	if err != nil {
+		return nil, err
+	}
+
+	err = ingress.Validate(info)
 	if err != nil {
 		return nil, err
 	}
@@ -81,11 +63,6 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 	}
 
 	videoEncodingOptions, err := getVideoEncodingOptions(infoCopy.Video)
-	if err != nil {
-		return nil, err
-	}
-
-	err = ingress.ValidateVideoOptionsConsistency(videoEncodingOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -121,10 +98,38 @@ func getAudioEncodingOptions(options *livekit.IngressAudioOptions) (*livekit.Ing
 	case *livekit.IngressAudioOptions_Preset:
 		return getOptionsForAudioPreset(o.Preset)
 	case *livekit.IngressAudioOptions_Options:
-		return o.Options, nil
+		return populateAudioEncodingOptionsDefaults(o.Options)
 	default:
 		return nil, errors.ErrInvalidAudioOptions
 	}
+}
+
+func populateAudioEncodingOptionsDefaults(options *livekit.IngressAudioEncodingOptions) (*livekit.IngressAudioEncodingOptions, error) {
+	o := proto.Clone(options).(*livekit.IngressAudioEncodingOptions)
+
+	// Use Opus by default
+	if o.AudioCodec == livekit.AudioCodec_DEFAULT_AC {
+		o.AudioCodec = livekit.AudioCodec_OPUS
+	}
+
+	// Stereo by default
+	if o.Channels == 0 {
+		o.Channels = 2
+	}
+
+	// Default bitrate, depends on channel count
+	if o.Bitrate == 0 {
+		switch o.Channels {
+		case 1:
+			o.Bitrate = 64000
+		default:
+			o.Bitrate = 96000
+		}
+	}
+
+	// DTX enabled by default
+
+	return o, nil
 }
 
 func getVideoEncodingOptions(options *livekit.IngressVideoOptions) (*livekit.IngressVideoEncodingOptions, error) {
@@ -135,10 +140,41 @@ func getVideoEncodingOptions(options *livekit.IngressVideoOptions) (*livekit.Ing
 	case *livekit.IngressVideoOptions_Preset:
 		return getOptionsForVideoPreset(o.Preset)
 	case *livekit.IngressVideoOptions_Options:
-		return o.Options, nil
+		return populateVideoEncodingOptionsDefaults(o.Options)
 	default:
 		return nil, errors.ErrInvalidVideoOptions
 	}
+}
+
+func populateVideoEncodingOptionsDefaults(options *livekit.IngressVideoEncodingOptions) (*livekit.IngressVideoEncodingOptions, error) {
+	o := proto.Clone(options).(*livekit.IngressVideoEncodingOptions)
+
+	// Use Opus by default
+	if o.VideoCodec == livekit.VideoCodec_DEFAULT_VC {
+		o.VideoCodec = livekit.VideoCodec_H264_BASELINE
+	}
+
+	if o.FrameRate <= 0 {
+		o.FrameRate = refFramerate
+	}
+
+	if len(o.Layers) == 0 {
+		o.Layers = computeVideoLayers(&livekit.VideoLayer{
+			Quality: livekit.VideoQuality_HIGH,
+			Width:   1280,
+			Height:  720,
+			Bitrate: 1_700_000,
+		}, 3)
+	} else {
+		for _, layer := range o.Layers {
+			if layer.Bitrate == 0 {
+				layer.Bitrate = getBitrateForParams(refBitrate, refWidth, refHeight, refFramerate,
+					layer.Width, layer.Height, o.FrameRate)
+			}
+		}
+	}
+
+	return o, nil
 }
 
 func (p *Params) SetStatus(status livekit.IngressState_Status, errString string) {

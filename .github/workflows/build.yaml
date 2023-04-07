@@ -24,4 +24,4 @@ jobs:
           key: ingress
 
       - name: Build docker image
-        run: docker build -t ingress -f ./build/Dockerfile .
+        run: docker build -t ingress -f ./build/ingress/Dockerfile .

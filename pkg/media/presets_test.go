@@ -7,8 +7,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestComputeVideoLayers(t *testing.T) {
-	expectedLayers := []*livekit.VideoLayer{
+var (
+	expectedDefaultLayers = []*livekit.VideoLayer{
 		&livekit.VideoLayer{
 			Quality: livekit.VideoQuality_HIGH,
 			Width:   1280,
@@ -19,24 +19,27 @@ func TestComputeVideoLayers(t *testing.T) {
 			Quality: livekit.VideoQuality_MEDIUM,
 			Width:   640,
 			Height:  360,
-			Bitrate: 425000,
+			Bitrate: 601040,
 		},
 		&livekit.VideoLayer{
 			Quality: livekit.VideoQuality_LOW,
 			Width:   320,
 			Height:  180,
-			Bitrate: 106250,
+			Bitrate: 212500,
 		},
 	}
+)
 
-	l := computeVideoLayers(expectedLayers[0], 3)
-	require.Equal(t, expectedLayers, l)
+func TestComputeVideoLayers(t *testing.T) {
 
-	expectedLayers[1].Quality = livekit.VideoQuality_LOW
-	l = computeVideoLayers(expectedLayers[0], 2)
-	require.Equal(t, expectedLayers[:2], l)
+	l := computeVideoLayers(expectedDefaultLayers[0], 3)
+	require.Equal(t, expectedDefaultLayers, l)
 
-	l = computeVideoLayers(expectedLayers[0], 1)
-	require.Equal(t, expectedLayers[:1], l)
+	expectedDefaultLayers[1].Quality = livekit.VideoQuality_LOW
+	l = computeVideoLayers(expectedDefaultLayers[0], 2)
+	require.Equal(t, expectedDefaultLayers[:2], l)
+
+	l = computeVideoLayers(expectedDefaultLayers[0], 1)
+	require.Equal(t, expectedDefaultLayers[:1], l)
 
 }

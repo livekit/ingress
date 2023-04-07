@@ -1,8 +1,18 @@
 package media
 
 import (
+	"math"
+
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
+)
+
+const (
+	// reference parameters used to compute bitrate
+	refBitrate   = 3_500_000
+	refWidth     = 1920
+	refHeight    = 1080
+	refFramerate = 30
 )
 
 func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livekit.IngressVideoEncodingOptions, error) {
@@ -15,7 +25,7 @@ func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livek
 				Quality: livekit.VideoQuality_HIGH,
 				Width:   1280,
 				Height:  720,
-				Bitrate: 1700000,
+				Bitrate: 1_900_000,
 			}, 3),
 		}, nil
 	case livekit.IngressVideoEncodingPreset_H264_1080P_30FPS_3_LAYERS:
@@ -26,7 +36,7 @@ func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livek
 				Quality: livekit.VideoQuality_HIGH,
 				Width:   1920,
 				Height:  1080,
-				Bitrate: 3000000,
+				Bitrate: 3_500_000,
 			}, 3),
 		}, nil
 	case livekit.IngressVideoEncodingPreset_H264_540P_25FPS_2_LAYERS:
@@ -37,29 +47,29 @@ func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livek
 				Quality: livekit.VideoQuality_HIGH,
 				Width:   960,
 				Height:  540,
-				Bitrate: 600000,
+				Bitrate: 1_000_000,
 			}, 2),
 		}, nil
 	case livekit.IngressVideoEncodingPreset_H264_720P_30FPS_1_LAYER:
 		return &livekit.IngressVideoEncodingOptions{
 			VideoCodec: livekit.VideoCodec_H264_BASELINE,
-			FrameRate:  25,
+			FrameRate:  30,
 			Layers: computeVideoLayers(&livekit.VideoLayer{
 				Quality: livekit.VideoQuality_HIGH,
 				Width:   1280,
 				Height:  720,
-				Bitrate: 1700000,
+				Bitrate: 1_900_000,
 			}, 1),
 		}, nil
 	case livekit.IngressVideoEncodingPreset_H264_1080P_30FPS_1_LAYER:
 		return &livekit.IngressVideoEncodingOptions{
 			VideoCodec: livekit.VideoCodec_H264_BASELINE,
-			FrameRate:  25,
+			FrameRate:  30,
 			Layers: computeVideoLayers(&livekit.VideoLayer{
 				Quality: livekit.VideoQuality_HIGH,
 				Width:   1920,
 				Height:  1080,
-				Bitrate: 3000000,
+				Bitrate: 3_500_000,
 			}, 1),
 		}, nil
 	default:
@@ -76,10 +86,15 @@ func computeVideoLayers(highLayer *livekit.VideoLayer, layerCount int) []*liveki
 	}
 
 	for i := 1; i < layerCount; i++ {
+		w := layerCopy.Width >> i // each layer has dimentions half of the previous one
+		h := layerCopy.Height >> i
+
+		rate := getBitrateForParams(layerCopy.Bitrate, layerCopy.Width, layerCopy.Height, 1, w, h, 1)
+
 		layer := &livekit.VideoLayer{
-			Width:   layerCopy.Width >> i, // each layer has dimentions half of the previous one
-			Height:  layerCopy.Height >> i,
-			Bitrate: layerCopy.Bitrate >> (2 * i), // bitrate 1/4 of the previous layer
+			Width:   w,
+			Height:  h,
+			Bitrate: rate,
 			Quality: livekit.VideoQuality(layerCount - 1 - i),
 		}
 
@@ -87,6 +102,15 @@ func computeVideoLayers(highLayer *livekit.VideoLayer, layerCount int) []*liveki
 	}
 
 	return layers
+}
+
+func getBitrateForParams(refBitrate, refWidth, refHeight uint32, refFramerate float64, targetWidth, targetHeight uint32, targetFramerate float64) uint32 {
+	// bitrate = ref_bitrate * (target framerate / ref framerate) ^ 0.75 * (target pixel area / ref pixel area) ^ 0.75
+
+	ratio := math.Pow(float64(targetFramerate)/float64(refFramerate), 0.75)
+	ratio = ratio * math.Pow(float64(targetWidth)*float64(targetHeight)/(float64(refWidth)*float64(refHeight)), 0.75)
+
+	return uint32(float64(refBitrate) * ratio)
 }
 
 func getOptionsForAudioPreset(preset livekit.IngressAudioEncodingPreset) (*livekit.IngressAudioEncodingOptions, error) {
