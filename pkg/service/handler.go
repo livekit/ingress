@@ -117,7 +117,7 @@ func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, 
 func (h *Handler) sendUpdate(ctx context.Context, info *livekit.IngressInfo) {
 	switch info.State.Status {
 	case livekit.IngressState_ENDPOINT_ERROR:
-		logger.Errorw("ingress failed", errors.New(info.State.Error),
+		logger.Warnw("ingress failed", errors.New(info.State.Error),
 			"ingressID", info.IngressId,
 		)
 	case livekit.IngressState_ENDPOINT_INACTIVE:
