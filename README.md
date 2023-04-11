@@ -1,6 +1,10 @@
+<!--BEGIN_BANNER_IMAGE--><!--END_BANNER_IMAGE-->
+
 # LiveKit Ingress
 
-WebRTC is proving to be a versatile and scalable transport protocol both for media ingestion and delivery. However, some applications may require integrating with existing workflows or equipment that do not support WebRTC. Universal Ingress provides a way to send media that was generated using such workflows to a LiveKit room. 
+<!--BEGIN_DESCRIPTION-->
+WebRTC is proving to be a versatile and scalable transport protocol both for media ingestion and delivery. However, some applications may require integrating with existing workflows or equipment that do not support WebRTC. Universal Ingress provides a way to send media that was generated using such workflows to a LiveKit room.
+<!--END_DESCRIPTION-->
 
 ## Capabilities
 
@@ -181,3 +185,4 @@ docker run --rm \
     livekit/ingress
 ```
 
+<!--BEGIN_REPO_NAV--><!--END_REPO_NAV-->
