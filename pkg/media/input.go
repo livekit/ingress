@@ -7,6 +7,8 @@ import (
 
 	"github.com/tinyzimmer/go-gst/gst"
 
+	"github.com/livekit/ingress/pkg/media/rtmp"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/logger"
 )
 
@@ -21,7 +23,7 @@ type Input struct {
 	lock sync.Mutex
 
 	bin    *gst.Bin
-	source *HTTPRelaySource
+	source *rtmp.HTTPRelaySource
 
 	audioOutput *gst.Pad
 	videoOutput *gst.Pad
@@ -31,8 +33,8 @@ type Input struct {
 
 type OutputReadyFunc func(pad *gst.Pad, kind StreamKind)
 
-func NewInput(p *Params) (*Input, error) {
-	src, err := NewHTTPRelaySource(context.Background(), p)
+func NewInput(p *params.Params) (*Input, error) {
+	src, err := rtmp.NewHTTPRelaySource(context.Background(), p)
 	if err != nil {
 		return nil, err
 	}

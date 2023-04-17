@@ -7,6 +7,7 @@ import (
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
@@ -93,7 +94,7 @@ func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, 
 
 	// build/verify params
 	var p *media.Pipeline
-	params, err := media.GetParams(ctx, h.conf, info, wsUrl, token)
+	params, err := params.GetParams(ctx, h.conf, info, wsUrl, token)
 	if err == nil {
 		// create the pipeline
 		p, err = media.New(ctx, h.conf, params)

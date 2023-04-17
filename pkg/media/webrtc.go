@@ -8,6 +8,7 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst"
 
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/protocol/utils"
@@ -17,10 +18,10 @@ import (
 type WebRTCSink struct {
 	room *lksdk.Room
 
-	params *Params
+	params *params.Params
 }
 
-func NewWebRTCSink(ctx context.Context, p *Params) (*WebRTCSink, error) {
+func NewWebRTCSink(ctx context.Context, p *params.Params) (*WebRTCSink, error) {
 	ctx, span := tracer.Start(ctx, "media.NewWebRTCSink")
 	defer span.End()
 
