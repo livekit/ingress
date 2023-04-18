@@ -125,17 +125,17 @@ func (s *WHIPServer) SetSDPResponse(resourceId string, sdp string, err error) er
 
 func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, string, error) {
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
+	sdpChan := make(chan sdpRes, 1)
+	s.handlers.Store(resourceId, sdpChan)
+	defer s.handlers.Delete(resourceId)
 
 	if s.onPublish != nil {
+		fmt.Println("ONPUBLISH", streamKey, resourceId, sdpOffer)
 		err := s.onPublish(streamKey, resourceId, sdpOffer)
 		if err != nil {
 			return "", "", err
 		}
 	}
-
-	sdpChan := make(chan sdpRes)
-	s.handlers.Store(resourceId, sdpChan)
-	defer s.handlers.Delete(resourceId)
 
 	var sdp string
 	select {
