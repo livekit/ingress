@@ -1,7 +1,10 @@
 package whip
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"sync"
 	"time"
@@ -13,15 +16,12 @@ import (
 	"github.com/livekit/psrpc"
 )
 
-// TODO Start server, set ReadTimeout and WriteTimeout
-// TODO set timeout
-
 const (
 	sdpResponseTimeout = 5 * time.Second
 )
 
 type WHIPServer struct {
-	onPublish func(streamKey, resourceId string) error
+	onPublish func(streamKey, resourceId, sdpOffer string) error
 	handlers  sync.Map
 }
 
@@ -38,29 +38,47 @@ func NewWHIPServer() *WHIPServer {
 	return &WHIPServer{}
 }
 
-func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resourceId string) error) error {
+func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resourceId, sdpOffer string) error) error {
 	s.onPublish = onPublish
 
 	r := mux.NewRouter()
 
 	r.HandleFunc("/{app}/{stream_key}", func(w http.ResponseWriter, r *http.Request) {
+		var err error
+		defer func() {
+			var psrpcErr psrpc.Error
+
+			switch {
+			case errors.As(err, &psrpcErr):
+				w.WriteHeader(psrpcErr.ToHttp())
+			case err == nil:
+				// Nothing, we already responded
+			default:
+				w.WriteHeader(http.StatusInternalServerError)
+			}
+		}()
+
 		vars := mux.Vars(r)
 		app := vars["app"]
 		streamKey := vars["stream_key"]
 
-		resourceId, sdp, err := s.createStream(streamKey)
-		switch err := err.(type) {
-		case nil:
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Content-Type", "application/sdp")
-			w.Header().Set("Location", fmt.Sprintf("/%s/%s/%s", app, streamKey, resourceId))
-			w.WriteHeader(http.StatusCreated)
-			w.Write([]byte(sdp))
-		case psrpc.Error:
-			code := err.ToHttp()
-			w.WriteHeader(code)
-		default:
+		sdpOffer := bytes.Buffer{}
+
+		_, err = io.Copy(&sdpOffer, r.Body)
+		if err != nil {
+			return
 		}
+
+		resourceId, sdp, err := s.createStream(streamKey, string(sdpOffer.Bytes()))
+		if err != nil {
+			return
+		}
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Content-Type", "application/sdp")
+		w.Header().Set("Location", fmt.Sprintf("/%s/%s/%s", app, streamKey, resourceId))
+		w.WriteHeader(http.StatusCreated)
+		w.Write([]byte(sdp))
+
 	}).Methods("POST")
 
 	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
@@ -105,11 +123,11 @@ func (s *WHIPServer) SetSDPResponse(resourceId string, sdp string, err error) er
 	return nil
 }
 
-func (s *WHIPServer) createStream(streamKey string) (string, string, error) {
+func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, string, error) {
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
 
 	if s.onPublish != nil {
-		err := s.onPublish(streamKey, resourceId)
+		err := s.onPublish(streamKey, resourceId, sdpOffer)
 		if err != nil {
 			return "", "", err
 		}
