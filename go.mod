@@ -1,13 +1,16 @@
 module github.com/livekit/ingress
 
+replace github.com/livekit/protocol => ../protocol
+
 go 1.18
 
 require (
 	github.com/frostbyte73/core v0.0.5
+	github.com/gorilla/mux v1.8.0
 	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/protocol v1.5.2-0.20230407184356-48e7d8e34e9b
-	github.com/livekit/psrpc v0.2.10
+	github.com/livekit/psrpc v0.2.11-0.20230405191830-d76f71512630
 	github.com/livekit/server-sdk-go v1.0.9-0.20230314192457-52c28d42b5d4
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/webrtc/v3 v3.1.59
@@ -82,12 +85,12 @@ require (
 	github.com/yutopp/go-amf0 v0.0.0-20180803120851-48851794bb1f // indirect
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
-	golang.org/x/crypto v0.7.0 // indirect
+	golang.org/x/crypto v0.8.0 // indirect
 	golang.org/x/exp v0.0.0-20230321023759-10a507213a29 // indirect
-	golang.org/x/net v0.8.0 // indirect
+	golang.org/x/net v0.9.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.7.0 // indirect
-	golang.org/x/text v0.8.0 // indirect
+	golang.org/x/text v0.9.0 // indirect
 	golang.org/x/time v0.0.0-20210220033141-f8bda1e9f3ba // indirect
 	google.golang.org/genproto v0.0.0-20230403163135-c38d8f061ccd // indirect
 	google.golang.org/grpc v1.54.0 // indirect
