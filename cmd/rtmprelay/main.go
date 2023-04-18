@@ -18,7 +18,7 @@ func main() {
 	}
 
 	rtmpServer := rtmp.NewRTMPServer()
-	relay := rtmp.NewRTMPRelay(rtmpServer)
+	relay := rtmp.NewRelay(rtmpServer)
 
 	err := rtmpServer.Start(conf, nil)
 	if err != nil {

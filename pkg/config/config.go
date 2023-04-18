@@ -16,6 +16,7 @@ import (
 
 const (
 	DefaultRTMPPort      int = 1935
+	DefaultWHIPPort          = 8080
 	DefaultHTTPRelayPort     = 9090
 )
 
@@ -29,6 +30,7 @@ type Config struct {
 	PrometheusPort int           `yaml:"prometheus_port"`
 	RTMPPort       int           `yaml:"rtmp_port"`
 	HTTPRelayPort  int           `yaml:"http_relay_port"`
+	WHIPPort       int           `yaml:"whip_port"`
 	Logging        logger.Config `yaml:"logging"`
 
 	// CPU costs for various ingress types
@@ -60,6 +62,9 @@ func NewConfig(confString string) (*Config, error) {
 	}
 	if conf.HTTPRelayPort == 0 {
 		conf.HTTPRelayPort = DefaultHTTPRelayPort
+	}
+	if conf.WHIPPort == 0 {
+		conf.WHIPPort = DefaultWHIPPort
 	}
 
 	if conf.Redis == nil {

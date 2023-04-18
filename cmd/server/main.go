@@ -110,7 +110,8 @@ func runService(c *cli.Context) error {
 
 	// Run RTMP server
 	rtmpsrv := rtmp.NewRTMPServer()
-	relay := rtmp.NewRTMPRelay(rtmpsrv)
+
+	relay := service.NewRelay(rtmpsrv)
 
 	err = rtmpsrv.Start(conf, svc.HandleRTMPPublishRequest)
 	if err != nil {

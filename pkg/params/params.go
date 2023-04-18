@@ -87,7 +87,7 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 }
 
 func getRelayUrl(conf *config.Config, streamKey string) string {
-	return fmt.Sprintf("http://localhost:%d/%s", conf.HTTPRelayPort, streamKey)
+	return fmt.Sprintf("http://localhost:%d/rtmp/%s", conf.HTTPRelayPort, streamKey)
 }
 
 func getAudioEncodingOptions(options *livekit.IngressAudioOptions) (*livekit.IngressAudioEncodingOptions, error) {
