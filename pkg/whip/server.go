@@ -8,6 +8,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 )
@@ -70,6 +71,20 @@ func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 		// RPC call
 	}).Methods("PATCH")
 
+	hs := &http.Server{
+		Addr:         fmt.Sprintf(":%d", conf.WHIPPort),
+		Handler:      r,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+
+	go func() {
+		err := hs.ListenAndServe()
+		if err != http.ErrServerClosed {
+			logger.Errorw("WHIP server start failed", err)
+		}
+	}()
+
 	return nil
 }
 
@@ -112,7 +127,7 @@ func (s *WHIPServer) createStream(streamKey string) (string, string, error) {
 		}
 		sdp = res.sdp
 	case <-time.After(sdpResponseTimeout):
-		return resourceId, "", psrpc.NewErrorf(psrpc.DeadlineExceeded, "timeout waiting for sdp offer")
+		return resourceId, "", psrpc.NewErrorf(psrpc.Unavailable, "timeout waiting for sdp offer")
 	}
 
 	return resourceId, sdp, nil
