@@ -6,9 +6,12 @@ import (
 	"sync"
 
 	"github.com/tinyzimmer/go-gst/gst"
+	"github.com/tinyzimmer/go-gst/gst/app"
 
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media/rtmp"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 )
 
@@ -19,11 +22,17 @@ const (
 	Video StreamKind = "video"
 )
 
+type Source interface {
+	GetSource() *app.Source
+	Start(ctx context.Context) error
+	Close() error
+}
+
 type Input struct {
 	lock sync.Mutex
 
 	bin    *gst.Bin
-	source *rtmp.HTTPRelaySource
+	source Source
 
 	audioOutput *gst.Pad
 	videoOutput *gst.Pad
@@ -34,11 +43,11 @@ type Input struct {
 type OutputReadyFunc func(pad *gst.Pad, kind StreamKind)
 
 func NewInput(p *params.Params) (*Input, error) {
-	src, err := rtmp.NewHTTPRelaySource(context.Background(), p)
+	src, err := CreateSource(p)
 	if err != nil {
 		return nil, err
 	}
-	flvSrc := src.GetSource()
+	appSrc := src.GetSource()
 
 	decodeBin, err := gst.NewElement("decodebin3")
 	if err != nil {
@@ -46,7 +55,7 @@ func NewInput(p *params.Params) (*Input, error) {
 	}
 
 	bin := gst.NewBin("input")
-	if err := bin.AddMany(flvSrc.Element, decodeBin); err != nil {
+	if err := bin.AddMany(appSrc.Element, decodeBin); err != nil {
 		return nil, err
 	}
 
@@ -59,11 +68,22 @@ func NewInput(p *params.Params) (*Input, error) {
 		return nil, err
 	}
 
-	if err = flvSrc.Link(decodeBin); err != nil {
+	if err = appSrc.Link(decodeBin); err != nil {
 		return nil, err
 	}
 
 	return i, nil
+}
+
+func CreateSource(p *params.Params) (Source, error) {
+	switch p.IngressInfo.InputType {
+	case livekit.IngressInput_RTMP_INPUT:
+		return rtmp.NewHTTPRelaySource(context.Background(), p)
+	case livekit.IngressInput_WHIP_INPUT:
+		return nil, nil
+	default:
+		return nil, errors.ErrInvalidIngressType
+	}
 }
 
 func (i *Input) OnOutputReady(f OutputReadyFunc) {

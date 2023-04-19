@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
 	"github.com/livekit/ingress/pkg/whip"
@@ -31,7 +33,7 @@ func main() {
 		Name:        "ingress",
 		Usage:       "LiveKit Ingress",
 		Version:     version.Version,
-		Description: "import RTMP to LiveKit",
+		Description: "import streamed media to LiveKit",
 		Commands: []*cli.Command{
 			{
 				Name:        "run-handler",
@@ -48,6 +50,9 @@ func main() {
 					},
 					&cli.StringFlag{
 						Name: "ws-url",
+					},
+					&cli.StringFlag{
+						Name: "extra-params",
 					},
 				},
 				Action: runHandler,
@@ -211,11 +216,23 @@ func runHandler(c *cli.Context) error {
 		return err
 	}
 
+	extraParams := c.String("extra-params")
+	var ep any
+	switch info.InputType {
+	case livekit.IngressInput_WHIP_INPUT:
+		whipParams := params.WhipExtraParams{}
+		err := json.Unmarshal([]byte(extraParams), &whipParams)
+		if err != nil {
+			return err
+		}
+		ep = &whipParams
+	}
+
 	token := c.String("token")
 
 	var handler interface {
 		Kill()
-		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string)
+		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string, extraParams any)
 	}
 
 	bus := psrpc.NewRedisMessageBus(rc)
@@ -250,7 +267,7 @@ func runHandler(c *cli.Context) error {
 		wsUrl = c.String("ws-url")
 	}
 
-	handler.HandleIngress(ctx, info, wsUrl, token)
+	handler.HandleIngress(ctx, info, wsUrl, token, ep)
 	return nil
 }
 

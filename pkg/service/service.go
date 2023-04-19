@@ -12,6 +12,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/version"
 	"github.com/livekit/protocol/ingress"
@@ -28,11 +29,6 @@ type publishRequest struct {
 	inputType   livekit.IngressInput
 	extraParams any
 	result      chan<- error
-}
-
-type whipExtraParams struct {
-	SDPOffer   string `json:"sdp_offer"`
-	ResourceId string `json:"resource_id"`
 }
 
 type Service struct {
@@ -98,7 +94,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId, sdpOffer strin
 	r := publishRequest{
 		streamKey: streamKey,
 		inputType: livekit.IngressInput_WHIP_INPUT,
-		extraParams: whipExtraParams{
+		extraParams: params.WhipExtraParams{
 			ResourceId: resourceId,
 			SDPOffer:   sdpOffer,
 		},
