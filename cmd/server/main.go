@@ -16,6 +16,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
+	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/ingress/version"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -108,15 +109,31 @@ func runService(c *cli.Context) error {
 	killChan := make(chan os.Signal, 1)
 	signal.Notify(killChan, syscall.SIGINT)
 
-	// Run RTMP server
-	rtmpsrv := rtmp.NewRTMPServer()
-
-	relay := service.NewRelay(rtmpsrv)
-
-	err = rtmpsrv.Start(conf, svc.HandleRTMPPublishRequest)
-	if err != nil {
-		return err
+	var rtmpsrv *rtmp.RTMPServer
+	var whipsrv *whip.WHIPServer
+	if conf.RTMPPort > 0 {
+		// Run RTMP server
+		rtmpsrv = rtmp.NewRTMPServer()
 	}
+	if conf.WHIPPort > 0 {
+		whipsrv = whip.NewWHIPServer()
+	}
+
+	relay := service.NewRelay(rtmpsrv, whipsrv)
+
+	if rtmpsrv != nil {
+		err = rtmpsrv.Start(conf, svc.HandleRTMPPublishRequest)
+		if err != nil {
+			return err
+		}
+	}
+	if whipsrv != nil {
+		err = whipsrv.Start(conf, svc.HandleWHIPPublishRequest)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = relay.Start(conf)
 	if err != nil {
 		return err
@@ -132,7 +149,9 @@ func runService(c *cli.Context) error {
 			logger.Infow("exit requested, stopping all ingress and shutting down", "signal", sig)
 			svc.Stop(true)
 			relay.Stop()
-			rtmpsrv.Stop()
+			if rtmpsrv != nil {
+				rtmpsrv.Stop()
+			}
 		}
 	}()
 

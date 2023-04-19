@@ -28,9 +28,9 @@ type Config struct {
 
 	HealthPort     int           `yaml:"health_port"`
 	PrometheusPort int           `yaml:"prometheus_port"`
-	RTMPPort       int           `yaml:"rtmp_port"`
+	RTMPPort       int           `yaml:"rtmp_port"` // -1 to disable RTMP
+	WHIPPort       int           `yaml:"whip_port"` // -1 to disable WHIP
 	HTTPRelayPort  int           `yaml:"http_relay_port"`
-	WHIPPort       int           `yaml:"whip_port"`
 	Logging        logger.Config `yaml:"logging"`
 
 	// CPU costs for various ingress types
