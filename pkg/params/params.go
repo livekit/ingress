@@ -13,6 +13,7 @@ import (
 )
 
 type Params struct {
+	*config.Config
 	*livekit.IngressInfo
 
 	AudioEncodingOptions *livekit.IngressAudioEncodingOptions
@@ -94,6 +95,7 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 
 	p := &Params{
 		IngressInfo:          infoCopy,
+		Config:               conf,
 		AudioEncodingOptions: audioEncodingOptions,
 		VideoEncodingOptions: videoEncodingOptions,
 		Token:                token,

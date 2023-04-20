@@ -19,7 +19,7 @@ require (
 	github.com/stretchr/testify v1.8.2
 	github.com/tinyzimmer/go-glib v0.0.25
 	github.com/tinyzimmer/go-gst v0.2.33
-	github.com/urfave/cli/v2 v2.24.4
+	github.com/urfave/cli/v2 v2.25.1
 	github.com/yutopp/go-flv v0.2.0
 	go.uber.org/atomic v1.10.0
 	google.golang.org/protobuf v1.30.0
@@ -45,7 +45,7 @@ require (
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
 	github.com/jxskiss/base62 v1.1.0 // indirect
 	github.com/lithammer/shortuuid/v4 v4.0.0 // indirect
-	github.com/livekit/mediatransportutil v0.0.0-20230130133657-96cfb115473a // indirect
+	github.com/livekit/mediatransportutil v0.0.0-20230326055817-ed569ca13d26 // indirect
 	github.com/mackerelio/go-osstat v0.2.4 // indirect
 	github.com/magefile/mage v1.14.0 // indirect
 	github.com/mattn/go-pointer v0.0.1 // indirect

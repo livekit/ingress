@@ -18,6 +18,7 @@ const (
 	DefaultRTMPPort      int = 1935
 	DefaultWHIPPort          = 8080
 	DefaultHTTPRelayPort     = 9090
+	DefaultICESinglePort     = 7070
 )
 
 type Config struct {
@@ -33,11 +34,19 @@ type Config struct {
 	HTTPRelayPort  int           `yaml:"http_relay_port"`
 	Logging        logger.Config `yaml:"logging"`
 
+	Whip WhipConfig `yaml:"whip"`
+
 	// CPU costs for various ingress types
 	CPUCost CPUCostConfig `yaml:"cpu_cost"`
 
 	// internal
 	NodeID string `yaml:"-"`
+}
+
+type WhipConfig struct {
+	// TODO add IceLite, NAT1To1IPs
+	ICESinglePort int      `yaml:"ice_single_port"` // when set, all UDP traffic will be muxed to this single UDP port. 7070 by default if no port id set
+	ICEPortRange  []uint16 `yaml:"ice_port_range"`
 }
 
 type CPUCostConfig struct {
@@ -67,6 +76,11 @@ func NewConfig(confString string) (*Config, error) {
 		conf.WHIPPort = DefaultWHIPPort
 	}
 
+	err := conf.InitWhipConf()
+	if err != nil {
+		return nil, err
+	}
+
 	if conf.Redis == nil {
 		return nil, psrpc.NewErrorf(psrpc.InvalidArgument, "redis configuration is required")
 	}
@@ -76,6 +90,18 @@ func NewConfig(confString string) (*Config, error) {
 	}
 
 	return conf, nil
+}
+
+func (c *Config) InitWhipConf() error {
+	if c.WHIPPort <= 0 {
+		return nil
+	}
+
+	if c.Whip.ICESinglePort <= 0 && len(c.Whip.ICEPortRange) != 2 {
+		c.Whip.ICESinglePort = DefaultICESinglePort
+	}
+
+	return nil
 }
 
 func (c *Config) InitLogger(values ...interface{}) error {
