@@ -4,12 +4,14 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/tinyzimmer/go-gst/gst"
 	"github.com/tinyzimmer/go-gst/gst/app"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media/rtmp"
+	"github.com/livekit/ingress/pkg/media/whip"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -80,7 +82,9 @@ func CreateSource(p *params.Params) (Source, error) {
 	case livekit.IngressInput_RTMP_INPUT:
 		return rtmp.NewHTTPRelaySource(context.Background(), p)
 	case livekit.IngressInput_WHIP_INPUT:
-		return nil, nil
+		ctx, done := context.WithTimeout(context.Background(), 5*time.Second)
+		defer done()
+		return whip.NewWHIPSource(ctx, p)
 	default:
 		return nil, errors.ErrInvalidIngressType
 	}

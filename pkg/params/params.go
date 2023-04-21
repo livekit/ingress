@@ -112,7 +112,7 @@ func getRTMPRelayUrl(conf *config.Config, streamKey string) string {
 }
 
 func getWHIPRelayUrl(conf *config.Config, resourceId string) string {
-	return fmt.Sprintf("http://localhost:%d/whip/%s", conf.WHIPPort, resourceId)
+	return fmt.Sprintf("http://localhost:%d/whip/%s", conf.HTTPRelayPort, resourceId)
 }
 
 func getAudioEncodingOptions(options *livekit.IngressAudioOptions) (*livekit.IngressAudioEncodingOptions, error) {

@@ -54,32 +54,6 @@ func (s *WHIPServer) handleError(err error, w http.ResponseWriter) {
 	}
 }
 
-func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request, streamKey string) error {
-	fmt.Println("URL", r.URL, streamKey)
-
-	vars := mux.Vars(r)
-	app := vars["app"]
-
-	sdpOffer := bytes.Buffer{}
-
-	_, err := io.Copy(&sdpOffer, r.Body)
-	if err != nil {
-		return err
-	}
-
-	resourceId, sdp, err := s.createStream(streamKey, string(sdpOffer.Bytes()))
-	if err != nil {
-		return err
-	}
-	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Content-Type", "application/sdp")
-	w.Header().Set("Location", fmt.Sprintf("/%s/%s/%s", app, streamKey, resourceId))
-	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(sdp))
-
-	return nil
-}
-
 func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resourceId, sdpOffer string) error) error {
 	s.onPublish = onPublish
 
@@ -139,6 +113,8 @@ func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 }
 
 func (s *WHIPServer) SetSDPResponse(resourceId string, sdp string, err error) error {
+	fmt.Println("SetSDPResponse", resourceId, sdp, err)
+
 	entry, ok := s.handlers.Load(resourceId)
 	if !ok {
 		return psrpc.NewErrorf(psrpc.NotFound, "unknown resource id")
@@ -151,6 +127,32 @@ func (s *WHIPServer) SetSDPResponse(resourceId string, sdp string, err error) er
 	default:
 		return psrpc.NewErrorf(psrpc.Internal, "SDP response channel full")
 	}
+
+	return nil
+}
+
+func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request, streamKey string) error {
+	fmt.Println("URL", r.URL, streamKey)
+
+	vars := mux.Vars(r)
+	app := vars["app"]
+
+	sdpOffer := bytes.Buffer{}
+
+	_, err := io.Copy(&sdpOffer, r.Body)
+	if err != nil {
+		return err
+	}
+
+	resourceId, sdp, err := s.createStream(streamKey, string(sdpOffer.Bytes()))
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/sdp")
+	w.Header().Set("Location", fmt.Sprintf("/%s/%s/%s", app, streamKey, resourceId))
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte(sdp))
 
 	return nil
 }

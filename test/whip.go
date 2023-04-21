@@ -28,6 +28,8 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 	psrpcClient, err := rpc.NewIOInfoClient("ingress_test_service", bus)
 	require.NoError(t, err)
 
+	conf.Whip.EnableLoopbackCandidate = true
+
 	svc := service.NewService(conf.Config, psrpcClient)
 
 	commandPsrpcClient, err := rpc.NewIngressHandlerClient("ingress_test_client", bus, psrpc.WithClientTimeout(5*time.Second))

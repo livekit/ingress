@@ -3,9 +3,9 @@ package whip
 import (
 	"bytes"
 	"context"
-	"net"
 	"net/http"
 
+	"github.com/pion/ice/v2"
 	"github.com/pion/interceptor"
 	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst/app"
@@ -22,7 +22,8 @@ import (
 
 const (
 	// TODO: 2 for audio and video
-	WhipAppSource = "whipAppSrc"
+	WhipAppSource        = "whipAppSrc"
+	defaultUDPBufferSize = 16_777_216
 )
 
 type WHIPSource struct {
@@ -40,16 +41,21 @@ func NewWHIPSource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
 
 	sdpOffer := p.ExtraParams.(*params.WhipExtraParams).SDPOffer
 	if p.Whip.ICESinglePort != 0 {
-		logger.Infow("listen ice on single-port: ", p.Whip.ICESinglePort)
-		udpListener, err := net.ListenUDP("udp", &net.UDPAddr{
-			IP:   net.IP{0, 0, 0, 0},
-			Port: p.Whip.ICESinglePort,
-		})
+		logger.Infow("listen ice on single-port", "port", p.Whip.ICESinglePort)
+		opts := []ice.UDPMuxFromPortOption{
+			ice.UDPMuxFromPortWithReadBufferSize(defaultUDPBufferSize),
+			ice.UDPMuxFromPortWithWriteBufferSize(defaultUDPBufferSize),
+			ice.UDPMuxFromPortWithLogger(logFactory.NewLogger("udp_mux")),
+		}
+		if p.Whip.EnableLoopbackCandidate {
+			opts = append(opts, ice.UDPMuxFromPortWithLoopback())
+		}
+		udpMux, err := ice.NewMultiUDPMuxFromPort(p.Whip.ICESinglePort, opts...)
 		if err != nil {
 			return nil, err
 		}
 
-		webrtcSettings.SetICEUDPMux(webrtc.NewICEUDPMux(logFactory.NewLogger("ice"), udpListener))
+		webrtcSettings.SetICEUDPMux(udpMux)
 	} else {
 		var icePortStart, icePortEnd uint16
 

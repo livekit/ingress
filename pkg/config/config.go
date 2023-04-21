@@ -45,12 +45,14 @@ type Config struct {
 
 type WhipConfig struct {
 	// TODO add IceLite, NAT1To1IPs
-	ICESinglePort int      `yaml:"ice_single_port"` // when set, all UDP traffic will be muxed to this single UDP port. 7070 by default if no port id set
-	ICEPortRange  []uint16 `yaml:"ice_port_range"`
+	ICESinglePort           int      `yaml:"ice_single_port"` // when set, all UDP traffic will be muxed to this single UDP port. 7070 by default if no port id set
+	ICEPortRange            []uint16 `yaml:"ice_port_range"`
+	EnableLoopbackCandidate bool     `yaml:"enable_loopback_candidate"`
 }
 
 type CPUCostConfig struct {
 	RTMPCpuCost float64 `yaml:"rtmp_cpu_cost"`
+	WHIPCpuCost float64 `yaml:"whip_cpu_cost"`
 }
 
 func NewConfig(confString string) (*Config, error) {
