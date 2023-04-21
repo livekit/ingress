@@ -2,19 +2,22 @@ package whip
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 )
+
+// TODO CORS
 
 const (
 	sdpResponseTimeout = 5 * time.Second
@@ -38,47 +41,76 @@ func NewWHIPServer() *WHIPServer {
 	return &WHIPServer{}
 }
 
+func (s *WHIPServer) handleError(err error, w http.ResponseWriter) {
+	var psrpcErr psrpc.Error
+	switch {
+	case errors.As(err, &psrpcErr):
+		w.WriteHeader(psrpcErr.ToHttp())
+		w.Write([]byte(psrpcErr.Error()))
+	case err == nil:
+		// Nothing, we already responded
+	default:
+		w.WriteHeader(http.StatusInternalServerError)
+	}
+}
+
+func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request, streamKey string) error {
+	fmt.Println("URL", r.URL, streamKey)
+
+	vars := mux.Vars(r)
+	app := vars["app"]
+
+	sdpOffer := bytes.Buffer{}
+
+	_, err := io.Copy(&sdpOffer, r.Body)
+	if err != nil {
+		return err
+	}
+
+	resourceId, sdp, err := s.createStream(streamKey, string(sdpOffer.Bytes()))
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Content-Type", "application/sdp")
+	w.Header().Set("Location", fmt.Sprintf("/%s/%s/%s", app, streamKey, resourceId))
+	w.WriteHeader(http.StatusCreated)
+	w.Write([]byte(sdp))
+
+	return nil
+}
+
 func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resourceId, sdpOffer string) error) error {
 	s.onPublish = onPublish
 
 	r := mux.NewRouter()
 
+	r.HandleFunc("/{app}", func(w http.ResponseWriter, r *http.Request) {
+		var err error
+		defer func() {
+			s.handleError(err, w)
+		}()
+
+		bearer := r.Header.Get("Authorization")
+		if !strings.HasPrefix(bearer, "Bearer ") {
+			err = psrpc.NewErrorf(psrpc.NotFound, "missing stream name in authorization header")
+			return
+		}
+
+		streamKey := strings.TrimPrefix(bearer, "Bearer ")
+
+		err = s.handleNewWhipClient(w, r, streamKey)
+	}).Methods("POST")
+
 	r.HandleFunc("/{app}/{stream_key}", func(w http.ResponseWriter, r *http.Request) {
 		var err error
 		defer func() {
-			var psrpcErr psrpc.Error
-
-			switch {
-			case errors.As(err, &psrpcErr):
-				w.WriteHeader(psrpcErr.ToHttp())
-			case err == nil:
-				// Nothing, we already responded
-			default:
-				w.WriteHeader(http.StatusInternalServerError)
-			}
+			s.handleError(err, w)
 		}()
 
-		vars := mux.Vars(r)
-		app := vars["app"]
-		streamKey := vars["stream_key"]
+		streamKey := mux.Vars(r)["stream_key"]
 
-		sdpOffer := bytes.Buffer{}
-
-		_, err = io.Copy(&sdpOffer, r.Body)
-		if err != nil {
-			return
-		}
-
-		resourceId, sdp, err := s.createStream(streamKey, string(sdpOffer.Bytes()))
-		if err != nil {
-			return
-		}
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Content-Type", "application/sdp")
-		w.Header().Set("Location", fmt.Sprintf("/%s/%s/%s", app, streamKey, resourceId))
-		w.WriteHeader(http.StatusCreated)
-		w.Write([]byte(sdp))
-
+		err = s.handleNewWhipClient(w, r, streamKey)
 	}).Methods("POST")
 
 	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
