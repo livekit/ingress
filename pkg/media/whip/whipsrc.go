@@ -8,6 +8,7 @@ import (
 
 	"github.com/pion/ice/v2"
 	"github.com/pion/interceptor"
+	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst/app"
 
@@ -26,7 +27,7 @@ import (
 
 const (
 	// TODO: 2 for audio and video
-	WhipAppSource        = "whipAppSrc"
+	WHIPAppSourceLabel   = "whipAppSrc"
 	defaultUDPBufferSize = 16_777_216
 )
 
@@ -36,7 +37,7 @@ type WHIPSource struct {
 	pc        *webrtc.PeerConnection
 	trackLock sync.Mutex
 	tracks    map[string]*webrtc.TrackRemote
-	trackSrc  map[types.StreamKind]*WhipAppSource
+	trackSrc  map[types.StreamKind]*WHIPAppSource
 }
 
 func NewWHIPSource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
@@ -227,9 +228,16 @@ func (s *WHIPSource) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRec
 		s.trackLock.Unlock()
 	}()
 
-	s.tracks[t.ID()] = track
+	s.tracks[track.ID()] = track
 
 	// TODO create appSrc
+}
+
+func (w *WHIPSource) writePLI(ssrc webrtc.SSRC) error {
+	pli := []rtcp.Packet{
+		&rtcp.PictureLossIndication{SenderSSRC: uint32(ssrc), MediaSSRC: uint32(ssrc)},
+	}
+	_ = w.pc.WriteRTCP(pli)
 }
 
 func newMediaEngine(p *params.Params) (*webrtc.MediaEngine, error) {
