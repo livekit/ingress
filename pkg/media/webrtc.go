@@ -9,6 +9,7 @@ import (
 	"github.com/tinyzimmer/go-gst/gst"
 
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/protocol/utils"
@@ -154,7 +155,7 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 	return outputs, nil
 }
 
-func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
+func (s *WebRTCSink) AddTrack(kind types.StreamKind) (*gst.Bin, error) {
 	var bin *gst.Bin
 
 	switch kind {

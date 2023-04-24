@@ -13,15 +13,9 @@ import (
 	"github.com/livekit/ingress/pkg/media/rtmp"
 	"github.com/livekit/ingress/pkg/media/whip"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
-)
-
-type StreamKind string
-
-const (
-	Audio StreamKind = "audio"
-	Video StreamKind = "video"
 )
 
 type Source interface {
@@ -42,7 +36,7 @@ type Input struct {
 	onOutputReady OutputReadyFunc
 }
 
-type OutputReadyFunc func(pad *gst.Pad, kind StreamKind)
+type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
 
 func NewInput(p *params.Params) (*Input, error) {
 	src, err := CreateSource(p)
@@ -106,7 +100,7 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 	// surface callback for first audio and video pads, plug in fakesink on the rest
 	i.lock.Lock()
 	newPad := false
-	var kind StreamKind
+	var kind types.StreamKind
 	var ghostPad *gst.GhostPad
 	if strings.HasPrefix(pad.GetName(), "audio") {
 		if i.audioOutput == nil {
