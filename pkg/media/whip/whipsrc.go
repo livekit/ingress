@@ -12,29 +12,34 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst/app"
 
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/logger"
 	pionlogger "github.com/livekit/protocol/logger/pion"
+	"github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
+	"github.com/livekit/server-sdk-go/pkg/synchronizer"
 )
 
 // TODO STUN & TURN
 // TODO pion log level
 // TODO handle ICE never succeeding / data never coming
-// TODO PLI when missing packets?
 // TODO Cleanup
 
 const (
 	// TODO: 2 for audio and video
 	WHIPAppSourceLabel   = "whipAppSrc"
 	defaultUDPBufferSize = 16_777_216
+	whipIdentity         = "WHIPIngress"
 )
 
 type WHIPSource struct {
 	params *params.Params
 
-	pc        *webrtc.PeerConnection
+	pc   *webrtc.PeerConnection
+	sync *synchronizer.Synchronizer
+
 	trackLock sync.Mutex
 	tracks    map[string]*webrtc.TrackRemote
 	trackSrc  map[types.StreamKind]*WHIPAppSource
@@ -43,6 +48,7 @@ type WHIPSource struct {
 func NewWHIPSource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
 	s := &WHIPSource{
 		params: p,
+		sync:   synchronizer.NewSynchronizer(nil),
 	}
 
 	logFactory := pionlogger.NewLoggerFactory(logger.GetLogger())
@@ -116,14 +122,39 @@ func NewWHIPSource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
 }
 
 func (s *WHIPSource) Start(ctx context.Context) error {
+	for _, v := range s.trackSrc {
+		err := v.Start()
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
 func (s *WHIPSource) Close() error {
-	return nil
+	s.sync.End()
+
+	var errs utils.ErrArray
+	for _, v := range s.trackSrc {
+		err := v.Close()
+		if err != nil {
+			errs.AppendErr(err)
+		}
+	}
+
+	return errs.ToError()
 }
 
-func (s *WHIPSource) GetSource() *app.Source {
+func (s *WHIPSource) GetSource(kind types.StreamKind) *app.Source {
+	s.trackLock.Lock()
+	defer s.trackLock.Unlock()
+
+	src := s.trackSrc[kind]
+	if src != nil {
+		return src.GetAppSource()
+	}
+
 	return nil
 }
 
@@ -224,20 +255,42 @@ func (s *WHIPSource) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRec
 	logger.Infow("track has started", "type", track.PayloadType(), "codec", track.Codec().MimeType)
 
 	s.trackLock.Lock()
-	defer func() {
-		s.trackLock.Unlock()
-	}()
-
+	defer s.trackLock.Unlock()
 	s.tracks[track.ID()] = track
+	kind := streamKindFromCodecType(track.Kind())
+	if _, ok := s.trackSrc[kind]; ok {
+		logger.Warnw("duplicate track of the same kind", errors.ErrUnsupportedDecodeFormat, "kind", kind)
+		return
+	}
 
-	// TODO create appSrc
+	sync := s.sync.AddTrack(track, whipIdentity)
+	appSrc, err := NewWHIPAppSource(track, receiver, sync, s.writePLI, s.sync.OnRTCP)
+	if err != nil {
+		logger.Warnw("failed creating whip app source", err)
+		return
+	}
+	s.trackSrc[kind] = appSrc
 }
 
-func (w *WHIPSource) writePLI(ssrc webrtc.SSRC) error {
+func streamKindFromCodecType(typ webrtc.RTPCodecType) types.StreamKind {
+	switch typ {
+	case webrtc.RTPCodecTypeAudio:
+		return types.Audio
+	case webrtc.RTPCodecTypeVideo:
+		return types.Video
+	default:
+		return types.Unknown
+	}
+}
+
+func (w *WHIPSource) writePLI(ssrc webrtc.SSRC) {
 	pli := []rtcp.Packet{
 		&rtcp.PictureLossIndication{SenderSSRC: uint32(ssrc), MediaSSRC: uint32(ssrc)},
 	}
-	_ = w.pc.WriteRTCP(pli)
+	err := w.pc.WriteRTCP(pli)
+	if err != nil {
+		logger.Warnw("failed writing PLI", err, "ssrc", ssrc)
+	}
 }
 
 func newMediaEngine(p *params.Params) (*webrtc.MediaEngine, error) {

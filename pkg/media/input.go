@@ -19,7 +19,7 @@ import (
 )
 
 type Source interface {
-	GetSource() *app.Source
+	GetSource(kind types.StreamKind) *app.Source
 	Start(ctx context.Context) error
 	Close() error
 }
@@ -43,7 +43,7 @@ func NewInput(p *params.Params) (*Input, error) {
 	if err != nil {
 		return nil, err
 	}
-	appSrc := src.GetSource()
+	appSrc := src.GetSource(types.Interleaved)
 
 	decodeBin, err := gst.NewElement("decodebin3")
 	if err != nil {

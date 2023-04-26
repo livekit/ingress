@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/server-sdk-go/pkg/samplebuilder"
+	"github.com/livekit/server-sdk-go/pkg/synchronizer"
+	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/rtp/codecs"
 	"github.com/pion/webrtc/v3"
@@ -26,18 +29,31 @@ const (
 
 type WHIPAppSource struct {
 	remoteTrack *webrtc.TrackRemote
+	receiver    *webrtc.RTPReceiver
 	appSrc      *app.Source
 	sb          *samplebuilder.SampleBuilder
+	sync        *synchronizer.TrackSynchronizer
 	writePLI    func(ssrc webrtc.SSRC)
+	onRTCP      func(packet rtcp.Packet)
 
-	fuse   core.Fuse
-	result chan error
+	firstPacket sync.Once
+	fuse        core.Fuse
+	result      chan error
 }
 
-func NewWHIPAppSource(remoteTrack *webrtc.TrackRemote, writePLI func(ssrc webrtc.SSRC)) (*WHIPAppSource, error) {
+func NewWHIPAppSource(
+	remoteTrack *webrtc.TrackRemote,
+	receiver *webrtc.RTPReceiver,
+	sync *synchronizer.TrackSynchronizer,
+	writePLI func(ssrc webrtc.SSRC),
+	onRTCP func(packet rtcp.Packet),
+) (*WHIPAppSource, error) {
 	w := &WHIPAppSource{
 		remoteTrack: remoteTrack,
+		receiver:    receiver,
+		sync:        sync,
 		writePLI:    writePLI,
+		onRTCP:      onRTCP,
 		fuse:        core.NewFuse(),
 	}
 
@@ -71,7 +87,25 @@ func NewWHIPAppSource(remoteTrack *webrtc.TrackRemote, writePLI func(ssrc webrtc
 
 func (w *WHIPAppSource) Start() error {
 	w.result = make(chan error, 1)
+	w.startRTPReceiver()
+	if w.onRTCP != nil {
+		w.startRTCPReceiver()
+	}
 
+	return nil
+}
+
+func (w *WHIPAppSource) Close() error {
+	w.fuse.Break()
+
+	return <-w.result
+}
+
+func (w *WHIPAppSource) GetAppSource() *app.Source {
+	return w.appSrc
+}
+
+func (w *WHIPAppSource) startRTPReceiver() {
 	go func() {
 		var err error
 
@@ -108,33 +142,35 @@ func (w *WHIPAppSource) Start() error {
 		}
 
 	}()
-
-	return nil
-}
-
-func (w *WHIPAppSource) Close() error {
-	w.fuse.Break()
-
-	return <-w.result
 }
 
 // TODO drain on close?
 func (w *WHIPAppSource) processRTPPacket() error {
-	var p *rtp.Packet
+	var pkt *rtp.Packet
 
 	_ = w.remoteTrack.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
 
-	p, _, err := w.remoteTrack.ReadRTP()
+	pkt, _, err := w.remoteTrack.ReadRTP()
 	if err != nil {
 		return err
 	}
 
-	w.sb.Push(p)
+	w.firstPacket.Do(func() {
+		w.sync.FirstPacketForTrack(pkt)
+	})
+
+	w.sb.Push(pkt)
 	for {
 		s, rtpTs := w.sb.PopWithTimestamp()
 		if s == nil {
 			break
 		}
+
+		ts, err := w.sync.GetPTS(rtpTs)
+		if err != nil {
+			return err
+		}
+
 		b := gst.NewBufferFromBytes(s.Data)
 		b.SetPresentationTimestamp(ts)
 
@@ -151,6 +187,42 @@ func (w *WHIPAppSource) processRTPPacket() error {
 	}
 
 	return nil
+}
+
+func (w *WHIPAppSource) startRTCPReceiver() {
+	go func() {
+		logger.Infow("starting app source rtcp receiver", "trackID", w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
+
+		for {
+			select {
+			case <-w.fuse.Watch():
+				logger.Debugw("stopping app source rtcp receiver", "trackID", w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
+			default:
+				_ = w.receiver.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
+				pkts, _, err := w.receiver.ReadRTCP()
+
+				switch {
+				case err == nil:
+					// continue
+				case err == io.EOF:
+					err = nil
+					return
+				default:
+					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+						continue
+					}
+
+					logger.Warnw("error reading rtcp", err, "trackID", err, w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
+					return
+				}
+
+				for _, pkt := range pkts {
+					w.onRTCP(pkt)
+				}
+			}
+		}
+
+	}()
 }
 
 func (w *WHIPAppSource) createSampleBuilder() (*samplebuilder.SampleBuilder, error) {
