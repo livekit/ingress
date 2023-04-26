@@ -150,12 +150,12 @@ func (s *WHIPSource) Close() error {
 }
 
 func (s *WHIPSource) GetSources() []*app.Source {
+	time.Sleep(5 * time.Second)
 	s.trackLock.Lock()
 	defer s.trackLock.Unlock()
 
 	// TODO callback!
 
-	time.Sleep(1 * time.Second)
 	ret := make([]*app.Source, 0)
 
 	for _, v := range s.trackSrc {

@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -44,28 +45,25 @@ func NewInput(p *params.Params) (*Input, error) {
 		return nil, err
 	}
 
-	decodeBin, err := gst.NewElement("decodebin3")
-	if err != nil {
-		return nil, err
-	}
-
 	bin := gst.NewBin("input")
-	if err := bin.Add(decodeBin); err != nil {
-		return nil, err
-	}
-
 	i := &Input{
 		bin:    bin,
 		source: src,
 	}
 
-	if _, err = decodeBin.Connect("pad-added", i.onPadAdded); err != nil {
-		return nil, err
-	}
-
 	appSrcs := src.GetSources()
+	fmt.Println("SOURCES", appSrcs)
 	for _, appSrc := range appSrcs {
-		if err := bin.Add(appSrc.Element); err != nil {
+		decodeBin, err := gst.NewElement("decodebin3")
+		if err != nil {
+			return nil, err
+		}
+
+		if err := bin.AddMany(decodeBin, appSrc.Element); err != nil {
+			return nil, err
+		}
+
+		if _, err = decodeBin.Connect("pad-added", i.onPadAdded); err != nil {
 			return nil, err
 		}
 
@@ -103,6 +101,7 @@ func (i *Input) Close() error {
 }
 
 func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
+	fmt.Println("ONPADADDED", pad.GetName())
 	// surface callback for first audio and video pads, plug in fakesink on the rest
 	i.lock.Lock()
 	newPad := false

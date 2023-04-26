@@ -172,6 +172,11 @@ func (w *WHIPAppSource) processRTPPacket() error {
 			return err
 		}
 
+		//			for _, b := range s.Data {
+		//				fmt.Printf("0x%02x ", b)
+		//			}
+		//			fmt.Println("")
+
 		b := gst.NewBufferFromBytes(s.Data)
 		b.SetPresentationTimestamp(ts)
 
@@ -261,11 +266,11 @@ func getCapsForCodec(mimeType string) (*gst.Caps, error) {
 
 	switch mt {
 	case strings.ToLower(webrtc.MimeTypeH264):
-		return gst.NewCapsFromString("video/x-h264,stream-format=byte-stream,alignment=au"), nil
+		return gst.NewCapsFromString("video/x-h264,stream-format=byte-stream,alignment=nal"), nil
 	case strings.ToLower(webrtc.MimeTypeVP8):
 		return gst.NewCapsFromString("video/x-vp8"), nil
 	case strings.ToLower(webrtc.MimeTypeOpus):
-		return gst.NewCapsFromString("audio/x-opus"), nil
+		return gst.NewCapsFromString("audio/x-opus,channel-mapping-family=0"), nil
 	}
 
 	return nil, errors.ErrUnsupportedDecodeFormat
