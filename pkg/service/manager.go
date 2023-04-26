@@ -99,7 +99,6 @@ func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngress
 	cmd.Dir = "/"
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Env = append(os.Environ(), "GST_DEBUG=3,h264parse:6")
 
 	s.monitor.IngressStarted(resp.Info)
 	h := &process{

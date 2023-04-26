@@ -119,10 +119,15 @@ func (w *WHIPAppSource) startRTPReceiver() {
 
 		logger.Infow("starting app source track reader", "trackID", w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
 
+		if w.remoteTrack.Kind() == webrtc.RTPCodecTypeVideo && w.writePLI != nil {
+			w.writePLI(w.remoteTrack.SSRC())
+		}
+
 		for {
 			select {
 			case <-w.fuse.Watch():
 				logger.Debugw("stopping app source track reader", "trackID", w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
+				return
 			default:
 				err = w.processRTPPacket()
 				switch {
@@ -203,6 +208,7 @@ func (w *WHIPAppSource) startRTCPReceiver() {
 			select {
 			case <-w.fuse.Watch():
 				logger.Debugw("stopping app source rtcp receiver", "trackID", w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
+				return
 			default:
 				_ = w.receiver.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
 				pkts, _, err := w.receiver.ReadRTCP()

@@ -291,6 +291,7 @@ func streamKindFromCodecType(typ webrtc.RTPCodecType) types.StreamKind {
 }
 
 func (w *WHIPSource) writePLI(ssrc webrtc.SSRC) {
+	logger.Debugw("sending PLI request", "ssrc", ssrc)
 	pli := []rtcp.Packet{
 		&rtcp.PictureLossIndication{SenderSSRC: uint32(ssrc), MediaSSRC: uint32(ssrc)},
 	}
