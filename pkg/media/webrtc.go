@@ -159,7 +159,7 @@ func (s *WebRTCSink) AddTrack(kind types.StreamKind) (*gst.Bin, error) {
 	var bin *gst.Bin
 
 	switch kind {
-	case Audio:
+	case types.Audio:
 		output, err := s.addAudioTrack()
 		if err != nil {
 			logger.Errorw("could not add audio track", err)
@@ -168,7 +168,7 @@ func (s *WebRTCSink) AddTrack(kind types.StreamKind) (*gst.Bin, error) {
 
 		bin = output.bin
 
-	case Video:
+	case types.Video:
 		outputs, err := s.addVideoTrack()
 		if err != nil {
 			logger.Errorw("could not add video track", err)

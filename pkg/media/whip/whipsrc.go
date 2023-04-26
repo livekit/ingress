@@ -5,6 +5,7 @@ import (
 	"context"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/pion/ice/v2"
 	"github.com/pion/interceptor"
@@ -47,8 +48,10 @@ type WHIPSource struct {
 
 func NewWHIPSource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
 	s := &WHIPSource{
-		params: p,
-		sync:   synchronizer.NewSynchronizer(nil),
+		params:   p,
+		sync:     synchronizer.NewSynchronizer(nil),
+		tracks:   make(map[string]*webrtc.TrackRemote),
+		trackSrc: make(map[types.StreamKind]*WHIPAppSource),
 	}
 
 	logFactory := pionlogger.NewLoggerFactory(logger.GetLogger())
@@ -146,16 +149,20 @@ func (s *WHIPSource) Close() error {
 	return errs.ToError()
 }
 
-func (s *WHIPSource) GetSource(kind types.StreamKind) *app.Source {
+func (s *WHIPSource) GetSources() []*app.Source {
 	s.trackLock.Lock()
 	defer s.trackLock.Unlock()
 
-	src := s.trackSrc[kind]
-	if src != nil {
-		return src.GetAppSource()
+	// TODO callback!
+
+	time.Sleep(1 * time.Second)
+	ret := make([]*app.Source, 0)
+
+	for _, v := range s.trackSrc {
+		ret = append(ret, v.GetAppSource())
 	}
 
-	return nil
+	return ret
 }
 
 func (s *WHIPSource) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnection, error) {
@@ -252,12 +259,12 @@ func (s *WHIPSource) postSDPAnswer(ctx context.Context, sdpAnswer string) error 
 }
 
 func (s *WHIPSource) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
-	logger.Infow("track has started", "type", track.PayloadType(), "codec", track.Codec().MimeType)
+	kind := streamKindFromCodecType(track.Kind())
+	logger.Infow("track has started", "type", track.PayloadType(), "codec", track.Codec().MimeType, "kind", kind)
 
 	s.trackLock.Lock()
 	defer s.trackLock.Unlock()
 	s.tracks[track.ID()] = track
-	kind := streamKindFromCodecType(track.Kind())
 	if _, ok := s.trackSrc[kind]; ok {
 		logger.Warnw("duplicate track of the same kind", errors.ErrUnsupportedDecodeFormat, "kind", kind)
 		return

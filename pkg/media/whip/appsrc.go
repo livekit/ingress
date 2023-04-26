@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"time"
 
@@ -230,18 +231,18 @@ func (w *WHIPAppSource) createSampleBuilder() (*samplebuilder.SampleBuilder, err
 	var maxLate uint16
 	var writePLI func()
 
-	switch w.remoteTrack.Codec().MimeType {
-	case webrtc.MimeTypeVP8:
+	switch strings.ToLower(w.remoteTrack.Codec().MimeType) {
+	case strings.ToLower(webrtc.MimeTypeVP8):
 		depacketizer = &codecs.VP8Packet{}
 		maxLate = maxVideoLate
 		writePLI = func() { w.writePLI(w.remoteTrack.SSRC()) }
 
-	case webrtc.MimeTypeH264:
+	case strings.ToLower(webrtc.MimeTypeH264):
 		depacketizer = &codecs.H264Packet{}
 		maxLate = maxVideoLate
 		writePLI = func() { w.writePLI(w.remoteTrack.SSRC()) }
 
-	case webrtc.MimeTypeOpus:
+	case strings.ToLower(webrtc.MimeTypeOpus):
 		depacketizer = &codecs.OpusPacket{}
 		maxLate = maxAudioLate
 		// No PLI for audio
@@ -256,12 +257,14 @@ func (w *WHIPAppSource) createSampleBuilder() (*samplebuilder.SampleBuilder, err
 	), nil
 }
 func getCapsForCodec(mimeType string) (*gst.Caps, error) {
-	switch mimeType {
-	case webrtc.MimeTypeH264:
+	mt := strings.ToLower(mimeType)
+
+	switch mt {
+	case strings.ToLower(webrtc.MimeTypeH264):
 		return gst.NewCapsFromString("video/x-h264,stream-format=byte-stream,alignment=au"), nil
-	case webrtc.MimeTypeVP8:
+	case strings.ToLower(webrtc.MimeTypeVP8):
 		return gst.NewCapsFromString("video/x-vp8"), nil
-	case webrtc.MimeTypeOpus:
+	case strings.ToLower(webrtc.MimeTypeOpus):
 		return gst.NewCapsFromString("audio/x-opus"), nil
 	}
 

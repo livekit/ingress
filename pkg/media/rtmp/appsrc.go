@@ -11,7 +11,6 @@ import (
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
-	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 )
@@ -91,12 +90,8 @@ func (s *HTTPRelaySource) Close() error {
 	return <-s.result
 }
 
-func (s *HTTPRelaySource) GetSource(kind types.StreamKind) *app.Source {
-	if kind == types.Interleaved {
-		return s.flvSrc
-	} else {
-		return nil
-	}
+func (s *HTTPRelaySource) GetSources() []*app.Source {
+	return []*app.Source{s.flvSrc}
 }
 
 type appSrcWriter struct {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
@@ -69,7 +70,7 @@ func New(ctx context.Context, conf *config.Config, params *params.Params) (*Pipe
 	return p, nil
 }
 
-func (p *Pipeline) onOutputReady(pad *gst.Pad, kind StreamKind) {
+func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 	var err error
 
 	defer func() {

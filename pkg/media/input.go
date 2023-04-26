@@ -19,7 +19,7 @@ import (
 )
 
 type Source interface {
-	GetSource(kind types.StreamKind) *app.Source
+	GetSources() []*app.Source
 	Start(ctx context.Context) error
 	Close() error
 }
@@ -43,7 +43,6 @@ func NewInput(p *params.Params) (*Input, error) {
 	if err != nil {
 		return nil, err
 	}
-	appSrc := src.GetSource(types.Interleaved)
 
 	decodeBin, err := gst.NewElement("decodebin3")
 	if err != nil {
@@ -51,7 +50,7 @@ func NewInput(p *params.Params) (*Input, error) {
 	}
 
 	bin := gst.NewBin("input")
-	if err := bin.AddMany(appSrc.Element, decodeBin); err != nil {
+	if err := bin.Add(decodeBin); err != nil {
 		return nil, err
 	}
 
@@ -64,8 +63,15 @@ func NewInput(p *params.Params) (*Input, error) {
 		return nil, err
 	}
 
-	if err = appSrc.Link(decodeBin); err != nil {
-		return nil, err
+	appSrcs := src.GetSources()
+	for _, appSrc := range appSrcs {
+		if err := bin.Add(appSrc.Element); err != nil {
+			return nil, err
+		}
+
+		if err = appSrc.Link(decodeBin); err != nil {
+			return nil, err
+		}
 	}
 
 	return i, nil
@@ -105,14 +111,14 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 	if strings.HasPrefix(pad.GetName(), "audio") {
 		if i.audioOutput == nil {
 			newPad = true
-			kind = Audio
+			kind = types.Audio
 			i.audioOutput = pad
 			ghostPad = gst.NewGhostPad("audio", pad)
 		}
 	} else if strings.HasPrefix(pad.GetName(), "video") {
 		if i.videoOutput == nil {
 			newPad = true
-			kind = Video
+			kind = types.Video
 			i.videoOutput = pad
 			ghostPad = gst.NewGhostPad("video", pad)
 		}
