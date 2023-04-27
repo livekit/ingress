@@ -39,6 +39,7 @@ type WHIPSource struct {
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
 	expectedTrackCount int
+	result             chan error
 
 	trackLock      sync.Mutex
 	tracks         map[string]*webrtc.TrackRemote
@@ -52,6 +53,7 @@ func NewWHIPSource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
 	s := &WHIPSource{
 		params:   p,
 		sync:     synchronizer.NewSynchronizer(nil),
+		result:   make(chan error, 1),
 		tracks:   make(map[string]*webrtc.TrackRemote),
 		trackSrc: make(map[types.StreamKind]*WHIPAppSource),
 	}
@@ -120,6 +122,9 @@ func NewWHIPSource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
 }
 
 func (s *WHIPSource) Start(ctx context.Context) error {
+	s.trackLock.Lock()
+	defer s.trackLock.Unlock()
+
 	for _, v := range s.trackSrc {
 		err := v.Start()
 		if err != nil {
@@ -131,17 +136,13 @@ func (s *WHIPSource) Start(ctx context.Context) error {
 }
 
 func (s *WHIPSource) Close() error {
-	s.sync.End()
-
-	var errs utils.ErrArray
-	for _, v := range s.trackSrc {
-		err := v.Close()
-		if err != nil {
-			errs.AppendErr(err)
-		}
+	if s.pc == nil {
+		return nil
 	}
 
-	return errs.ToError()
+	s.pc.Close()
+
+	return <-s.result
 }
 
 func (s *WHIPSource) GetSources(ctx context.Context) []*app.Source {
@@ -193,10 +194,28 @@ func (s *WHIPSource) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnecti
 
 	pc.OnTrack(s.addTrack)
 
-	pc.OnConnectionStateChange(func(s webrtc.PeerConnectionState) {
-		logger.Infow("Peer Connection State has changed", "state", s.String())
+	closeOnce := sync.Once{}
+	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
+		logger.Infow("Peer Connection State changed", "state", state.String())
 
-		// TODO handle state change
+		// TODO support ICE Restart
+		if state >= webrtc.PeerConnectionStateDisconnected {
+			closeOnce.Do(func() {
+				s.sync.End()
+
+				var errs utils.ErrArray
+				s.trackLock.Lock()
+				for _, v := range s.trackSrc {
+					err := v.Close()
+					if err != nil {
+						errs.AppendErr(err)
+					}
+				}
+				s.trackLock.Unlock()
+
+				s.result <- errs.ToError()
+			})
+		}
 	})
 
 	return pc, nil

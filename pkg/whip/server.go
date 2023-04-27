@@ -132,6 +132,8 @@ func (s *WHIPServer) SetSDPResponse(resourceId string, sdp string, err error) er
 }
 
 func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request, streamKey string) error {
+	// TODO return ETAG header
+
 	fmt.Println("URL", r.URL, streamKey)
 
 	vars := mux.Vars(r)
