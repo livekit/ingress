@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/tinyzimmer/go-glib/glib"
@@ -14,6 +15,10 @@ import (
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/psrpc"
+)
+
+const (
+	creationTimeout = 10 * time.Second
 )
 
 type Pipeline struct {
@@ -33,12 +38,15 @@ func New(ctx context.Context, conf *config.Config, params *params.Params) (*Pipe
 	ctx, span := tracer.Start(ctx, "Pipeline.New")
 	defer span.End()
 
+	ctx, done := context.WithTimeout(ctx, creationTimeout)
+	defer done()
+
 	// initialize gst
 	gst.Init(nil)
 
 	logger.Debugw("listening", "url", params.Url)
 
-	input, err := NewInput(params)
+	input, err := NewInput(ctx, params)
 	if err != nil {
 		return nil, err
 	}

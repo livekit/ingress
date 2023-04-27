@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/urfave/cli/v2"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -198,7 +199,10 @@ func runHandler(c *cli.Context) error {
 		return err
 	}
 
-	ctx, span := tracer.Start(context.Background(), "Handler.New")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ctx, span := tracer.Start(ctx, "Handler.New")
 	defer span.End()
 	logger.Debugw("handler launched")
 
@@ -260,6 +264,10 @@ func runHandler(c *cli.Context) error {
 		sig := <-killChan
 		logger.Infow("exit requested, stopping all ingress and shutting down", "signal", sig)
 		handler.Kill()
+
+		time.Sleep(10 * time.Second)
+		// If handler didn't exit cleanly after 10s, cancel the context
+		cancel()
 	}()
 
 	wsUrl := conf.WsUrl

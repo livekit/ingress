@@ -90,7 +90,7 @@ func (s *HTTPRelaySource) Close() error {
 	return <-s.result
 }
 
-func (s *HTTPRelaySource) GetSources() []*app.Source {
+func (s *HTTPRelaySource) GetSources(ctx context.Context) []*app.Source {
 	return []*app.Source{s.flvSrc}
 }
 

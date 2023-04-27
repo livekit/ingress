@@ -5,7 +5,6 @@ import (
 	"context"
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/pion/ice/v2"
 	"github.com/pion/interceptor"
@@ -17,7 +16,7 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/logger"
-	pionlogger "github.com/livekit/protocol/logger/pion"
+	"github.com/livekit/protocol/logger/pionlogger"
 	"github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 	"github.com/livekit/server-sdk-go/pkg/synchronizer"
@@ -38,15 +37,19 @@ const (
 type WHIPSource struct {
 	params *params.Params
 
-	pc   *webrtc.PeerConnection
-	sync *synchronizer.Synchronizer
+	pc                 *webrtc.PeerConnection
+	sync               *synchronizer.Synchronizer
+	expectedTrackCount int
 
-	trackLock sync.Mutex
-	tracks    map[string]*webrtc.TrackRemote
-	trackSrc  map[types.StreamKind]*WHIPAppSource
+	trackLock      sync.Mutex
+	tracks         map[string]*webrtc.TrackRemote
+	trackSrc       map[types.StreamKind]*WHIPAppSource
+	trackAddedChan chan *webrtc.TrackRemote
 }
 
 func NewWHIPSource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
+	var err error
+
 	s := &WHIPSource{
 		params:   p,
 		sync:     synchronizer.NewSynchronizer(nil),
@@ -57,7 +60,16 @@ func NewWHIPSource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
 	logFactory := pionlogger.NewLoggerFactory(logger.GetLogger())
 	webrtcSettings := &webrtc.SettingEngine{}
 
-	sdpOffer := p.ExtraParams.(*params.WhipExtraParams).SDPOffer
+	offer := &webrtc.SessionDescription{
+		Type: webrtc.SDPTypeOffer,
+		SDP:  p.ExtraParams.(*params.WhipExtraParams).SDPOffer,
+	}
+	s.expectedTrackCount, err = getExpectedTrackCount(offer)
+	s.trackAddedChan = make(chan *webrtc.TrackRemote, s.expectedTrackCount)
+	if err != nil {
+		return nil, err
+	}
+
 	if p.Whip.ICESinglePort != 0 {
 		logger.Infow("listen ice on single-port", "port", p.Whip.ICESinglePort)
 		opts := []ice.UDPMuxFromPortOption{
@@ -111,7 +123,7 @@ func NewWHIPSource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
 		return nil, err
 	}
 
-	sdpAnswer, err := s.getSDPAnswer(ctx, sdpOffer)
+	sdpAnswer, err := s.getSDPAnswer(ctx, offer)
 	if err != nil {
 		return nil, err
 	}
@@ -149,20 +161,29 @@ func (s *WHIPSource) Close() error {
 	return errs.ToError()
 }
 
-func (s *WHIPSource) GetSources() []*app.Source {
-	time.Sleep(5 * time.Second)
-	s.trackLock.Lock()
-	defer s.trackLock.Unlock()
+func (s *WHIPSource) GetSources(ctx context.Context) []*app.Source {
+	for {
+		s.trackLock.Lock()
+		if len(s.trackSrc) >= s.expectedTrackCount {
+			ret := make([]*app.Source, 0)
 
-	// TODO callback!
+			for _, v := range s.trackSrc {
+				ret = append(ret, v.GetAppSource())
+			}
 
-	ret := make([]*app.Source, 0)
+			s.trackLock.Unlock()
+			return ret
+		}
+		s.trackLock.Unlock()
 
-	for _, v := range s.trackSrc {
-		ret = append(ret, v.GetAppSource())
+		select {
+		case <-ctx.Done():
+			logger.Infow("GetSources cancelled before all sources were ready")
+			return nil
+		case <-s.trackAddedChan:
+			// continue
+		}
 	}
-
-	return ret
 }
 
 func (s *WHIPSource) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnection, error) {
@@ -198,14 +219,9 @@ func (s *WHIPSource) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnecti
 	return pc, nil
 }
 
-func (s *WHIPSource) getSDPAnswer(ctx context.Context, sdpOffer string) (string, error) {
-	offer := webrtc.SessionDescription{
-		Type: webrtc.SDPTypeOffer,
-		SDP:  sdpOffer,
-	}
-
+func (s *WHIPSource) getSDPAnswer(ctx context.Context, offer *webrtc.SessionDescription) (string, error) {
 	// Set the remote SessionDescription
-	err := s.pc.SetRemoteDescription(offer)
+	err := s.pc.SetRemoteDescription(*offer)
 	if err != nil {
 		s.pc.Close()
 		return "", err
@@ -277,6 +293,12 @@ func (s *WHIPSource) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRec
 		return
 	}
 	s.trackSrc[kind] = appSrc
+
+	select {
+	case s.trackAddedChan <- track:
+	default:
+		logger.Warnw("failed notifying of new track", errors.New("channel full"))
+	}
 }
 
 func streamKindFromCodecType(typ webrtc.RTPCodecType) types.StreamKind {
@@ -299,6 +321,15 @@ func (w *WHIPSource) writePLI(ssrc webrtc.SSRC) {
 	if err != nil {
 		logger.Warnw("failed writing PLI", err, "ssrc", ssrc)
 	}
+}
+
+func getExpectedTrackCount(offer *webrtc.SessionDescription) (int, error) {
+	parsed, err := offer.Unmarshal()
+	if err != nil {
+		return 0, err
+	}
+
+	return len(parsed.MediaDescriptions), nil
 }
 
 func newMediaEngine(p *params.Params) (*webrtc.MediaEngine, error) {

@@ -20,7 +20,7 @@ import (
 )
 
 type Source interface {
-	GetSources() []*app.Source
+	GetSources(ctx context.Context) []*app.Source
 	Start(ctx context.Context) error
 	Close() error
 }
@@ -39,7 +39,7 @@ type Input struct {
 
 type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
 
-func NewInput(p *params.Params) (*Input, error) {
+func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 	src, err := CreateSource(p)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,11 @@ func NewInput(p *params.Params) (*Input, error) {
 		source: src,
 	}
 
-	appSrcs := src.GetSources()
+	appSrcs := src.GetSources(ctx)
+	if len(appSrcs) == 0 {
+		return nil, errors.ErrSourceNotReady
+	}
+
 	fmt.Println("SOURCES", appSrcs)
 	for _, appSrc := range appSrcs {
 		decodeBin, err := gst.NewElement("decodebin3")

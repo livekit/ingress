@@ -13,6 +13,7 @@ var (
 	ErrInvalidVideoOptions     = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid video options")
 	ErrInvalidAudioPreset      = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid audio encoding preset")
 	ErrInvalidVideoPreset      = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid video encoding preset")
+	ErrSourceNotReady          = psrpc.NewErrorf(psrpc.FailedPrecondition, "source encoder not ready")
 	ErrInvalidIngressType      = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid ingress type")
 	ErrUnsupportedDecodeFormat = psrpc.NewErrorf(psrpc.InvalidArgument, "unsupported mime type for the source media")
 	ErrUnsupportedEncodeFormat = psrpc.NewErrorf(psrpc.InvalidArgument, "unsupported mime type for encoder")
