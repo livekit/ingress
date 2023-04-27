@@ -18,7 +18,10 @@ const (
 	DefaultRTMPPort      int = 1935
 	DefaultWHIPPort          = 8080
 	DefaultHTTPRelayPort     = 9090
-	DefaultICESinglePort     = 7070
+)
+
+var (
+	DefaultICEPortRange = []uint16{2000, 4000}
 )
 
 type Config struct {
@@ -45,7 +48,6 @@ type Config struct {
 
 type WhipConfig struct {
 	// TODO add IceLite, NAT1To1IPs
-	ICESinglePort           int      `yaml:"ice_single_port"` // when set, all UDP traffic will be muxed to this single UDP port. 7070 by default if no port id set
 	ICEPortRange            []uint16 `yaml:"ice_port_range"`
 	EnableLoopbackCandidate bool     `yaml:"enable_loopback_candidate"`
 }
@@ -99,8 +101,9 @@ func (c *Config) InitWhipConf() error {
 		return nil
 	}
 
-	if c.Whip.ICESinglePort <= 0 && len(c.Whip.ICEPortRange) != 2 {
-		c.Whip.ICESinglePort = DefaultICESinglePort
+	if len(c.Whip.ICEPortRange) != 2 {
+		logger.Infow("using default ICE port range", "range", DefaultICEPortRange)
+		c.Whip.ICEPortRange = DefaultICEPortRange
 	}
 
 	return nil

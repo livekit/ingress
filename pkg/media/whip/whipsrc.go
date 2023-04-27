@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/pion/ice/v2"
 	"github.com/pion/interceptor"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
@@ -57,9 +56,6 @@ func NewWHIPSource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
 		trackSrc: make(map[types.StreamKind]*WHIPAppSource),
 	}
 
-	logFactory := pionlogger.NewLoggerFactory(logger.GetLogger())
-	webrtcSettings := &webrtc.SettingEngine{}
-
 	offer := &webrtc.SessionDescription{
 		Type: webrtc.SDPTypeOffer,
 		SDP:  p.ExtraParams.(*params.WhipExtraParams).SDPOffer,
@@ -70,35 +66,22 @@ func NewWHIPSource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
 		return nil, err
 	}
 
-	if p.Whip.ICESinglePort != 0 {
-		logger.Infow("listen ice on single-port", "port", p.Whip.ICESinglePort)
-		opts := []ice.UDPMuxFromPortOption{
-			ice.UDPMuxFromPortWithReadBufferSize(defaultUDPBufferSize),
-			ice.UDPMuxFromPortWithWriteBufferSize(defaultUDPBufferSize),
-			ice.UDPMuxFromPortWithLogger(logFactory.NewLogger("udp_mux")),
-		}
-		if p.Whip.EnableLoopbackCandidate {
-			opts = append(opts, ice.UDPMuxFromPortWithLoopback())
-		}
-		udpMux, err := ice.NewMultiUDPMuxFromPort(p.Whip.ICESinglePort, opts...)
-		if err != nil {
+	webrtcSettings := &webrtc.SettingEngine{
+		LoggerFactory: pionlogger.NewLoggerFactory(logger.GetLogger()),
+	}
+
+	var icePortStart, icePortEnd uint16
+
+	if len(p.Whip.ICEPortRange) == 2 {
+		icePortStart = p.Whip.ICEPortRange[0]
+		icePortEnd = p.Whip.ICEPortRange[1]
+	}
+	if icePortStart != 0 || icePortEnd != 0 {
+		if err := webrtcSettings.SetEphemeralUDPPortRange(icePortStart, icePortEnd); err != nil {
 			return nil, err
 		}
-
-		webrtcSettings.SetICEUDPMux(udpMux)
-	} else {
-		var icePortStart, icePortEnd uint16
-
-		if len(p.Whip.ICEPortRange) == 2 {
-			icePortStart = p.Whip.ICEPortRange[0]
-			icePortEnd = p.Whip.ICEPortRange[1]
-		}
-		if icePortStart != 0 || icePortEnd != 0 {
-			if err := webrtcSettings.SetEphemeralUDPPortRange(icePortStart, icePortEnd); err != nil {
-				return nil, err
-			}
-		}
 	}
+	webrtcSettings.SetIncludeLoopbackCandidate(p.Whip.EnableLoopbackCandidate)
 
 	m, err := newMediaEngine(p)
 	if err != nil {

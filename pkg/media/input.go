@@ -56,7 +56,6 @@ func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 		return nil, errors.ErrSourceNotReady
 	}
 
-	fmt.Println("SOURCES", appSrcs)
 	for _, appSrc := range appSrcs {
 		decodeBin, err := gst.NewElement("decodebin3")
 		if err != nil {
