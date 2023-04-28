@@ -2,6 +2,7 @@ package whip
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 )
@@ -21,11 +23,13 @@ import (
 
 const (
 	sdpResponseTimeout = 5 * time.Second
+	rpcTimeout         = 5 * time.Second
 )
 
 type WHIPServer struct {
 	onPublish func(streamKey, resourceId, sdpOffer string) error
 	handlers  sync.Map
+	rpcClient rpc.IngressHandlerClient
 }
 
 type handler struct {
@@ -37,8 +41,10 @@ type sdpRes struct {
 	err error
 }
 
-func NewWHIPServer() *WHIPServer {
-	return &WHIPServer{}
+func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
+	return &WHIPServer{
+		rpcClient: rpcClient,
+	}
 }
 
 func (s *WHIPServer) handleError(err error, w http.ResponseWriter) {
@@ -87,13 +93,29 @@ func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 		err = s.handleNewWhipClient(w, r, streamKey)
 	}).Methods("POST")
 
+	// End
 	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
-		// RPC call
+		var err error
+		defer func() {
+			s.handleError(err, w)
+		}()
+
+		vars := mux.Vars(r)
+		resourceID := vars["resource_id"]
+
+		logger.Infow("handling WHIP delete request", "resourceID", resourceID)
+
+		req := &rpc.DeleteWHIPResourceRequest{
+			ResourceId: resourceID,
+		}
+
+		_, err = s.rpcClient.DeleteWHIPResource(context.Background(), resourceID, req, psrpc.WithRequestTimeout(5*time.Second))
 	}).Methods("DELETE")
 
-	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
-		// RPC call
-	}).Methods("PATCH")
+	// Trickle, ICE Restart
+	//	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
+	//		// RPC call
+	//	}).Methods("PATCH")
 
 	hs := &http.Server{
 		Addr:         fmt.Sprintf(":%d", conf.WHIPPort),

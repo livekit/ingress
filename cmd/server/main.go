@@ -122,7 +122,12 @@ func runService(c *cli.Context) error {
 		rtmpsrv = rtmp.NewRTMPServer()
 	}
 	if conf.WHIPPort > 0 {
-		whipsrv = whip.NewWHIPServer()
+		psrpcWHIPClient, err := rpc.NewIngressHandlerClient(conf.NodeID, bus)
+		if err != nil {
+			return err
+		}
+
+		whipsrv = whip.NewWHIPServer(psrpcWHIPClient)
 	}
 
 	relay := service.NewRelay(rtmpsrv, whipsrv)
