@@ -228,7 +228,6 @@ func (w *WHIPAppSource) startRTCPReceiver() {
 				}
 			}
 		}
-
 	}()
 }
 

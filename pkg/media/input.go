@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/tinyzimmer/go-gst/gst"
 	"github.com/tinyzimmer/go-gst/gst/app"
@@ -39,7 +38,7 @@ type Input struct {
 type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
 
 func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
-	src, err := CreateSource(p)
+	src, err := CreateSource(ctx, p)
 	if err != nil {
 		return nil, err
 	}
@@ -77,13 +76,11 @@ func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 	return i, nil
 }
 
-func CreateSource(p *params.Params) (Source, error) {
+func CreateSource(ctx context.Context, p *params.Params) (Source, error) {
 	switch p.IngressInfo.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		return rtmp.NewHTTPRelaySource(context.Background(), p)
+		return rtmp.NewHTTPRelaySource(ctx, p)
 	case livekit.IngressInput_WHIP_INPUT:
-		ctx, done := context.WithTimeout(context.Background(), 5*time.Second)
-		defer done()
 		return whip.NewWHIPSource(ctx, p)
 	default:
 		return nil, errors.ErrInvalidIngressType
