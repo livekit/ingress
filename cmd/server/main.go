@@ -246,16 +246,7 @@ func runHandler(c *cli.Context) error {
 	}
 	handler = service.NewHandler(conf, rpcClient)
 
-	rpcServer, err := rpc.NewIngressHandlerServer(conf.NodeID, handler.(*service.Handler), bus)
-	if err != nil {
-		return err
-	}
-	if err := rpcServer.RegisterUpdateIngressTopic(info.IngressId); err != nil {
-		return err
-	}
-	if err := rpcServer.RegisterDeleteIngressTopic(info.IngressId); err != nil {
-		return err
-	}
+	setupHandlerRPCHandlers(conf, handler.(*service.Handler), bus, info, ep)
 
 	killChan := make(chan os.Signal, 1)
 	signal.Notify(killChan, syscall.SIGINT)
@@ -276,6 +267,29 @@ func runHandler(c *cli.Context) error {
 	}
 
 	handler.HandleIngress(ctx, info, wsUrl, token, ep)
+	return nil
+}
+
+func setupHandlerRPCHandlers(conf *config.Config, handler *service.Handler, bus psrpc.MessageBus, info *livekit.IngressInfo, ep any) error {
+	rpcServer, err := rpc.NewIngressHandlerServer(conf.NodeID, handler, bus)
+	if err != nil {
+		return err
+	}
+	if err := rpcServer.RegisterUpdateIngressTopic(info.IngressId); err != nil {
+		return err
+	}
+	if err := rpcServer.RegisterDeleteIngressTopic(info.IngressId); err != nil {
+		return err
+	}
+
+	if info.InputType == livekit.IngressInput_WHIP_INPUT {
+		resourceId := ep.(*params.WhipExtraParams).ResourceId
+
+		if err := rpcServer.RegisterDeleteWHIPResourceTopic(resourceId); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

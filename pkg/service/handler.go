@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 
+	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
@@ -86,6 +88,15 @@ func (h *Handler) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressR
 	_, span := tracer.Start(ctx, "Handler.DeleteIngress")
 	defer span.End()
 	return h.killAndReturnState(ctx)
+}
+
+func (h *Handler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {
+	_, span := tracer.Start(ctx, "Handler.DeleteWHIPResource")
+	defer span.End()
+
+	h.killAndReturnState(ctx)
+
+	return &google_protobuf2.Empty{}, nil
 }
 
 func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string, extraParams any) (*media.Pipeline, error) {
