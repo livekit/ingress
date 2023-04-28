@@ -2,10 +2,6 @@ module github.com/livekit/ingress
 
 replace github.com/livekit/protocol => ../protocol
 
-replace github.com/livekit/server-sdk-go => ../server-sdk-go
-
-replace github.com/livekit/psrpc => ../psrpc
-
 go 1.18
 
 require (
@@ -15,7 +11,7 @@ require (
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/protocol v1.5.5
 	github.com/livekit/psrpc v0.3.0
-	github.com/livekit/server-sdk-go v1.0.9-0.20230314192457-52c28d42b5d4
+	github.com/livekit/server-sdk-go v1.0.11-0.20230428163439-17d5bea0992f
 	github.com/pion/ice/v2 v2.3.2
 	github.com/pion/interceptor v0.1.13
 	github.com/pion/rtcp v1.2.10
