@@ -177,11 +177,6 @@ func (w *WHIPAppSource) processRTPPacket() error {
 			return err
 		}
 
-		//			for _, b := range s.Data {
-		//				fmt.Printf("0x%02x ", b)
-		//			}
-		//			fmt.Println("")
-
 		b := gst.NewBufferFromBytes(s.Data)
 		b.SetPresentationTimestamp(ts)
 

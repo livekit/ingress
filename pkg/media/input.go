@@ -2,7 +2,6 @@ package media
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -104,7 +103,6 @@ func (i *Input) Close() error {
 }
 
 func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
-	fmt.Println("ONPADADDED", pad.GetName())
 	// surface callback for first audio and video pads, plug in fakesink on the rest
 	i.lock.Lock()
 	newPad := false

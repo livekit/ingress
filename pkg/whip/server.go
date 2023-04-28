@@ -19,8 +19,6 @@ import (
 	"github.com/livekit/psrpc"
 )
 
-// TODO CORS
-
 const (
 	sdpResponseTimeout = 5 * time.Second
 	rpcTimeout         = 5 * time.Second
@@ -147,8 +145,6 @@ func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 }
 
 func (s *WHIPServer) SetSDPResponse(resourceId string, sdp string, err error) error {
-	fmt.Println("SetSDPResponse", resourceId, sdp, err)
-
 	entry, ok := s.handlers.Load(resourceId)
 	if !ok {
 		return psrpc.NewErrorf(psrpc.NotFound, "unknown resource id")
@@ -167,8 +163,6 @@ func (s *WHIPServer) SetSDPResponse(resourceId string, sdp string, err error) er
 
 func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request, streamKey string) error {
 	// TODO return ETAG header
-
-	fmt.Println("URL", r.URL, streamKey)
 
 	vars := mux.Vars(r)
 	app := vars["app"]

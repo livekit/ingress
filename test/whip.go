@@ -21,7 +21,7 @@ import (
 
 // TODO bundle tool
 const (
-	whipClientPath = "/Users/bigben/go/src/github.com/cloudwebrtc/livekit-whip-bot/cmd/whip-client/whip-client"
+	whipClientPath = "whip-client"
 )
 
 func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {

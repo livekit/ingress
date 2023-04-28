@@ -24,10 +24,8 @@ import (
 // TODO STUN & TURN
 // TODO pion log level
 // TODO handle ICE never succeeding / data never coming
-// TODO Cleanup
 
 const (
-	// TODO: 2 for audio and video
 	WHIPAppSourceLabel   = "whipAppSrc"
 	defaultUDPBufferSize = 16_777_216
 	whipIdentity         = "WHIPIngress"
