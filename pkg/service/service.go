@@ -12,6 +12,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/version"
 	"github.com/livekit/protocol/ingress"
@@ -23,6 +24,13 @@ import (
 
 const shutdownTimer = time.Second * 5
 
+type publishRequest struct {
+	streamKey   string
+	inputType   livekit.IngressInput
+	extraParams any
+	result      chan<- error
+}
+
 type Service struct {
 	conf    *config.Config
 	monitor *stats.Monitor
@@ -32,20 +40,20 @@ type Service struct {
 
 	promServer *http.Server
 
-	rtmpPublishRequests chan rtmpPublishRequest
-	shutdown            core.Fuse
+	publishRequests chan publishRequest
+	shutdown        core.Fuse
 }
 
 func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient) *Service {
 	monitor := stats.NewMonitor()
 
 	s := &Service{
-		conf:                conf,
-		monitor:             monitor,
-		manager:             NewProcessManager(conf, monitor),
-		psrpcClient:         psrpcClient,
-		rtmpPublishRequests: make(chan rtmpPublishRequest),
-		shutdown:            core.NewFuse(),
+		conf:            conf,
+		monitor:         monitor,
+		manager:         NewProcessManager(conf, monitor),
+		psrpcClient:     psrpcClient,
+		publishRequests: make(chan publishRequest, 5),
+		shutdown:        core.NewFuse(),
 	}
 
 	s.manager.onFatalError(func(info *livekit.IngressInfo, err error) {
@@ -66,21 +74,43 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient) *Service {
 
 func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 	res := make(chan error)
-	r := rtmpPublishRequest{
+	r := publishRequest{
 		streamKey: streamKey,
+		inputType: livekit.IngressInput_RTMP_INPUT,
 		result:    res,
 	}
 
 	select {
 	case <-s.shutdown.Watch():
 		return errors.ErrServerShuttingDown
-	case s.rtmpPublishRequests <- r:
+	case s.publishRequests <- r:
 		err := <-res
 		return err
 	}
 }
 
-func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) (*livekit.IngressInfo, error) {
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId, sdpOffer string) error {
+	res := make(chan error)
+	r := publishRequest{
+		streamKey: streamKey,
+		inputType: livekit.IngressInput_WHIP_INPUT,
+		extraParams: params.WhipExtraParams{
+			ResourceId: resourceId,
+			SDPOffer:   sdpOffer,
+		},
+		result: res,
+	}
+
+	select {
+	case <-s.shutdown.Watch():
+		return errors.ErrServerShuttingDown
+	case s.publishRequests <- r:
+		err := <-res
+		return err
+	}
+}
+
+func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inputType livekit.IngressInput, extraParams any) (*livekit.IngressInfo, error) {
 	resp, err := s.psrpcClient.GetIngressInfo(ctx, &rpc.GetIngressInfoRequest{
 		StreamKey: streamKey,
 	})
@@ -91,6 +121,10 @@ func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) 
 	err = ingress.Validate(resp.Info)
 	if err != nil {
 		return resp.Info, err
+	}
+
+	if inputType != resp.Info.InputType {
+		return nil, errors.ErrInvalidIngressType
 	}
 
 	// check cpu load
@@ -104,7 +138,7 @@ func (s *Service) handleNewRTMPPublisher(ctx context.Context, streamKey string) 
 		StartedAt: time.Now().UnixNano(),
 	}
 
-	go s.manager.launchHandler(ctx, resp)
+	go s.manager.launchHandler(ctx, resp, extraParams)
 
 	return resp.Info, nil
 }
@@ -136,10 +170,10 @@ func (s *Service) Run() error {
 				time.Sleep(shutdownTimer)
 			}
 			return nil
-		case req := <-s.rtmpPublishRequests:
+		case req := <-s.publishRequests:
 			go func() {
 				ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
-				info, err := s.handleNewRTMPPublisher(ctx, req.streamKey)
+				info, err := s.handleNewPublisher(ctx, req.streamKey, req.inputType, req.extraParams)
 				if info != nil {
 					s.sendUpdate(ctx, info, err)
 				}

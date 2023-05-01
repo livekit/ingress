@@ -1,4 +1,4 @@
-package media
+package rtmp
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"go.uber.org/atomic"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 )
@@ -19,14 +20,14 @@ const (
 )
 
 type HTTPRelaySource struct {
-	params *Params
+	params *params.Params
 
 	flvSrc *app.Source
 	writer *appSrcWriter
 	result chan error
 }
 
-func NewHTTPRelaySource(ctx context.Context, p *Params) (*HTTPRelaySource, error) {
+func NewHTTPRelaySource(ctx context.Context, p *params.Params) (*HTTPRelaySource, error) {
 	ctx, span := tracer.Start(ctx, "HTTPRelaySource.New")
 	defer span.End()
 
@@ -89,8 +90,8 @@ func (s *HTTPRelaySource) Close() error {
 	return <-s.result
 }
 
-func (s *HTTPRelaySource) GetSource() *app.Source {
-	return s.flvSrc
+func (s *HTTPRelaySource) GetSources(ctx context.Context) []*app.Source {
+	return []*app.Source{s.flvSrc}
 }
 
 type appSrcWriter struct {

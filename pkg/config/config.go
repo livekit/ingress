@@ -16,7 +16,12 @@ import (
 
 const (
 	DefaultRTMPPort      int = 1935
+	DefaultWHIPPort          = 8080
 	DefaultHTTPRelayPort     = 9090
+)
+
+var (
+	DefaultICEPortRange = []uint16{2000, 4000}
 )
 
 type Config struct {
@@ -27,9 +32,12 @@ type Config struct {
 
 	HealthPort     int           `yaml:"health_port"`
 	PrometheusPort int           `yaml:"prometheus_port"`
-	RTMPPort       int           `yaml:"rtmp_port"`
+	RTMPPort       int           `yaml:"rtmp_port"` // -1 to disable RTMP
+	WHIPPort       int           `yaml:"whip_port"` // -1 to disable WHIP
 	HTTPRelayPort  int           `yaml:"http_relay_port"`
 	Logging        logger.Config `yaml:"logging"`
+
+	Whip WhipConfig `yaml:"whip"`
 
 	// CPU costs for various ingress types
 	CPUCost CPUCostConfig `yaml:"cpu_cost"`
@@ -38,8 +46,15 @@ type Config struct {
 	NodeID string `yaml:"-"`
 }
 
+type WhipConfig struct {
+	// TODO add IceLite, NAT1To1IPs
+	ICEPortRange            []uint16 `yaml:"ice_port_range"`
+	EnableLoopbackCandidate bool     `yaml:"enable_loopback_candidate"`
+}
+
 type CPUCostConfig struct {
 	RTMPCpuCost float64 `yaml:"rtmp_cpu_cost"`
+	WHIPCpuCost float64 `yaml:"whip_cpu_cost"`
 }
 
 func NewConfig(confString string) (*Config, error) {
@@ -61,6 +76,14 @@ func NewConfig(confString string) (*Config, error) {
 	if conf.HTTPRelayPort == 0 {
 		conf.HTTPRelayPort = DefaultHTTPRelayPort
 	}
+	if conf.WHIPPort == 0 {
+		conf.WHIPPort = DefaultWHIPPort
+	}
+
+	err := conf.InitWhipConf()
+	if err != nil {
+		return nil, err
+	}
 
 	if conf.Redis == nil {
 		return nil, psrpc.NewErrorf(psrpc.InvalidArgument, "redis configuration is required")
@@ -71,6 +94,19 @@ func NewConfig(confString string) (*Config, error) {
 	}
 
 	return conf, nil
+}
+
+func (c *Config) InitWhipConf() error {
+	if c.WHIPPort <= 0 {
+		return nil
+	}
+
+	if len(c.Whip.ICEPortRange) != 2 {
+		logger.Infow("using default ICE port range", "range", DefaultICEPortRange)
+		c.Whip.ICEPortRange = DefaultICEPortRange
+	}
+
+	return nil
 }
 
 func (c *Config) InitLogger(values ...interface{}) error {

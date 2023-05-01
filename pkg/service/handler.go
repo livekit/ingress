@@ -3,10 +3,13 @@ package service
 import (
 	"context"
 
+	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
@@ -30,11 +33,11 @@ func NewHandler(conf *config.Config, rpcClient rpc.IOInfoClient) *Handler {
 	}
 }
 
-func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl string, token string) {
+func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string, extraParams any) {
 	ctx, span := tracer.Start(ctx, "Handler.HandleRequest")
 	defer span.End()
 
-	p, err := h.buildPipeline(ctx, info, wsUrl, token)
+	p, err := h.buildPipeline(ctx, info, wsUrl, token, extraParams)
 	if err != nil {
 		span.RecordError(err)
 		return
@@ -87,13 +90,22 @@ func (h *Handler) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressR
 	return h.killAndReturnState(ctx)
 }
 
-func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl string, token string) (*media.Pipeline, error) {
+func (h *Handler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {
+	_, span := tracer.Start(ctx, "Handler.DeleteWHIPResource")
+	defer span.End()
+
+	h.killAndReturnState(ctx)
+
+	return &google_protobuf2.Empty{}, nil
+}
+
+func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string, extraParams any) (*media.Pipeline, error) {
 	ctx, span := tracer.Start(ctx, "Handler.buildPipeline")
 	defer span.End()
 
 	// build/verify params
 	var p *media.Pipeline
-	params, err := media.GetParams(ctx, h.conf, info, wsUrl, token)
+	params, err := params.GetParams(ctx, h.conf, info, wsUrl, token, extraParams)
 	if err == nil {
 		// create the pipeline
 		p, err = media.New(ctx, h.conf, params)

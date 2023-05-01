@@ -8,6 +8,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/rtmp"
+	"github.com/livekit/ingress/pkg/service"
 	"github.com/livekit/protocol/logger"
 )
 
@@ -18,7 +19,7 @@ func main() {
 	}
 
 	rtmpServer := rtmp.NewRTMPServer()
-	relay := rtmp.NewRTMPRelay(rtmpServer)
+	relay := service.NewRelay(rtmpServer)
 
 	err := rtmpServer.Start(conf, nil)
 	if err != nil {

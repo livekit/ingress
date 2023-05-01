@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"sync"
@@ -25,11 +26,6 @@ type process struct {
 	closed core.Fuse
 }
 
-type rtmpPublishRequest struct {
-	streamKey string
-	result    chan<- error
-}
-
 type ProcessManager struct {
 	conf    *config.Config
 	monitor *stats.Monitor
@@ -51,7 +47,7 @@ func (s *ProcessManager) onFatalError(f func(info *livekit.IngressInfo, err erro
 	s.onFatal = f
 }
 
-func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngressInfoResponse) {
+func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngressInfoResponse, extraParams any) {
 	// TODO send update on failure
 	_, span := tracer.Start(ctx, "Service.launchHandler")
 	defer span.End()
@@ -70,6 +66,16 @@ func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngress
 		return
 	}
 
+	extraParamsString := ""
+	if extraParams != nil {
+		p, err := json.Marshal(extraParams)
+		if err != nil {
+			span.RecordError(err)
+			logger.Errorw("could not marshall extra parameters", err)
+		}
+		extraParamsString = string(p)
+	}
+
 	args := []string{
 		"run-handler",
 		"--config-body", string(confString),
@@ -81,6 +87,9 @@ func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngress
 	}
 	if resp.Token != "" {
 		args = append(args, "--token", resp.Token)
+	}
+	if extraParamsString != "" {
+		args = append(args, "--extra-params", extraParamsString)
 	}
 
 	cmd := exec.Command("ingress",

@@ -2,20 +2,24 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/urfave/cli/v2"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
+	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/ingress/version"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -30,7 +34,7 @@ func main() {
 		Name:        "ingress",
 		Usage:       "LiveKit Ingress",
 		Version:     version.Version,
-		Description: "import RTMP to LiveKit",
+		Description: "import streamed media to LiveKit",
 		Commands: []*cli.Command{
 			{
 				Name:        "run-handler",
@@ -47,6 +51,9 @@ func main() {
 					},
 					&cli.StringFlag{
 						Name: "ws-url",
+					},
+					&cli.StringFlag{
+						Name: "extra-params",
 					},
 				},
 				Action: runHandler,
@@ -108,14 +115,36 @@ func runService(c *cli.Context) error {
 	killChan := make(chan os.Signal, 1)
 	signal.Notify(killChan, syscall.SIGINT)
 
-	// Run RTMP server
-	rtmpsrv := rtmp.NewRTMPServer()
-	relay := rtmp.NewRTMPRelay(rtmpsrv)
-
-	err = rtmpsrv.Start(conf, svc.HandleRTMPPublishRequest)
-	if err != nil {
-		return err
+	var rtmpsrv *rtmp.RTMPServer
+	var whipsrv *whip.WHIPServer
+	if conf.RTMPPort > 0 {
+		// Run RTMP server
+		rtmpsrv = rtmp.NewRTMPServer()
 	}
+	if conf.WHIPPort > 0 {
+		psrpcWHIPClient, err := rpc.NewIngressHandlerClient(conf.NodeID, bus)
+		if err != nil {
+			return err
+		}
+
+		whipsrv = whip.NewWHIPServer(psrpcWHIPClient)
+	}
+
+	relay := service.NewRelay(rtmpsrv, whipsrv)
+
+	if rtmpsrv != nil {
+		err = rtmpsrv.Start(conf, svc.HandleRTMPPublishRequest)
+		if err != nil {
+			return err
+		}
+	}
+	if whipsrv != nil {
+		err = whipsrv.Start(conf, svc.HandleWHIPPublishRequest)
+		if err != nil {
+			return err
+		}
+	}
+
 	err = relay.Start(conf)
 	if err != nil {
 		return err
@@ -131,7 +160,9 @@ func runService(c *cli.Context) error {
 			logger.Infow("exit requested, stopping all ingress and shutting down", "signal", sig)
 			svc.Stop(true)
 			relay.Stop()
-			rtmpsrv.Stop()
+			if rtmpsrv != nil {
+				rtmpsrv.Stop()
+			}
 		}
 	}()
 
@@ -173,7 +204,10 @@ func runHandler(c *cli.Context) error {
 		return err
 	}
 
-	ctx, span := tracer.Start(context.Background(), "Handler.New")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	ctx, span := tracer.Start(ctx, "Handler.New")
 	defer span.End()
 	logger.Debugw("handler launched")
 
@@ -191,11 +225,23 @@ func runHandler(c *cli.Context) error {
 		return err
 	}
 
+	extraParams := c.String("extra-params")
+	var ep any
+	switch info.InputType {
+	case livekit.IngressInput_WHIP_INPUT:
+		whipParams := params.WhipExtraParams{}
+		err := json.Unmarshal([]byte(extraParams), &whipParams)
+		if err != nil {
+			return err
+		}
+		ep = &whipParams
+	}
+
 	token := c.String("token")
 
 	var handler interface {
 		Kill()
-		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string)
+		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string, extraParams any)
 	}
 
 	bus := psrpc.NewRedisMessageBus(rc)
@@ -205,7 +251,32 @@ func runHandler(c *cli.Context) error {
 	}
 	handler = service.NewHandler(conf, rpcClient)
 
-	rpcServer, err := rpc.NewIngressHandlerServer(conf.NodeID, handler.(*service.Handler), bus)
+	setupHandlerRPCHandlers(conf, handler.(*service.Handler), bus, info, ep)
+
+	killChan := make(chan os.Signal, 1)
+	signal.Notify(killChan, syscall.SIGINT)
+
+	go func() {
+		sig := <-killChan
+		logger.Infow("exit requested, stopping all ingress and shutting down", "signal", sig)
+		handler.Kill()
+
+		time.Sleep(10 * time.Second)
+		// If handler didn't exit cleanly after 10s, cancel the context
+		cancel()
+	}()
+
+	wsUrl := conf.WsUrl
+	if c.String("ws-url") != "" {
+		wsUrl = c.String("ws-url")
+	}
+
+	handler.HandleIngress(ctx, info, wsUrl, token, ep)
+	return nil
+}
+
+func setupHandlerRPCHandlers(conf *config.Config, handler *service.Handler, bus psrpc.MessageBus, info *livekit.IngressInfo, ep any) error {
+	rpcServer, err := rpc.NewIngressHandlerServer(conf.NodeID, handler, bus)
 	if err != nil {
 		return err
 	}
@@ -216,21 +287,14 @@ func runHandler(c *cli.Context) error {
 		return err
 	}
 
-	killChan := make(chan os.Signal, 1)
-	signal.Notify(killChan, syscall.SIGINT)
+	if info.InputType == livekit.IngressInput_WHIP_INPUT {
+		resourceId := ep.(*params.WhipExtraParams).ResourceId
 
-	go func() {
-		sig := <-killChan
-		logger.Infow("exit requested, stopping all ingress and shutting down", "signal", sig)
-		handler.Kill()
-	}()
-
-	wsUrl := conf.WsUrl
-	if c.String("ws-url") != "" {
-		wsUrl = c.String("ws-url")
+		if err := rpcServer.RegisterDeleteWHIPResourceTopic(resourceId); err != nil {
+			return err
+		}
 	}
 
-	handler.HandleIngress(ctx, info, wsUrl, token)
 	return nil
 }
 

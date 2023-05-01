@@ -1,48 +1,14 @@
 package rtmp
 
 import (
-	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
-	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/psrpc"
 )
-
-type RTMPRelay struct {
-	server     *http.Server
-	rtmpServer *RTMPServer
-}
-
-func NewRTMPRelay(rtmpServer *RTMPServer) *RTMPRelay {
-	return &RTMPRelay{
-		rtmpServer: rtmpServer,
-	}
-}
-
-func (r *RTMPRelay) Start(conf *config.Config) error {
-	port := conf.HTTPRelayPort
-
-	h := NewRTMPRelayHandler(r.rtmpServer)
-	r.server = &http.Server{
-		Handler: h,
-		Addr:    fmt.Sprintf(":%d", port),
-	}
-
-	go func() {
-		err := r.server.ListenAndServe()
-		logger.Debugw("RTMP relay stopped", "error", err)
-	}()
-
-	return nil
-}
-
-func (r *RTMPRelay) Stop() error {
-	return r.server.Close()
-}
 
 type RTMPRelayHandler struct {
 	rtmpServer *RTMPServer
@@ -69,7 +35,7 @@ func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	streamKey := strings.TrimLeft(r.URL.Path, "/")
+	streamKey := strings.TrimLeft(r.URL.Path, "/rtmp/")
 
 	log := logger.Logger(logger.GetLogger().WithValues("streamKey", streamKey))
 	log.Infow("relaying ingress")

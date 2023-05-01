@@ -2,20 +2,27 @@ package media
 
 import (
 	"context"
+	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/tinyzimmer/go-glib/glib"
 	"github.com/tinyzimmer/go-gst/gst"
 
 	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/psrpc"
 )
 
+const (
+	creationTimeout = 10 * time.Second
+)
+
 type Pipeline struct {
-	*Params
+	*params.Params
 
 	// gstreamer
 	pipeline *gst.Pipeline
@@ -27,16 +34,19 @@ type Pipeline struct {
 	closed         core.Fuse
 }
 
-func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, error) {
+func New(ctx context.Context, conf *config.Config, params *params.Params) (*Pipeline, error) {
 	ctx, span := tracer.Start(ctx, "Pipeline.New")
 	defer span.End()
+
+	ctx, done := context.WithTimeout(ctx, creationTimeout)
+	defer done()
 
 	// initialize gst
 	gst.Init(nil)
 
 	logger.Debugw("listening", "url", params.Url)
 
-	input, err := NewInput(params)
+	input, err := NewInput(ctx, params)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +78,7 @@ func New(ctx context.Context, conf *config.Config, params *Params) (*Pipeline, e
 	return p, nil
 }
 
-func (p *Pipeline) onOutputReady(pad *gst.Pad, kind StreamKind) {
+func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 	var err error
 
 	defer func() {

@@ -89,8 +89,17 @@ func (m *Monitor) checkCPUConfig(costConfig config.CPUCostConfig) error {
 		)
 	}
 
+	if costConfig.WHIPCpuCost < 1 {
+		logger.Warnw("whip input requirement too low", nil,
+			"config value", costConfig.WHIPCpuCost,
+			"minimum value", 1,
+			"recommended value", 2,
+		)
+	}
+
 	requirements := []float64{
 		costConfig.RTMPCpuCost,
+		costConfig.WHIPCpuCost,
 	}
 	sort.Float64s(requirements)
 	m.maxCost = requirements[len(requirements)-1]
@@ -141,6 +150,10 @@ func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 	case livekit.IngressInput_RTMP_INPUT:
 		accept = available > m.cpuCostConfig.RTMPCpuCost
 		cpuHold = m.cpuCostConfig.RTMPCpuCost
+	case livekit.IngressInput_WHIP_INPUT:
+		accept = available > m.cpuCostConfig.WHIPCpuCost
+		cpuHold = m.cpuCostConfig.WHIPCpuCost
+
 	default:
 		logger.Errorw("unsupported request type", errors.New("invalid parameter"))
 	}

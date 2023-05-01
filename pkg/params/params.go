@@ -1,4 +1,4 @@
-package media
+package params
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 )
 
 type Params struct {
+	*config.Config
 	*livekit.IngressInfo
 
 	AudioEncodingOptions *livekit.IngressAudioEncodingOptions
@@ -24,12 +25,30 @@ type Params struct {
 
 	// relay info
 	RelayUrl string
+
+	// Input type specific private parameters
+	ExtraParams any
 }
 
-func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressInfo, wsUrl string, token string) (*Params, error) {
+type WhipExtraParams struct {
+	SDPOffer   string `json:"sdp_offer"`
+	ResourceId string `json:"resource_id"`
+}
+
+func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressInfo, wsUrl, token string, ep any) (*Params, error) {
 	var err error
 
-	err = conf.InitLogger("ingressID", info.IngressId)
+	relayUrl := ""
+	fields := []interface{}{"ingressID", info.IngressId}
+	switch info.InputType {
+	case livekit.IngressInput_RTMP_INPUT:
+		relayUrl = getRTMPRelayUrl(conf, info.StreamKey)
+	case livekit.IngressInput_WHIP_INPUT:
+		fields = append(fields, "resourceID", ep.(*WhipExtraParams).ResourceId)
+		relayUrl = getWHIPRelayUrl(conf, ep.(*WhipExtraParams).ResourceId)
+	}
+
+	err = conf.InitLogger(fields...)
 	if err != nil {
 		return nil, err
 	}
@@ -76,18 +95,24 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 
 	p := &Params{
 		IngressInfo:          infoCopy,
+		Config:               conf,
 		AudioEncodingOptions: audioEncodingOptions,
 		VideoEncodingOptions: videoEncodingOptions,
 		Token:                token,
 		WsUrl:                wsUrl,
-		RelayUrl:             getRelayUrl(conf, info.StreamKey),
+		RelayUrl:             relayUrl,
+		ExtraParams:          ep,
 	}
 
 	return p, nil
 }
 
-func getRelayUrl(conf *config.Config, streamKey string) string {
-	return fmt.Sprintf("http://localhost:%d/%s", conf.HTTPRelayPort, streamKey)
+func getRTMPRelayUrl(conf *config.Config, streamKey string) string {
+	return fmt.Sprintf("http://localhost:%d/rtmp/%s", conf.HTTPRelayPort, streamKey)
+}
+
+func getWHIPRelayUrl(conf *config.Config, resourceId string) string {
+	return fmt.Sprintf("http://localhost:%d/whip/%s", conf.HTTPRelayPort, resourceId)
 }
 
 func getAudioEncodingOptions(options *livekit.IngressAudioOptions) (*livekit.IngressAudioEncodingOptions, error) {

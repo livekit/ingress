@@ -8,6 +8,8 @@ import (
 	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst"
 
+	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/protocol/utils"
@@ -17,10 +19,10 @@ import (
 type WebRTCSink struct {
 	room *lksdk.Room
 
-	params *Params
+	params *params.Params
 }
 
-func NewWebRTCSink(ctx context.Context, p *Params) (*WebRTCSink, error) {
+func NewWebRTCSink(ctx context.Context, p *params.Params) (*WebRTCSink, error) {
 	ctx, span := tracer.Start(ctx, "media.NewWebRTCSink")
 	defer span.End()
 
@@ -153,11 +155,11 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 	return outputs, nil
 }
 
-func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
+func (s *WebRTCSink) AddTrack(kind types.StreamKind) (*gst.Bin, error) {
 	var bin *gst.Bin
 
 	switch kind {
-	case Audio:
+	case types.Audio:
 		output, err := s.addAudioTrack()
 		if err != nil {
 			logger.Errorw("could not add audio track", err)
@@ -166,7 +168,7 @@ func (s *WebRTCSink) AddTrack(kind StreamKind) (*gst.Bin, error) {
 
 		bin = output.bin
 
-	case Video:
+	case types.Video:
 		outputs, err := s.addVideoTrack()
 		if err != nil {
 			logger.Errorw("could not add video track", err)
