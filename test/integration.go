@@ -76,7 +76,7 @@ func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 	if !conf.WhipOnly {
 		RunRTMPTest(t, conf, bus)
 	}
-	//	if !conf.RtmpOnly {
-	//		RunWHIPTest(t, conf, bus)
-	//	}
+	if !conf.RtmpOnly {
+		RunWHIPTest(t, conf, bus)
+	}
 }
