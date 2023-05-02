@@ -13,6 +13,7 @@ import (
 	"github.com/livekit/ingress/pkg/media/whip"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 )
@@ -83,7 +84,7 @@ func CreateSource(ctx context.Context, p *params.Params) (Source, error) {
 	case livekit.IngressInput_WHIP_INPUT:
 		return whip.NewWHIPSource(ctx, p)
 	default:
-		return nil, errors.ErrInvalidIngressType
+		return nil, ingress.ErrInvalidIngressType
 	}
 }
 

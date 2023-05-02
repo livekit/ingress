@@ -124,7 +124,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inpu
 	}
 
 	if inputType != resp.Info.InputType {
-		return nil, errors.ErrInvalidIngressType
+		return nil, ingress.ErrInvalidIngressType
 	}
 
 	// check cpu load

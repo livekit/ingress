@@ -1,0 +1,4 @@
+[submodule "test/livekit-whip-bot"]
+	path = test/livekit-whip-bot
+	url = https://github.com/cloudwebrtc/livekit-whip-bot
+	branch = test_devices

@@ -78,6 +78,11 @@ func Integration(configFile string) error {
 }
 
 func Retest(configFile string) error {
+	err := WhipClient()
+	if err != nil {
+		return err
+	}
+
 	cmd := exec.Command("go", "test", "-v", "-count=1", "--tags=integration", "./test/...")
 
 	brewPrefix, err := getBrewPrefix()
@@ -108,6 +113,10 @@ func Retest(configFile string) error {
 
 func Publish(ingressId string) error {
 	return run(fmt.Sprintf("gst-launch-1.0 -v flvmux name=mux ! rtmp2sink location=rtmp://localhost:1935/live/%s  audiotestsrc freq=200 ! faac ! mux.  videotestsrc pattern=ball is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 ! mux.", ingressId))
+}
+
+func WhipClient() error {
+	return run("go build -C ./test/livekit-whip-bot/cmd/whip-client/ ./...")
 }
 
 // helpers

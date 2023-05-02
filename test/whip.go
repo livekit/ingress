@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -19,9 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TODO bundle tool
 const (
-	whipClientPath = "whip-client"
+	whipClientPath = "livekit-whip-bot/cmd/whip-client/whip-client"
 )
 
 func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
@@ -35,7 +35,7 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 	commandPsrpcClient, err := rpc.NewIngressHandlerClient("ingress_test_client", bus, psrpc.WithClientTimeout(5*time.Second))
 	require.NoError(t, err)
 
-	whipsrv := whip.NewWHIPServer()
+	whipsrv := whip.NewWHIPServer(commandPsrpcClient)
 	relay := service.NewRelay(nil, whipsrv)
 
 	err = whipsrv.Start(conf.Config, svc.HandleWHIPPublishRequest)
@@ -128,4 +128,6 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 
 	final := <-updates
 	require.NotEqual(t, final.State.Status, livekit.IngressState_ENDPOINT_ERROR)
+
+	syscall.Kill(cmd.Process.Pid, syscall.SIGTERM)
 }

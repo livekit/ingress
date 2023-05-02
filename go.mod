@@ -7,7 +7,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
-	github.com/livekit/protocol v1.5.6-0.20230428212533-59f4b6592830
+	github.com/livekit/protocol v1.5.6-0.20230501213748-b2974692ebfd
 	github.com/livekit/psrpc v0.3.0
 	github.com/livekit/server-sdk-go v1.0.11-0.20230428163439-17d5bea0992f
 	github.com/pion/interceptor v0.1.13
