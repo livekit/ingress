@@ -82,6 +82,8 @@ func NewWHIPSource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
 		}
 	}
 	webrtcSettings.SetIncludeLoopbackCandidate(p.Whip.EnableLoopbackCandidate)
+	webrtcSettings.DisableSRTPReplayProtection(true)
+	webrtcSettings.DisableSRTCPReplayProtection(true)
 
 	m, err := newMediaEngine(p)
 	if err != nil {

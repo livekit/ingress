@@ -70,11 +70,7 @@ func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 		}()
 
 		bearer := r.Header.Get("Authorization")
-		if !strings.HasPrefix(bearer, "Bearer ") {
-			err = psrpc.NewErrorf(psrpc.NotFound, "missing stream name in authorization header")
-			return
-		}
-
+		// OBS adds the 'Bearer' prefix as expected, but some other clients do not
 		streamKey := strings.TrimPrefix(bearer, "Bearer ")
 
 		err = s.handleNewWhipClient(w, r, streamKey)
@@ -93,10 +89,12 @@ func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 
 	r.HandleFunc("/{app}", func(w http.ResponseWriter, r *http.Request) {
 		setCORSHeaders(w, r, false)
+		w.WriteHeader(http.StatusNoContent)
 	}).Methods("OPTIONS")
 
 	r.HandleFunc("/{app}/{stream_key}", func(w http.ResponseWriter, r *http.Request) {
 		setCORSHeaders(w, r, false)
+		w.WriteHeader(http.StatusNoContent)
 	}).Methods("OPTIONS")
 
 	// End
@@ -114,6 +112,8 @@ func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 		req := &rpc.DeleteWHIPResourceRequest{
 			ResourceId: resourceID,
 		}
+
+		w.Header().Set("Access-Control-Allow-Origin", "*")
 
 		_, err = s.rpcClient.DeleteWHIPResource(context.Background(), resourceID, req, psrpc.WithRequestTimeout(5*time.Second))
 	}).Methods("DELETE")
@@ -178,6 +178,8 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		return err
 	}
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Expose-Headers", "Location")
 	w.Header().Set("Content-Type", "application/sdp")
 	w.Header().Set("Location", fmt.Sprintf("/%s/%s/%s", app, streamKey, resourceId))
 	w.WriteHeader(http.StatusCreated)
@@ -217,9 +219,10 @@ func setCORSHeaders(w http.ResponseWriter, r *http.Request, resourceEndpoint boo
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "*")
 	if resourceEndpoint {
-		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-	} else {
 		w.Header().Set("Access-Control-Allow-Methods", "PATCH, OPTIONS, DELETE")
+	} else {
+		w.Header().Set("Accept-Post", "application/sdp")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
+		w.Header().Set("Access-Control-Expose-Headers", "Location")
 	}
-	w.Header().Set("Accept-Post", "application/sdp")
 }
