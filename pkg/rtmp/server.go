@@ -130,7 +130,7 @@ type RTMPHandler struct {
 	videoInit     *flvtag.VideoData
 	audioInit     *flvtag.AudioData
 	keyFrameFound bool
-	mediaBuffer   *prerollBuffer
+	mediaBuffer   *utils.PrerollBuffer
 
 	log logger.Logger
 
@@ -143,7 +143,7 @@ func NewRTMPHandler() *RTMPHandler {
 		log: logger.GetLogger(),
 	}
 
-	h.mediaBuffer = newPrerollBuffer(func() error {
+	h.mediaBuffer = utils.NewPrerollBuffer(func() error {
 		h.log.Infow("preroll buffer reset event")
 		h.flvEnc = nil
 
@@ -299,7 +299,7 @@ func (h *RTMPHandler) OnClose() {
 }
 
 func (h *RTMPHandler) SetWriter(w io.WriteCloser) error {
-	return h.mediaBuffer.setWriter(w)
+	return h.mediaBuffer.SetWriter(w)
 }
 
 func (h *RTMPHandler) initFlvEncoder() error {

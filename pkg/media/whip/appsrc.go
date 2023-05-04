@@ -5,15 +5,12 @@ import (
 	"io"
 	"net"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/server-sdk-go/pkg/samplebuilder"
-	"github.com/livekit/server-sdk-go/pkg/synchronizer"
-	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/rtp/codecs"
 	"github.com/pion/webrtc/v3"
@@ -29,40 +26,17 @@ const (
 )
 
 type WHIPAppSource struct {
-	remoteTrack *webrtc.TrackRemote
-	receiver    *webrtc.RTPReceiver
-	appSrc      *app.Source
-	sb          *samplebuilder.SampleBuilder
-	sync        *synchronizer.TrackSynchronizer
-	writePLI    func(ssrc webrtc.SSRC)
-	onRTCP      func(packet rtcp.Packet)
+	appSrc *app.Source
+	trackKind types.StreamKind
 
-	firstPacket sync.Once
-	fuse        core.Fuse
-	result      chan error
+	fuse   core.Fuse
+	result chan error
 }
 
-func NewWHIPAppSource(
-	remoteTrack *webrtc.TrackRemote,
-	receiver *webrtc.RTPReceiver,
-	sync *synchronizer.TrackSynchronizer,
-	writePLI func(ssrc webrtc.SSRC),
-	onRTCP func(packet rtcp.Packet),
-) (*WHIPAppSource, error) {
+func newWHIPAppSource(trackKind types.StreamKind) (*WHIPAppSource, error) {
 	w := &WHIPAppSource{
-		remoteTrack: remoteTrack,
-		receiver:    receiver,
-		sync:        sync,
-		writePLI:    writePLI,
-		onRTCP:      onRTCP,
-		fuse:        core.NewFuse(),
+		trackKind: trackKind,
 	}
-
-	sb, err := w.createSampleBuilder()
-	if err != nil {
-		return nil, err
-	}
-	w.sb = sb
 
 	elem, err := gst.NewElementWithName("appsrc", fmt.Sprintf("%s_%s", WHIPAppSourceLabel, remoteTrack.Kind()))
 	if err != nil {
@@ -87,12 +61,6 @@ func NewWHIPAppSource(
 }
 
 func (w *WHIPAppSource) Start() error {
-	w.result = make(chan error, 1)
-	w.startRTPReceiver()
-	if w.onRTCP != nil {
-		w.startRTCPReceiver()
-	}
-
 	return nil
 }
 
@@ -117,7 +85,7 @@ func (w *WHIPAppSource) startRTPReceiver() {
 			close(w.result)
 		}()
 
-		logger.Infow("starting app source track reader", "trackID", w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
+		logger.Infow("starting app source track reader", "trackID", "kind", w.trackKind))
 
 		if w.remoteTrack.Kind() == webrtc.RTPCodecTypeVideo && w.writePLI != nil {
 			w.writePLI(w.remoteTrack.SSRC())
