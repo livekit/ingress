@@ -18,10 +18,9 @@ import (
 	"github.com/tinyzimmer/go-gst/gst/app"
 )
 
-// TODO values taken from egress
 const (
-	maxVideoLate = 1000 // nearly 2s for fhd video
-	maxAudioLate = 200  // 4s for audio
+	maxVideoLate = 300  // nearly 2s for fhd video
+	maxAudioLate = 25   // 4s for audio
 	maxDropout   = 3000 // max sequence number skip
 )
 
@@ -130,6 +129,7 @@ func (w *WHIPAppSource) processRTPPacket() error {
 	}
 
 	w.firstPacket.Do(func() {
+		logger.Debugw("first packet received", "trackID", w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
 		w.sync.FirstPacketForTrack(pkt)
 	})
 
