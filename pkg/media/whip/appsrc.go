@@ -5,27 +5,18 @@ import (
 	"io"
 	"net"
 	"strings"
-	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/server-sdk-go/pkg/samplebuilder"
-	"github.com/pion/rtp"
-	"github.com/pion/rtp/codecs"
 	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst"
 	"github.com/tinyzimmer/go-gst/gst/app"
 )
 
-const (
-	maxVideoLate = 300  // nearly 2s for fhd video
-	maxAudioLate = 25   // 4s for audio
-	maxDropout   = 3000 // max sequence number skip
-)
-
 type WHIPAppSource struct {
-	appSrc *app.Source
+	appSrc    *app.Source
 	trackKind types.StreamKind
 
 	fuse   core.Fuse
@@ -73,7 +64,7 @@ func (w *WHIPAppSource) GetAppSource() *app.Source {
 	return w.appSrc
 }
 
-func (w *WHIPAppSource) startRTPReceiver() {
+func (w *WHIPAppSource) startTrackRelay() {
 	go func() {
 		var err error
 
@@ -84,7 +75,7 @@ func (w *WHIPAppSource) startRTPReceiver() {
 			close(w.result)
 		}()
 
-		logger.Infow("starting app source track reader", "trackID", "kind", w.trackKind))
+		logger.Infow("starting app source track reader", "kind", w.trackKind)
 
 		if w.remoteTrack.Kind() == webrtc.RTPCodecTypeVideo && w.writePLI != nil {
 			w.writePLI(w.remoteTrack.SSRC())
@@ -93,10 +84,10 @@ func (w *WHIPAppSource) startRTPReceiver() {
 		for {
 			select {
 			case <-w.fuse.Watch():
-				logger.Debugw("stopping app source track reader", "trackID", w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
+				logger.Debugw("stopping app source track reader", "kind", w.trackKind)
 				return
 			default:
-				err = w.processRTPPacket()
+				err = w.relayRTPPacket()
 				switch {
 				case err == nil:
 					// continue
@@ -108,7 +99,7 @@ func (w *WHIPAppSource) startRTPReceiver() {
 						continue
 					}
 
-					logger.Warnw("error reading track", err, "trackID", err, w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
+					logger.Warnw("error reading track", err, "kind", w.trackKind)
 					return
 				}
 			}
@@ -117,118 +108,24 @@ func (w *WHIPAppSource) startRTPReceiver() {
 	}()
 }
 
-// TODO drain on close?
-func (w *WHIPAppSource) processRTPPacket() error {
-	var pkt *rtp.Packet
+func relayRTPPacket() {
+	b := gst.NewBufferFromBytes(s.Data)
+	b.SetPresentationTimestamp(ts)
 
-	_ = w.remoteTrack.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
-
-	pkt, _, err := w.remoteTrack.ReadRTP()
-	if err != nil {
-		return err
-	}
-
-	w.firstPacket.Do(func() {
-		logger.Debugw("first packet received", "trackID", w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
-		w.sync.FirstPacketForTrack(pkt)
-	})
-
-	w.sb.Push(pkt)
-	for {
-		s, rtpTs := w.sb.PopWithTimestamp()
-		if s == nil {
-			break
-		}
-
-		ts, err := w.sync.GetPTS(rtpTs)
-		if err != nil {
-			return err
-		}
-
-		b := gst.NewBufferFromBytes(s.Data)
-		b.SetPresentationTimestamp(ts)
-
-		ret := w.appSrc.PushBuffer(b)
-		switch ret {
-		case gst.FlowOK, gst.FlowFlushing:
-			// continue
-		case gst.FlowEOS:
-			w.Close()
-			return io.EOF
-		default:
-			return errors.ErrFromGstFlowReturn(ret)
-		}
-	}
-
-	return nil
-}
-
-func (w *WHIPAppSource) startRTCPReceiver() {
-	go func() {
-		logger.Infow("starting app source rtcp receiver", "trackID", w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
-
-		for {
-			select {
-			case <-w.fuse.Watch():
-				logger.Debugw("stopping app source rtcp receiver", "trackID", w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
-				return
-			default:
-				_ = w.receiver.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
-				pkts, _, err := w.receiver.ReadRTCP()
-
-				switch {
-				case err == nil:
-					// continue
-				case err == io.EOF:
-					err = nil
-					return
-				default:
-					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-						continue
-					}
-
-					logger.Warnw("error reading rtcp", err, "trackID", err, w.remoteTrack.ID(), "kind", w.remoteTrack.Kind())
-					return
-				}
-
-				for _, pkt := range pkts {
-					w.onRTCP(pkt)
-				}
-			}
-		}
-	}()
-}
-
-func (w *WHIPAppSource) createSampleBuilder() (*samplebuilder.SampleBuilder, error) {
-	var depacketizer rtp.Depacketizer
-	var maxLate uint16
-	var writePLI func()
-
-	switch strings.ToLower(w.remoteTrack.Codec().MimeType) {
-	case strings.ToLower(webrtc.MimeTypeVP8):
-		depacketizer = &codecs.VP8Packet{}
-		maxLate = maxVideoLate
-		writePLI = func() { w.writePLI(w.remoteTrack.SSRC()) }
-
-	case strings.ToLower(webrtc.MimeTypeH264):
-		depacketizer = &codecs.H264Packet{}
-		maxLate = maxVideoLate
-		writePLI = func() { w.writePLI(w.remoteTrack.SSRC()) }
-
-	case strings.ToLower(webrtc.MimeTypeOpus):
-		depacketizer = &codecs.OpusPacket{}
-		maxLate = maxAudioLate
-		// No PLI for audio
-
+	ret := t.appSrc.PushBuffer(b)
+	switch ret {
+	case gst.FlowOK, gst.FlowFlushing:
+		// continue
+	case gst.FlowEOS:
+		t.Close()
+		return io.EOF
 	default:
-		return nil, errors.ErrUnsupportedDecodeFormat
+		t.Close()
+		return errors.ErrFromGstFlowReturn(ret)
 	}
 
-	return samplebuilder.New(
-		maxLate, depacketizer, w.remoteTrack.Codec().ClockRate,
-		samplebuilder.WithPacketDroppedHandler(writePLI),
-	), nil
 }
+
 func getCapsForCodec(mimeType string) (*gst.Caps, error) {
 	mt := strings.ToLower(mimeType)
 

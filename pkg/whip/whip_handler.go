@@ -27,9 +27,9 @@ type whipHandler struct {
 	expectedTrackCount int
 	result             chan error
 
-	trackLock sync.Mutex
-	tracks    map[string]*webrtc.TrackRemote
-	//TODO add kind -> relay map
+	trackLock      sync.Mutex
+	tracks         map[string]*webrtc.TrackRemote
+	trackHandlers  map[types.StreamKind]*whipTrackHandler
 	trackAddedChan chan *webrtc.TrackRemote
 }
 
@@ -39,9 +39,10 @@ func newWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (
 	var err error
 
 	h := &whipHandler{
-		sync:   synchronizer.NewSynchronizer(nil),
-		result: make(chan error, 1),
-		tracks: make(map[string]*webrtc.TrackRemote),
+		sync:          synchronizer.NewSynchronizer(nil),
+		result:        make(chan error, 1),
+		tracks:        make(map[string]*webrtc.TrackRemote),
+		trackHandlers: make(map[types.StreamKind]*whipTrackHandler),
 	}
 
 	offer := &webrtc.SessionDescription{
@@ -195,12 +196,13 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 	h.tracks[track.ID()] = track
 
 	sync := h.sync.AddTrack(track, whipIdentity)
-	// TODO Add relay
-	var err error
+
+	th, err := newWHIPTrackHandler(track, receiver, sync, h.writePLI, h.sync.OnRTCP)
 	if err != nil {
-		logger.Warnw("failed creating media relay", err)
+		logger.Warnw("failed creating whip track handler", err, "trackID", track.ID(), "kind", kind)
 		return
 	}
+	h.trackHandlers[kind] = th
 
 	select {
 	case h.trackAddedChan <- track:

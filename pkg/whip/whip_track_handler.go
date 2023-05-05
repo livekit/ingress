@@ -3,15 +3,25 @@ package whip
 import (
 	"io"
 	"net"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/frostbyte73/core"
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/server-sdk-go/pkg/samplebuilder"
 	"github.com/livekit/server-sdk-go/pkg/synchronizer"
 	"github.com/pion/rtcp"
+	"github.com/pion/rtp"
+	"github.com/pion/rtp/codecs"
 	"github.com/pion/webrtc/v3"
+)
+
+const (
+	maxVideoLate = 300 // nearly 2s for fhd video
+	maxAudioLate = 25  // 4s for audio
 )
 
 type whipTrackHandler struct {
@@ -36,7 +46,7 @@ func newWHIPTrackHandler(
 	onRTCP func(packet rtcp.Packet),
 ) (*whipTrackHandler, error) {
 	t := &whipTrackHandler{
-		remoteTrack: remoteTrack,
+		remoteTrack: track,
 		receiver:    receiver,
 		sync:        sync,
 		writePLI:    writePLI,
@@ -49,6 +59,12 @@ func newWHIPTrackHandler(
 		return nil, err
 	}
 	t.sb = sb
+
+	t.mediaBuffer = utils.NewPrerollBuffer(func() error {
+		logger.Infow("preroll buffer reset event", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+
+		return nil
+	})
 
 	return t, nil
 }
@@ -69,18 +85,20 @@ func (t *whipTrackHandler) Close() error {
 	return <-t.result
 }
 
-func (t *WHIPAppSource) startRTPReceiver() {
+func (t *whipTrackHandler) SetWriter(w io.WriteCloser) error {
+	return t.mediaBuffer.SetWriter(w)
+}
+
+func (t *whipTrackHandler) startRTPReceiver() {
 	go func() {
 		var err error
 
 		defer func() {
-			t.appSrc.EndStream()
-
 			t.result <- err
 			close(t.result)
 		}()
 
-		logger.Infow("starting app source track reader", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+		logger.Infow("starting rtp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
 
 		if t.remoteTrack.Kind() == webrtc.RTPCodecTypeVideo && t.writePLI != nil {
 			t.writePLI(t.remoteTrack.SSRC())
@@ -89,10 +107,79 @@ func (t *WHIPAppSource) startRTPReceiver() {
 		for {
 			select {
 			case <-t.fuse.Watch():
-				logger.Debugw("stopping app source track reader", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+				logger.Debugw("stopping rtp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
 				return
 			default:
 				err = t.processRTPPacket()
+				switch err {
+				case nil, errors.ErrPrerollBufferReset:
+					// continue
+				case io.EOF:
+					err = nil
+					return
+				default:
+					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+						continue
+					}
+
+					logger.Warnw("error reading rtp packets", err, "trackID", err, t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+					return
+				}
+			}
+		}
+	}()
+}
+
+// TODO drain on close?
+func (t *whipTrackHandler) processRTPPacket() error {
+	var pkt *rtp.Packet
+
+	_ = t.remoteTrack.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
+
+	pkt, _, err := t.remoteTrack.ReadRTP()
+	if err != nil {
+		return err
+	}
+
+	t.firstPacket.Do(func() {
+		logger.Debugw("first packet received", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+		t.sync.FirstPacketForTrack(pkt)
+	})
+
+	t.sb.Push(pkt)
+	for {
+		s, rtpTs := t.sb.PopWithTimestamp()
+		if s == nil {
+			break
+		}
+
+		ts, err := t.sync.GetPTS(rtpTs)
+		if err != nil {
+			return err
+		}
+
+		err = utils.SerializeMediaForRelay(t.mediaBuffer, s.Data, ts)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (t *whipTrackHandler) startRTCPReceiver() {
+	go func() {
+		logger.Infow("starting app source rtcp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+
+		for {
+			select {
+			case <-t.fuse.Watch():
+				logger.Debugw("stopping app source rtcp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+				return
+			default:
+				_ = t.receiver.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
+				pkts, _, err := t.receiver.ReadRTCP()
+
 				switch {
 				case err == nil:
 					// continue
@@ -104,11 +191,45 @@ func (t *WHIPAppSource) startRTPReceiver() {
 						continue
 					}
 
-					logger.Warnw("error reading track", err, "trackID", err, t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+					logger.Warnw("error reading rtcp", err, "trackID", err, t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
 					return
+				}
+
+				for _, pkt := range pkts {
+					t.onRTCP(pkt)
 				}
 			}
 		}
-
 	}()
+}
+
+func (t *whipTrackHandler) createSampleBuilder() (*samplebuilder.SampleBuilder, error) {
+	var depacketizer rtp.Depacketizer
+	var maxLate uint16
+	var writePLI func()
+
+	switch strings.ToLower(t.remoteTrack.Codec().MimeType) {
+	case strings.ToLower(webrtc.MimeTypeVP8):
+		depacketizer = &codecs.VP8Packet{}
+		maxLate = maxVideoLate
+		writePLI = func() { t.writePLI(t.remoteTrack.SSRC()) }
+
+	case strings.ToLower(webrtc.MimeTypeH264):
+		depacketizer = &codecs.H264Packet{}
+		maxLate = maxVideoLate
+		writePLI = func() { t.writePLI(t.remoteTrack.SSRC()) }
+
+	case strings.ToLower(webrtc.MimeTypeOpus):
+		depacketizer = &codecs.OpusPacket{}
+		maxLate = maxAudioLate
+		// No PLI for audio
+
+	default:
+		return nil, errors.ErrUnsupportedDecodeFormat
+	}
+
+	return samplebuilder.New(
+		maxLate, depacketizer, t.remoteTrack.Codec().ClockRate,
+		samplebuilder.WithPacketDroppedHandler(writePLI),
+	), nil
 }
