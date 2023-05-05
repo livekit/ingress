@@ -30,7 +30,8 @@ type WHIPServer struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	onPublish func(streamKey, resourceId string) (func(mimeTypes map[types.StreamKind]string), error)
+	conf      *config.Config
+	onPublish func(streamKey, resourceId string) (func(mimeTypes map[types.StreamKind]string, err error), error)
 	handlers  sync.Map
 	rpcClient rpc.IngressHandlerClient
 }
@@ -43,11 +44,12 @@ func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
 
 func (s *WHIPServer) Start(
 	conf *config.Config,
-	onPublish func(streamKey, resourceId string) (func(mimeTypes map[types.StreamKind]string), error),
+	onPublish func(streamKey, resourceId string) (func(mimeTypes map[types.StreamKind]string, err error), error),
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
 	s.onPublish = onPublish
+	s.conf = conf
 
 	r := mux.NewRouter()
 
@@ -103,7 +105,7 @@ func (s *WHIPServer) Start(
 
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		_, err = s.rpcClient.DeleteWHIPResource(context.Background(), resourceID, req, psrpc.WithRequestTimeout(5*time.Second))
+		_, err = s.rpcClient.DeleteWHIPResource(s.ctx, resourceID, req, psrpc.WithRequestTimeout(5*time.Second))
 	}).Methods("DELETE")
 
 	// Trickle, ICE Restart
@@ -133,7 +135,7 @@ func (s *WHIPServer) Start(
 }
 
 func (s *WHIPServer) Stop() {
-	s.Cancel()
+	s.cancel()
 }
 
 func (s *WHIPServer) AssociateRelay(resourceId string, kind types.StreamKind, w io.WriteCloser) error {
@@ -205,24 +207,28 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 }
 
 func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, string, error) {
-	ctx, done := context.WithTimeout(ctx.Background(), sdpResponseTimeout)
+	ctx, done := context.WithTimeout(s.ctx, sdpResponseTimeout)
 	defer done()
 
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
 
 	h, sdpResponse, err := NewWHIPHandler(ctx, s.conf, sdpOffer)
+	if err != nil {
+		return "", "", err
+	}
 
 	s.handlers.Store(resourceId, h)
 
+	var ready func(mimeTypes map[types.StreamKind]string, err error)
 	if s.onPublish != nil {
-		ready, err := s.onPublish(streamKey, resourceId)
+		ready, err = s.onPublish(streamKey, resourceId)
 		if err != nil {
 			return "", "", err
 		}
 	}
 
 	go func() {
-		ctx, done := context.WithTimeout(ctx.Background(), sessionStartTimeout)
+		ctx, done := context.WithTimeout(s.ctx, sessionStartTimeout)
 		defer done()
 
 		var err error
@@ -245,7 +251,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 				// The handler process should update the ingress info
 			}
 
-			s.handlers.Delete(resourceID)
+			s.handlers.Delete(resourceId)
 		}()
 	}()
 
