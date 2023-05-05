@@ -34,8 +34,6 @@ type whipHandler struct {
 	trackAddedChan chan *webrtc.TrackRemote
 }
 
-// TODO wait for all tracks, launch handler process
-// TODO close
 func NewWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (*whipHandler, string, error) {
 	var err error
 
@@ -111,17 +109,20 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (
 	return h, sdpAnswer, nil
 }
 
-func (h *whipHandler) WaitForTracksReady(ctx context.Context) error {
+func (h *whipHandler) WaitForTracksReady(ctx context.Context) (map[types.StreamKind]string, error) {
 	var trackCount int
+	mimeTypes := make(map[types.StreamKind]string)
 
 	for {
 		select {
 		case <-ctx.Done():
-			return errors.ErrSourceNotReady
-		case <-h.trackAddedChan:
+			return nil, errors.ErrSourceNotReady
+		case track := <-h.trackAddedChan:
+			mimeTypes[streamKindFromCodecType(track.Kind())] = track.Codec().MimeType
+
 			trackCount++
 			if trackCount == h.expectedTrackCount {
-				return nil
+				return mimeTypes, nil
 			}
 		}
 	}

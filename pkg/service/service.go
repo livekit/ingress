@@ -103,7 +103,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 	return nil
 }
 
-func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId, sdpOffer string) (ready func(mimeTypes map[types.StreamKind]string, err error), err error) {
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (ready func(mimeTypes map[types.StreamKind]string, err error), err error) {
 	res := make(chan publishResponse)
 	r := publishRequest{
 		streamKey: streamKey,
