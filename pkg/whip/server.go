@@ -30,15 +30,6 @@ type WHIPServer struct {
 	rpcClient rpc.IngressHandlerClient
 }
 
-type handler struct {
-	sdpChan chan<- sdpRes
-}
-
-type sdpRes struct {
-	sdp string
-	err error
-}
-
 func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
 	return &WHIPServer{
 		rpcClient: rpcClient,
@@ -144,23 +135,6 @@ func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 	return nil
 }
 
-func (s *WHIPServer) SetSDPResponse(resourceId string, sdp string, err error) error {
-	entry, ok := s.handlers.Load(resourceId)
-	if !ok {
-		return psrpc.NewErrorf(psrpc.NotFound, "unknown resource id")
-	}
-	sdpChan := entry.(chan sdpRes)
-
-	select {
-	case sdpChan <- sdpRes{sdp: sdp, err: err}:
-		// success
-	default:
-		return psrpc.NewErrorf(psrpc.Internal, "SDP response channel full")
-	}
-
-	return nil
-}
-
 func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request, streamKey string) error {
 	// TODO return ETAG header
 
@@ -188,9 +162,15 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 	return nil
 }
 
+// TODO call WaitForTracksReady -> onPublish
+// TODO check if stream allowed early?
+// TODO handle session end -> callback from whip_handler
+// TODO onPublish when
 func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, string, error) {
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
-	sdpChan := make(chan sdpRes, 1)
+
+	h, err := NewWHIPHandler(ctx, s.conf, sdpOffer)
+
 	s.handlers.Store(resourceId, sdpChan)
 	defer s.handlers.Delete(resourceId)
 

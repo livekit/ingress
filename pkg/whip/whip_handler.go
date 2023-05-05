@@ -2,6 +2,7 @@ package whip
 
 import (
 	"context"
+	"io"
 	"sync"
 
 	"github.com/livekit/ingress/pkg/config"
@@ -35,7 +36,7 @@ type whipHandler struct {
 
 // TODO wait for all tracks, launch handler process
 // TODO close
-func newWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (*whipHandler, string, error) {
+func NewWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (*whipHandler, string, error) {
 	var err error
 
 	h := &whipHandler{
@@ -96,6 +97,11 @@ func newWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (
 	if err != nil {
 		return nil, "", err
 	}
+	defer func() {
+		if err != nil {
+			h.pc.Close()
+		}
+	}()
 
 	sdpAnswer, err := h.getSDPAnswer(ctx, offer)
 	if err != nil {
@@ -103,6 +109,65 @@ func newWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (
 	}
 
 	return h, sdpAnswer, nil
+}
+
+func (h *whipHandler) WaitForTracksReady(ctx context.Context) error {
+	var trackCount int
+
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.ErrSourceNotReady
+		case <-h.trackAddedChan:
+			trackCount++
+			if trackCount == h.expectedTrackCount {
+				return nil
+			}
+		}
+	}
+}
+
+func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return errors.ErrSourceNotReady
+	case err := <-h.result:
+		return err
+	}
+}
+
+func (h *whipHandler) AssociateRelay(kind types.StreamKind, w io.WriteCloser) error {
+	h.trackLock.Lock()
+	defer h.trackLock.Unlock()
+
+	th := h.trackHandlers[kind]
+	if th == nil {
+		return errors.ErrIngressNotFound
+	}
+
+	err := th.SetWriter(w)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (h *whipHandler) DissociateRelay(kind types.StreamKind) error {
+	h.trackLock.Lock()
+	defer h.trackLock.Unlock()
+
+	th := h.trackHandlers[kind]
+	if th == nil {
+		return errors.ErrIngressNotFound
+	}
+
+	err := th.SetWriter(nil)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnection, error) {
@@ -140,7 +205,12 @@ func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnect
 
 				var errs utils.ErrArray
 				h.trackLock.Lock()
-				// TODO close relay handler
+				for _, v := range h.trackHandlers {
+					err := v.Close()
+					if err != nil {
+						errs.AppendErr(err)
+					}
+				}
 				h.trackLock.Unlock()
 
 				h.result <- errs.ToError()
@@ -155,14 +225,12 @@ func (h *whipHandler) getSDPAnswer(ctx context.Context, offer *webrtc.SessionDes
 	// Set the remote SessionDescription
 	err := h.pc.SetRemoteDescription(*offer)
 	if err != nil {
-		h.pc.Close()
 		return "", err
 	}
 
 	// Create an answer
 	answer, err := h.pc.CreateAnswer(nil)
 	if err != nil {
-		h.pc.Close()
 		return "", err
 	}
 
@@ -171,7 +239,6 @@ func (h *whipHandler) getSDPAnswer(ctx context.Context, offer *webrtc.SessionDes
 
 	// Sets the LocalDescription, and starts our UDP listeners
 	if err = h.pc.SetLocalDescription(answer); err != nil {
-		h.pc.Close()
 		return "", err
 	}
 

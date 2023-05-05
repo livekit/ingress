@@ -7,6 +7,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"google.golang.org/protobuf/proto"
@@ -31,8 +32,8 @@ type Params struct {
 }
 
 type WhipExtraParams struct {
-	SDPOffer   string `json:"sdp_offer"`
-	ResourceId string `json:"resource_id"`
+	ResourceId string                      `json:"resource_id"`
+	MimeTypes  map[types.StreamKind]string `json:"mime_types"`
 }
 
 func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressInfo, wsUrl, token string, ep any) (*Params, error) {

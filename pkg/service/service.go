@@ -14,6 +14,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/ingress/version"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
@@ -25,10 +26,14 @@ import (
 const shutdownTimer = time.Second * 5
 
 type publishRequest struct {
-	streamKey   string
-	inputType   livekit.IngressInput
-	extraParams any
-	result      chan<- error
+	streamKey string
+	inputType livekit.IngressInput
+	result    chan<- publishResponse
+}
+
+type publishResponse struct {
+	err  error
+	resp *rpc.GetIngressInfoResponse
 }
 
 type Service struct {
@@ -73,41 +78,69 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient) *Service {
 }
 
 func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
-	res := make(chan error)
+	ctx, span := tracer.Start(context.Background(), "Service.HandleRTMPPublishRequest")
+	res := make(chan publishResponse)
 	r := publishRequest{
 		streamKey: streamKey,
 		inputType: livekit.IngressInput_RTMP_INPUT,
 		result:    res,
 	}
 
+	var pRes publishResponse
 	select {
 	case <-s.shutdown.Watch():
 		return errors.ErrServerShuttingDown
 	case s.publishRequests <- r:
-		err := <-res
-		return err
+		pRes = <-res
+		if pRes.err != nil {
+			return err
+		}
 	}
+
+	go s.manager.launchHandler(ctx, pRes.resp, nil)
+
+	span.End()
+	return nil
 }
 
-func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId, sdpOffer string) error {
-	res := make(chan error)
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId, sdpOffer string) (ready func(mimeTypes map[types.StreamKind]string, err error), err error) {
+	res := make(chan publishResponse)
 	r := publishRequest{
 		streamKey: streamKey,
 		inputType: livekit.IngressInput_WHIP_INPUT,
-		extraParams: params.WhipExtraParams{
-			ResourceId: resourceId,
-			SDPOffer:   sdpOffer,
-		},
-		result: res,
+		result:    res,
 	}
 
+	var pRes publishResponse
 	select {
 	case <-s.shutdown.Watch():
 		return errors.ErrServerShuttingDown
 	case s.publishRequests <- r:
-		err := <-res
-		return err
+		pRes = <-res
+		if pRes.err != nil {
+			return nil, err
+		}
 	}
+
+	ready = func(mimeTypes map[types.StreamKind]string, err error) {
+		ctx, span := tracer.Start(context.Background(), "Service.HandleRTMPPublishRequest.ready")
+		if err != nil {
+			// Client failed to finalize session start
+			s.sendUpdate(ctx, pRes.resp.Info, err)
+			return
+		}
+
+		extraParams := params.WhipExtraParams{
+			ResourceId: resourceId,
+			MimeTypes:  mimeTypes,
+		}
+
+		go s.manager.launchHandler(ctx, pRes.resp, extraParams)
+
+		span.End()
+	}
+
+	return ready, nil
 }
 
 func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inputType livekit.IngressInput, extraParams any) (*livekit.IngressInfo, error) {
@@ -137,8 +170,6 @@ func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inpu
 		Status:    livekit.IngressState_ENDPOINT_BUFFERING,
 		StartedAt: time.Now().UnixNano(),
 	}
-
-	go s.manager.launchHandler(ctx, resp, extraParams)
 
 	return resp.Info, nil
 }

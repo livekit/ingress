@@ -16,6 +16,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/logger"
 )
 

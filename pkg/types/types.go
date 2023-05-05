@@ -3,8 +3,8 @@ package types
 type StreamKind string
 
 const (
-	Audio       = "audio"
-	Video       = "video"
-	Interleaved = "interleaved"
-	Unknown     = "unknown"
+	Audio       StreamKind = "audio"
+	Video                  = "video"
+	Interleaved            = "interleaved"
+	Unknown                = "unknown"
 )
