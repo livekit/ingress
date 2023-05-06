@@ -19,7 +19,7 @@ const (
 	FlvAppSource = "flvAppSrc"
 )
 
-type HTTPRelaySource struct {
+type RTMPRelaySource struct {
 	params *params.Params
 
 	flvSrc *app.Source
@@ -27,11 +27,11 @@ type HTTPRelaySource struct {
 	result chan error
 }
 
-func NewHTTPRelaySource(ctx context.Context, p *params.Params) (*HTTPRelaySource, error) {
-	ctx, span := tracer.Start(ctx, "HTTPRelaySource.New")
+func NewRTMPRelaySource(ctx context.Context, p *params.Params) (*RTMPRelaySource, error) {
+	ctx, span := tracer.Start(ctx, "RTMPRelaySource.New")
 	defer span.End()
 
-	s := &HTTPRelaySource{
+	s := &RTMPRelaySource{
 		params: p,
 	}
 
@@ -54,7 +54,10 @@ func NewHTTPRelaySource(ctx context.Context, p *params.Params) (*HTTPRelaySource
 	return s, nil
 }
 
-func (s *HTTPRelaySource) Start(ctx context.Context) error {
+func (s *RTMPRelaySource) Start(ctx context.Context) error {
+	ctx, span := tracer.Start(ctx, "RTMPRelaySource.Start")
+	defer span.End()
+
 	s.result = make(chan error, 1)
 
 	resp, err := http.Get(s.params.RelayUrl)
@@ -85,23 +88,23 @@ func (s *HTTPRelaySource) Start(ctx context.Context) error {
 	return nil
 }
 
-func (s *HTTPRelaySource) Close() error {
+func (s *RTMPRelaySource) Close() error {
 	s.writer.Close()
 	return <-s.result
 }
 
-func (s *HTTPRelaySource) GetSources(ctx context.Context) []*app.Source {
+func (s *RTMPRelaySource) GetSources(ctx context.Context) []*app.Source {
 	return []*app.Source{s.flvSrc}
 }
 
 type appSrcWriter struct {
-	flvSrc *app.Source
+	appSrc *app.Source
 	eos    *atomic.Bool
 }
 
 func newAppSrcWriter(flvSrc *app.Source) *appSrcWriter {
 	return &appSrcWriter{
-		flvSrc: flvSrc,
+		appSrc: flvSrc,
 		eos:    atomic.NewBool(false),
 	}
 }
@@ -113,7 +116,7 @@ func (w *appSrcWriter) Write(p []byte) (int, error) {
 
 	b := gst.NewBufferFromBytes(p)
 
-	ret := w.flvSrc.PushBuffer(b)
+	ret := w.appSrc.PushBuffer(b)
 	switch ret {
 	case gst.FlowOK, gst.FlowFlushing:
 	case gst.FlowEOS:

@@ -32,8 +32,8 @@ type publishRequest struct {
 }
 
 type publishResponse struct {
-	err  error
 	resp *rpc.GetIngressInfoResponse
+	err  error
 }
 
 type Service struct {
@@ -93,7 +93,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 	case s.publishRequests <- r:
 		pRes = <-res
 		if pRes.err != nil {
-			return err
+			return pRes.err
 		}
 	}
 
@@ -114,7 +114,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (ready 
 	var pRes publishResponse
 	select {
 	case <-s.shutdown.Watch():
-		return errors.ErrServerShuttingDown
+		return nil, errors.ErrServerShuttingDown
 	case s.publishRequests <- r:
 		pRes = <-res
 		if pRes.err != nil {
@@ -143,7 +143,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (ready 
 	return ready, nil
 }
 
-func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inputType livekit.IngressInput, extraParams any) (*livekit.IngressInfo, error) {
+func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inputType livekit.IngressInput) (*rpc.GetIngressInfoResponse, error) {
 	resp, err := s.psrpcClient.GetIngressInfo(ctx, &rpc.GetIngressInfoRequest{
 		StreamKey: streamKey,
 	})
@@ -153,7 +153,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inpu
 
 	err = ingress.Validate(resp.Info)
 	if err != nil {
-		return resp.Info, err
+		return resp, err
 	}
 
 	if inputType != resp.Info.InputType {
@@ -171,7 +171,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inpu
 		StartedAt: time.Now().UnixNano(),
 	}
 
-	return resp.Info, nil
+	return resp, nil
 }
 
 func (s *Service) Run() error {
@@ -204,15 +204,18 @@ func (s *Service) Run() error {
 		case req := <-s.publishRequests:
 			go func() {
 				ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
-				info, err := s.handleNewPublisher(ctx, req.streamKey, req.inputType, req.extraParams)
-				if info != nil {
-					s.sendUpdate(ctx, info, err)
+				resp, err := s.handleNewPublisher(ctx, req.streamKey, req.inputType)
+				if resp.Info != nil {
+					s.sendUpdate(ctx, resp.Info, err)
 				}
 				if err != nil {
 					span.RecordError(err)
 				}
 				// Result channel should be buffered
-				req.result <- err
+				req.result <- publishResponse{
+					resp: resp,
+					err:  err,
+				}
 				span.End()
 			}()
 		}

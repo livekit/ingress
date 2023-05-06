@@ -163,8 +163,8 @@ func runService(c *cli.Context) error {
 			if rtmpsrv != nil {
 				rtmpsrv.Stop()
 			}
-			if whipSrv != nil {
-				whipSrv.Stop()
+			if whipsrv != nil {
+				whipsrv.Stop()
 			}
 
 		}

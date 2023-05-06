@@ -46,7 +46,7 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 		relayUrl = getRTMPRelayUrl(conf, info.StreamKey)
 	case livekit.IngressInput_WHIP_INPUT:
 		fields = append(fields, "resourceID", ep.(*WhipExtraParams).ResourceId)
-		relayUrl = getWHIPRelayUrl(conf, ep.(*WhipExtraParams).ResourceId)
+		relayUrl = getWHIPRelayUrlPrefix(conf, ep.(*WhipExtraParams).ResourceId)
 	}
 
 	err = conf.InitLogger(fields...)
@@ -112,7 +112,7 @@ func getRTMPRelayUrl(conf *config.Config, streamKey string) string {
 	return fmt.Sprintf("http://localhost:%d/rtmp/%s", conf.HTTPRelayPort, streamKey)
 }
 
-func getWHIPRelayUrl(conf *config.Config, resourceId string) string {
+func getWHIPRelayUrlPrefix(conf *config.Config, resourceId string) string {
 	return fmt.Sprintf("http://localhost:%d/whip/%s", conf.HTTPRelayPort, resourceId)
 }
 

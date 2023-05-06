@@ -2,12 +2,13 @@ package whip
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/tinyzimmer/go-gst/gst/app"
 
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/utils"
 )
 
 // TODO STUN & TURN
@@ -20,24 +21,29 @@ const (
 
 type WHIPSource struct {
 	params   *params.Params
-	trackSrc map[types.StreamKind]*WHIPAppSource
+	trackSrc map[types.StreamKind]*whipAppSource
 }
 
-func NewWHIPSource(p *params.Params) (*WHIPSource, error) {
+func NewWHIPRelaySource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
 	s := &WHIPSource{
 		params:   p,
-		trackSrc: make(map[types.StreamKind]*WHIPAppSource),
+		trackSrc: make(map[types.StreamKind]*whipAppSource),
 	}
 
 	return s, nil
 }
 
 func (s *WHIPSource) Start(ctx context.Context) error {
-	s.trackLock.Lock()
-	defer s.trackLock.Unlock()
+	mimeTypes := s.params.ExtraParams.(*params.WhipExtraParams).MimeTypes
 
-	for _, v := range s.trackSrc {
-		err := v.Start()
+	for k, v := range mimeTypes {
+		relayUrl := s.getRelayUrl(k)
+		t, err := NewWHIPAppSource(ctx, k, v, relayUrl)
+		if err != nil {
+			return err
+		}
+
+		err = t.Start(ctx)
 		if err != nil {
 			return err
 		}
@@ -47,36 +53,27 @@ func (s *WHIPSource) Start(ctx context.Context) error {
 }
 
 func (s *WHIPSource) Close() error {
-	if s.pc == nil {
-		return nil
+	var errs utils.ErrArray
+	for _, t := range s.trackSrc {
+		err := t.Close()
+		if err != nil {
+			errs.AppendErr(err)
+		}
 	}
 
-	s.pc.Close()
-
-	return <-s.result
+	return errs.ToError()
 }
 
 func (s *WHIPSource) GetSources(ctx context.Context) []*app.Source {
-	for {
-		s.trackLock.Lock()
-		if len(s.trackSrc) >= s.expectedTrackCount {
-			ret := make([]*app.Source, 0)
+	ret := make([]*app.Source, 0, len(s.trackSrc))
 
-			for _, v := range s.trackSrc {
-				ret = append(ret, v.GetAppSource())
-			}
-
-			s.trackLock.Unlock()
-			return ret
-		}
-		s.trackLock.Unlock()
-
-		select {
-		case <-ctx.Done():
-			logger.Infow("GetSources cancelled before all sources were ready")
-			return nil
-		case <-s.trackAddedChan:
-			// continue
-		}
+	for _, t := range s.trackSrc {
+		ret = append(ret, t.GetAppSource())
 	}
+
+	return ret
+}
+
+func (s *WHIPSource) getRelayUrl(kind types.StreamKind) string {
+	return fmt.Sprintf("%s/%s", s.params.RelayUrl, kind)
 }

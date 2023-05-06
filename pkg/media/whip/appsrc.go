@@ -1,39 +1,47 @@
 package whip
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"net"
+	"net/http"
 	"strings"
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/tracer"
 	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-gst/gst"
 	"github.com/tinyzimmer/go-gst/gst/app"
 )
 
-type WHIPAppSource struct {
+type whipAppSource struct {
 	appSrc    *app.Source
 	trackKind types.StreamKind
+	relayUrl  string
 
 	fuse   core.Fuse
 	result chan error
 }
 
-func newWHIPAppSource(trackKind types.StreamKind) (*WHIPAppSource, error) {
-	w := &WHIPAppSource{
+func NewWHIPAppSource(ctx context.Context, trackKind types.StreamKind, mimeType string, relayUrl string) (*whipAppSource, error) {
+	ctx, span := tracer.Start(ctx, "WHIPRelaySource.New")
+	defer span.End()
+
+	w := &whipAppSource{
 		trackKind: trackKind,
+		relayUrl:  relayUrl,
 	}
 
-	elem, err := gst.NewElementWithName("appsrc", fmt.Sprintf("%s_%s", WHIPAppSourceLabel, remoteTrack.Kind()))
+	elem, err := gst.NewElementWithName("appsrc", fmt.Sprintf("%s_%s", WHIPAppSourceLabel, trackKind))
 	if err != nil {
 		logger.Errorw("could not create appsrc", err)
 		return nil, err
 	}
-	caps, err := getCapsForCodec(remoteTrack.Codec().MimeType)
+	caps, err := getCapsForCodec(mimeType)
 	if err != nil {
 		return nil, err
 	}
@@ -50,80 +58,66 @@ func newWHIPAppSource(trackKind types.StreamKind) (*WHIPAppSource, error) {
 	return w, nil
 }
 
-func (w *WHIPAppSource) Start() error {
+func (w *whipAppSource) Start(ctx context.Context) error {
+	ctx, span := tracer.Start(ctx, "RTMPRelaySource.Start")
+	defer span.End()
+
+	resp, err := http.Get(w.relayUrl)
+	switch {
+	case err != nil:
+		return err
+	case resp != nil && (resp.StatusCode < 200 || resp.StatusCode >= 400):
+		return errors.ErrHttpRelayFailure(resp.StatusCode)
+	}
+
+	go func() {
+		defer resp.Body.Close()
+
+		err := w.copyRelayedData(resp.Body)
+
+		w.appSrc.EndStream()
+
+		w.result <- err
+		close(w.result)
+	}()
+
 	return nil
 }
 
-func (w *WHIPAppSource) Close() error {
+func (w *whipAppSource) Close() error {
 	w.fuse.Break()
 
 	return <-w.result
 }
 
-func (w *WHIPAppSource) GetAppSource() *app.Source {
+func (w *whipAppSource) GetAppSource() *app.Source {
 	return w.appSrc
 }
 
-func (w *WHIPAppSource) startTrackRelay() {
-	go func() {
-		var err error
-
-		defer func() {
-			w.appSrc.EndStream()
-
-			w.result <- err
-			close(w.result)
-		}()
-
-		logger.Infow("starting app source track reader", "kind", w.trackKind)
-
-		if w.remoteTrack.Kind() == webrtc.RTPCodecTypeVideo && w.writePLI != nil {
-			w.writePLI(w.remoteTrack.SSRC())
+func (w *whipAppSource) copyRelayedData(r io.Reader) error {
+	for {
+		if w.fuse.IsBroken() {
+			return io.ErrUnexpectedEOF
 		}
 
-		for {
-			select {
-			case <-w.fuse.Watch():
-				logger.Debugw("stopping app source track reader", "kind", w.trackKind)
-				return
-			default:
-				err = w.relayRTPPacket()
-				switch {
-				case err == nil:
-					// continue
-				case err == io.EOF:
-					err = nil
-					return
-				default:
-					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-						continue
-					}
-
-					logger.Warnw("error reading track", err, "kind", w.trackKind)
-					return
-				}
-			}
+		data, ts, err := utils.DeserializeMediaForRelay(r)
+		if err != nil {
+			return err
 		}
 
-	}()
-}
+		b := gst.NewBufferFromBytes(data)
+		b.SetPresentationTimestamp(ts)
 
-func relayRTPPacket() {
-	b := gst.NewBufferFromBytes(s.Data)
-	b.SetPresentationTimestamp(ts)
-
-	ret := t.appSrc.PushBuffer(b)
-	switch ret {
-	case gst.FlowOK, gst.FlowFlushing:
-		// continue
-	case gst.FlowEOS:
-		t.Close()
-		return io.EOF
-	default:
-		t.Close()
-		return errors.ErrFromGstFlowReturn(ret)
+		ret := w.appSrc.PushBuffer(b)
+		switch ret {
+		case gst.FlowOK, gst.FlowFlushing:
+			// continue
+		case gst.FlowEOS:
+			return io.EOF
+		default:
+			return errors.ErrFromGstFlowReturn(ret)
+		}
 	}
-
 }
 
 func getCapsForCodec(mimeType string) (*gst.Caps, error) {
