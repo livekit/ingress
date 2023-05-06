@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"sync"
@@ -75,6 +76,8 @@ func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngress
 		}
 		extraParamsString = string(p)
 	}
+
+	fmt.Println("EXTRA", extraParams, "STR", extraParamsString)
 
 	args := []string{
 		"run-handler",

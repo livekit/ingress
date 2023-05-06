@@ -30,20 +30,23 @@ func NewWHIPRelaySource(ctx context.Context, p *params.Params) (*WHIPSource, err
 		trackSrc: make(map[types.StreamKind]*whipAppSource),
 	}
 
-	return s, nil
-}
-
-func (s *WHIPSource) Start(ctx context.Context) error {
 	mimeTypes := s.params.ExtraParams.(*params.WhipExtraParams).MimeTypes
-
 	for k, v := range mimeTypes {
 		relayUrl := s.getRelayUrl(k)
 		t, err := NewWHIPAppSource(ctx, k, v, relayUrl)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
-		err = t.Start(ctx)
+		s.trackSrc[k] = t
+	}
+
+	return s, nil
+}
+
+func (s *WHIPSource) Start(ctx context.Context) error {
+	for _, t := range s.trackSrc {
+		err := t.Start(ctx)
 		if err != nil {
 			return err
 		}
