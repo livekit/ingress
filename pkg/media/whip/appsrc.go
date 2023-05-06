@@ -19,26 +19,28 @@ import (
 )
 
 type whipAppSource struct {
-	appSrc    *app.Source
-	trackKind types.StreamKind
-	relayUrl  string
+	appSrc     *app.Source
+	trackKind  types.StreamKind
+	relayUrl   string
+	resourceId string
 
 	fuse   core.Fuse
 	result chan error
 }
 
-func NewWHIPAppSource(ctx context.Context, trackKind types.StreamKind, mimeType string, relayUrl string) (*whipAppSource, error) {
+func NewWHIPAppSource(ctx context.Context, resourceId string, trackKind types.StreamKind, mimeType string, relayUrl string) (*whipAppSource, error) {
 	ctx, span := tracer.Start(ctx, "WHIPRelaySource.New")
 	defer span.End()
 
 	w := &whipAppSource{
-		trackKind: trackKind,
-		relayUrl:  relayUrl,
+		trackKind:  trackKind,
+		relayUrl:   relayUrl,
+		resourceId: resourceId,
 	}
 
 	elem, err := gst.NewElementWithName("appsrc", fmt.Sprintf("%s_%s", WHIPAppSourceLabel, trackKind))
 	if err != nil {
-		logger.Errorw("could not create appsrc", err)
+		logger.Errorw("could not create appsrc", err, "resourceID", w.resourceId, "kind", w.trackKind)
 		return nil, err
 	}
 	caps, err := getCapsForCodec(mimeType)
@@ -61,6 +63,8 @@ func NewWHIPAppSource(ctx context.Context, trackKind types.StreamKind, mimeType 
 func (w *whipAppSource) Start(ctx context.Context) error {
 	ctx, span := tracer.Start(ctx, "RTMPRelaySource.Start")
 	defer span.End()
+
+	logger.Debugw("starting WHIP app source", "resourceID", w.resourceId, "kind", w.trackKind)
 
 	resp, err := http.Get(w.relayUrl)
 	switch {

@@ -20,20 +20,22 @@ const (
 )
 
 type WHIPSource struct {
-	params   *params.Params
-	trackSrc map[types.StreamKind]*whipAppSource
+	params     *params.Params
+	resourceId string
+	trackSrc   map[types.StreamKind]*whipAppSource
 }
 
 func NewWHIPRelaySource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
 	s := &WHIPSource{
-		params:   p,
-		trackSrc: make(map[types.StreamKind]*whipAppSource),
+		params:     p,
+		trackSrc:   make(map[types.StreamKind]*whipAppSource),
+		resourceId: p.ExtraParams.(*params.WhipExtraParams).ResourceId,
 	}
 
 	mimeTypes := s.params.ExtraParams.(*params.WhipExtraParams).MimeTypes
 	for k, v := range mimeTypes {
 		relayUrl := s.getRelayUrl(k)
-		t, err := NewWHIPAppSource(ctx, k, v, relayUrl)
+		t, err := NewWHIPAppSource(ctx, s.resourceId, k, v, relayUrl)
 		if err != nil {
 			return nil, err
 		}

@@ -2,7 +2,6 @@ package service
 
 import (
 	"context"
-	"fmt"
 
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
@@ -37,8 +36,6 @@ func NewHandler(conf *config.Config, rpcClient rpc.IOInfoClient) *Handler {
 func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string, extraParams any) {
 	ctx, span := tracer.Start(ctx, "Handler.HandleRequest")
 	defer span.End()
-
-	fmt.Println("EXTRA HANDLER", extraParams)
 
 	p, err := h.buildPipeline(ctx, info, wsUrl, token, extraParams)
 	if err != nil {

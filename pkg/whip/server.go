@@ -244,6 +244,8 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 			return
 		}
 
+		logger.Infow("all tracks ready")
+
 		go func() {
 			err := h.WaitForSessionEnd(s.ctx)
 			if err != nil {
