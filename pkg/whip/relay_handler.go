@@ -46,7 +46,7 @@ func (h *WHIPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	kind := types.StreamKind(v[1])
 
 	log := logger.Logger(logger.GetLogger().WithValues("resourceId", resourceId, "kind", kind))
-	log.Infow("relaying ingress")
+	log.Infow("relaying whip ingress")
 
 	pr, pw := io.Pipe()
 	done := make(chan error)
@@ -61,6 +61,7 @@ func (h *WHIPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
+
 	defer func() {
 		pw.Close()
 		h.whipServer.DissociateRelay(resourceId, kind)

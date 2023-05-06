@@ -36,6 +36,7 @@ func NewWHIPAppSource(ctx context.Context, resourceId string, trackKind types.St
 		trackKind:  trackKind,
 		relayUrl:   relayUrl,
 		resourceId: resourceId,
+		fuse:       core.NewFuse(),
 	}
 
 	elem, err := gst.NewElementWithName("appsrc", fmt.Sprintf("%s_%s", WHIPAppSourceLabel, trackKind))

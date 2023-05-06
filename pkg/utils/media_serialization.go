@@ -47,13 +47,13 @@ func DeserializeMediaForRelay(r io.Reader) ([]byte, time.Duration, error) {
 	}
 
 	var size uint32
-	err = binary.Read(r, binary.BigEndian, size)
+	err = binary.Read(r, binary.BigEndian, &size)
 	if err != nil {
 		return nil, 0, err
 	}
 
 	data := make([]byte, int(size))
-	err = binary.Read(r, binary.BigEndian, &data)
+	err = binary.Read(r, binary.BigEndian, data)
 	if err != nil {
 		return nil, 0, err
 	}

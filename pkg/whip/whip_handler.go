@@ -109,10 +109,11 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (
 	return h, sdpAnswer, nil
 }
 
-func (h *whipHandler) WaitForTracksReady(ctx context.Context) (map[types.StreamKind]string, error) {
+func (h *whipHandler) Start(ctx context.Context) (map[types.StreamKind]string, error) {
 	var trackCount int
 	mimeTypes := make(map[types.StreamKind]string)
 
+loop:
 	for {
 		select {
 		case <-ctx.Done():
@@ -122,10 +123,21 @@ func (h *whipHandler) WaitForTracksReady(ctx context.Context) (map[types.StreamK
 
 			trackCount++
 			if trackCount == h.expectedTrackCount {
-				return mimeTypes, nil
+				break loop
 			}
 		}
 	}
+
+	h.trackLock.Lock()
+	defer h.trackLock.Unlock()
+	for _, th := range h.trackHandlers {
+		err := th.Start()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return mimeTypes, nil
 }
 
 func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
@@ -140,7 +152,6 @@ func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
 func (h *whipHandler) AssociateRelay(kind types.StreamKind, w io.WriteCloser) error {
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
-
 	th := h.trackHandlers[kind]
 	if th == nil {
 		return errors.ErrIngressNotFound
@@ -157,7 +168,6 @@ func (h *whipHandler) AssociateRelay(kind types.StreamKind, w io.WriteCloser) er
 func (h *whipHandler) DissociateRelay(kind types.StreamKind) error {
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
-
 	th := h.trackHandlers[kind]
 	if th == nil {
 		return errors.ErrIngressNotFound

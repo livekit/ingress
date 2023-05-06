@@ -239,7 +239,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 			}()
 		}
 
-		mimeTypes, err = h.WaitForTracksReady(ctx)
+		mimeTypes, err = h.Start(ctx)
 		if err != nil {
 			return
 		}
