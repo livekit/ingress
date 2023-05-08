@@ -249,7 +249,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 		go func() {
 			err := h.WaitForSessionEnd(s.ctx)
 			if err != nil {
-				logger.Warnw("whil session failed", err, "streamKey", streamKey, "resourceID", resourceId)
+				logger.Warnw("WHIP session failed", err, "streamKey", streamKey, "resourceID", resourceId)
 				// The handler process should update the ingress info
 			}
 

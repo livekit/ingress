@@ -3,6 +3,7 @@ package whip
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/tinyzimmer/go-gst/gst/app"
 
@@ -61,7 +62,10 @@ func (s *WHIPSource) Close() error {
 	var errs utils.ErrArray
 	for _, t := range s.trackSrc {
 		err := t.Close()
-		if err != nil {
+		switch err {
+		case nil, io.EOF:
+			// success
+		default:
 			errs.AppendErr(err)
 		}
 	}

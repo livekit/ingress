@@ -37,6 +37,7 @@ func NewWHIPAppSource(ctx context.Context, resourceId string, trackKind types.St
 		relayUrl:   relayUrl,
 		resourceId: resourceId,
 		fuse:       core.NewFuse(),
+		result:     make(chan error, 1),
 	}
 
 	elem, err := gst.NewElementWithName("appsrc", fmt.Sprintf("%s_%s", WHIPAppSourceLabel, trackKind))
@@ -79,6 +80,7 @@ func (w *whipAppSource) Start(ctx context.Context) error {
 		defer resp.Body.Close()
 
 		err := w.copyRelayedData(resp.Body)
+		logger.Debugw("WHIP app source relay stopped", "error", err, "resourceID", w.resourceId, "kind", w.trackKind)
 
 		w.appSrc.EndStream()
 
@@ -90,6 +92,7 @@ func (w *whipAppSource) Start(ctx context.Context) error {
 }
 
 func (w *whipAppSource) Close() error {
+	logger.Debugw("WHIP app source relay Close called", "resourceID", w.resourceId, "kind", w.trackKind)
 	w.fuse.Break()
 
 	return <-w.result
@@ -102,7 +105,7 @@ func (w *whipAppSource) GetAppSource() *app.Source {
 func (w *whipAppSource) copyRelayedData(r io.Reader) error {
 	for {
 		if w.fuse.IsBroken() {
-			return io.ErrUnexpectedEOF
+			return io.EOF
 		}
 
 		data, ts, err := utils.DeserializeMediaForRelay(r)

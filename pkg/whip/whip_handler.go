@@ -224,6 +224,8 @@ func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnect
 				}
 				h.trackLock.Unlock()
 
+				pc.Close()
+
 				h.result <- errs.ToError()
 			})
 		}

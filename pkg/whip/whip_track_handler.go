@@ -94,6 +94,7 @@ func (t *whipTrackHandler) startRTPReceiver() {
 		var err error
 
 		defer func() {
+			t.mediaBuffer.Close()
 			t.result <- err
 			close(t.result)
 		}()
@@ -122,7 +123,7 @@ func (t *whipTrackHandler) startRTPReceiver() {
 						continue
 					}
 
-					logger.Warnw("error reading rtp packets", err, "trackID", err, t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+					logger.Warnw("error reading rtp packets", err, "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
 					return
 				}
 			}
