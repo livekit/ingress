@@ -106,6 +106,9 @@ func (s *WHIPServer) Start(
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
 		_, err = s.rpcClient.DeleteWHIPResource(s.ctx, resourceID, req, psrpc.WithRequestTimeout(5*time.Second))
+		if err == psrpc.ErrNoResponse {
+			err = errors.ErrIngressNotFound
+		}
 	}).Methods("DELETE")
 
 	// Trickle, ICE Restart
@@ -198,20 +201,21 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
 
-	h, sdpResponse, err := NewWHIPHandler(ctx, s.conf, sdpOffer)
-	if err != nil {
-		return "", "", err
-	}
-
-	s.handlers.Store(resourceId, h)
-
 	var ready func(mimeTypes map[types.StreamKind]string, err error)
+	var err error
 	if s.onPublish != nil {
 		ready, err = s.onPublish(streamKey, resourceId)
 		if err != nil {
 			return "", "", err
 		}
 	}
+
+	h, sdpResponse, err := NewWHIPHandler(ctx, s.conf, sdpOffer)
+	if err != nil {
+		return "", "", err
+	}
+
+	s.handlers.Store(resourceId, h)
 
 	go func() {
 		ctx, done := context.WithTimeout(s.ctx, sessionStartTimeout)
@@ -233,13 +237,15 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 		logger.Infow("all tracks ready")
 
 		go func() {
+			defer func() {
+				s.handlers.Delete(resourceId)
+			}()
+
 			err := h.WaitForSessionEnd(s.ctx)
 			if err != nil {
 				logger.Warnw("WHIP session failed", err, "streamKey", streamKey, "resourceID", resourceId)
 				// The handler process should update the ingress info
 			}
-
-			s.handlers.Delete(resourceId)
 		}()
 	}()
 

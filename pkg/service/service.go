@@ -118,7 +118,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (ready 
 	case s.publishRequests <- r:
 		pRes = <-res
 		if pRes.err != nil {
-			return nil, err
+			return nil, pRes.err
 		}
 	}
 
@@ -205,7 +205,7 @@ func (s *Service) Run() error {
 			go func() {
 				ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
 				resp, err := s.handleNewPublisher(ctx, req.streamKey, req.inputType)
-				if resp.Info != nil {
+				if resp != nil && resp.Info != nil {
 					s.sendUpdate(ctx, resp.Info, err)
 				}
 				if err != nil {
