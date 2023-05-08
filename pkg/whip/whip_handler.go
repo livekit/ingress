@@ -22,6 +22,8 @@ const (
 	whipIdentity = "WHIPIngress"
 )
 
+// TODO log ingress id / resource ID
+
 type whipHandler struct {
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
@@ -131,21 +133,42 @@ loop:
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
 	for _, th := range h.trackHandlers {
-		err := th.Start()
+		waitForDone, err := th.Start()
 		if err != nil {
 			return nil, err
 		}
+
+		go func() {
+			err := waitForDone()
+			h.result <- err
+		}()
 	}
 
 	return mimeTypes, nil
 }
 
 func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return errors.ErrSourceNotReady
-	case err := <-h.result:
-		return err
+	defer func() {
+		logger.Infow("closing peer connection")
+		h.pc.Close()
+	}()
+
+	var trackDoneCount int
+	var errs utils.ErrArray
+
+	for {
+		select {
+		case <-ctx.Done():
+			return errors.ErrSourceNotReady
+		case err := <-h.result:
+			trackDoneCount++
+			if err != nil {
+				errs.AppendErr(err)
+			}
+			if trackDoneCount == h.expectedTrackCount {
+				return errs.ToError()
+			}
+		}
 	}
 }
 
@@ -158,22 +181,6 @@ func (h *whipHandler) AssociateRelay(kind types.StreamKind, w io.WriteCloser) er
 	}
 
 	err := th.SetWriter(w)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (h *whipHandler) DissociateRelay(kind types.StreamKind) error {
-	h.trackLock.Lock()
-	defer h.trackLock.Unlock()
-	th := h.trackHandlers[kind]
-	if th == nil {
-		return errors.ErrIngressNotFound
-	}
-
-	err := th.SetWriter(nil)
 	if err != nil {
 		return err
 	}
@@ -214,19 +221,11 @@ func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnect
 			closeOnce.Do(func() {
 				h.sync.End()
 
-				var errs utils.ErrArray
 				h.trackLock.Lock()
 				for _, v := range h.trackHandlers {
-					err := v.Close()
-					if err != nil {
-						errs.AppendErr(err)
-					}
+					v.Close()
 				}
 				h.trackLock.Unlock()
-
-				pc.Close()
-
-				h.result <- errs.ToError()
 			})
 		}
 	})

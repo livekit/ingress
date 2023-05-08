@@ -69,20 +69,18 @@ func newWHIPTrackHandler(
 	return t, nil
 }
 
-func (t *whipTrackHandler) Start() error {
+func (t *whipTrackHandler) Start() (waitForDone func() error, err error) {
 	t.result = make(chan error, 1)
 	t.startRTPReceiver()
 	if t.onRTCP != nil {
 		t.startRTCPReceiver()
 	}
 
-	return nil
+	return func() error { return <-t.result }, nil
 }
 
-func (t *whipTrackHandler) Close() error {
+func (t *whipTrackHandler) Close() {
 	t.fuse.Break()
-
-	return <-t.result
 }
 
 func (t *whipTrackHandler) SetWriter(w io.WriteCloser) error {

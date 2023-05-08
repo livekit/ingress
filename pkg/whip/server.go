@@ -152,20 +152,6 @@ func (s *WHIPServer) AssociateRelay(resourceId string, kind types.StreamKind, w 
 	return nil
 }
 
-func (s *WHIPServer) DissociateRelay(resourceId string, kind types.StreamKind) error {
-	h, ok := s.handlers.Load(resourceId)
-	if ok && h != nil {
-		err := h.(*whipHandler).DissociateRelay(kind)
-		if err != nil {
-			return err
-		}
-	} else {
-		return errors.ErrIngressNotFound
-	}
-
-	return nil
-}
-
 func (s *WHIPServer) handleError(err error, w http.ResponseWriter) {
 	var psrpcErr psrpc.Error
 	switch {
