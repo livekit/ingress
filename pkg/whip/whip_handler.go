@@ -133,15 +133,12 @@ loop:
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
 	for _, th := range h.trackHandlers {
-		waitForDone, err := th.Start()
+		err := th.Start(func(err error) {
+			h.result <- err
+		})
 		if err != nil {
 			return nil, err
 		}
-
-		go func() {
-			err := waitForDone()
-			h.result <- err
-		}()
 	}
 
 	return mimeTypes, nil

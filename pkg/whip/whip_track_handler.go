@@ -35,7 +35,6 @@ type whipTrackHandler struct {
 	firstPacket sync.Once
 	mediaBuffer *utils.PrerollBuffer
 	fuse        core.Fuse
-	result      chan error
 }
 
 func newWHIPTrackHandler(
@@ -69,14 +68,13 @@ func newWHIPTrackHandler(
 	return t, nil
 }
 
-func (t *whipTrackHandler) Start() (waitForDone func() error, err error) {
-	t.result = make(chan error, 1)
-	t.startRTPReceiver()
+func (t *whipTrackHandler) Start(onDone func(err error)) (err error) {
+	t.startRTPReceiver(onDone)
 	if t.onRTCP != nil {
 		t.startRTCPReceiver()
 	}
 
-	return func() error { return <-t.result }, nil
+	return nil
 }
 
 func (t *whipTrackHandler) Close() {
@@ -87,14 +85,15 @@ func (t *whipTrackHandler) SetWriter(w io.WriteCloser) error {
 	return t.mediaBuffer.SetWriter(w)
 }
 
-func (t *whipTrackHandler) startRTPReceiver() {
+func (t *whipTrackHandler) startRTPReceiver(onDone func(err error)) {
 	go func() {
 		var err error
 
 		defer func() {
 			t.mediaBuffer.Close()
-			t.result <- err
-			close(t.result)
+			if onDone != nil {
+				onDone(err)
+			}
 		}()
 
 		logger.Infow("starting rtp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
