@@ -109,6 +109,7 @@ func (t *whipTrackHandler) startRTPReceiver() {
 			select {
 			case <-t.fuse.Watch():
 				logger.Debugw("stopping rtp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+				err = nil
 				return
 			default:
 				err = t.processRTPPacket()

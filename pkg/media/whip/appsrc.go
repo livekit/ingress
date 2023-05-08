@@ -109,7 +109,13 @@ func (w *whipAppSource) copyRelayedData(r io.Reader) error {
 		}
 
 		data, ts, err := utils.DeserializeMediaForRelay(r)
-		if err != nil {
+		switch err {
+		case nil:
+			// continue
+		case io.EOF:
+			// relay stopped without a clean session shutdown
+			return io.ErrUnexpectedEOF
+		default:
 			return err
 		}
 
