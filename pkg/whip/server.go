@@ -219,8 +219,6 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 		return "", "", err
 	}
 
-	s.handlers.Store(resourceId, h)
-
 	go func() {
 		ctx, done := context.WithTimeout(s.ctx, sessionStartTimeout)
 		defer done()
@@ -230,8 +228,13 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 		if ready != nil {
 			defer func() {
 				ready(mimeTypes, err)
+				if err != nil {
+					s.handlers.Delete(resourceId)
+				}
 			}()
 		}
+
+		s.handlers.Store(resourceId, h)
 
 		mimeTypes, err = h.Start(ctx)
 		if err != nil {
