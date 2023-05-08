@@ -25,6 +25,7 @@ const (
 )
 
 type whipTrackHandler struct {
+	logger      logger.Logger
 	remoteTrack *webrtc.TrackRemote
 	receiver    *webrtc.RTPReceiver
 	sb          *samplebuilder.SampleBuilder
@@ -38,6 +39,7 @@ type whipTrackHandler struct {
 }
 
 func newWHIPTrackHandler(
+	logger logger.Logger,
 	track *webrtc.TrackRemote,
 	receiver *webrtc.RTPReceiver,
 	sync *synchronizer.TrackSynchronizer,
@@ -45,6 +47,7 @@ func newWHIPTrackHandler(
 	onRTCP func(packet rtcp.Packet),
 ) (*whipTrackHandler, error) {
 	t := &whipTrackHandler{
+		logger:      logger,
 		remoteTrack: track,
 		receiver:    receiver,
 		sync:        sync,
@@ -60,7 +63,7 @@ func newWHIPTrackHandler(
 	t.sb = sb
 
 	t.mediaBuffer = utils.NewPrerollBuffer(func() error {
-		logger.Infow("preroll buffer reset event", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+		t.logger.Infow("preroll buffer reset event", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
 
 		return nil
 	})
@@ -96,7 +99,7 @@ func (t *whipTrackHandler) startRTPReceiver(onDone func(err error)) {
 			}
 		}()
 
-		logger.Infow("starting rtp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+		t.logger.Infow("starting rtp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
 
 		if t.remoteTrack.Kind() == webrtc.RTPCodecTypeVideo && t.writePLI != nil {
 			t.writePLI(t.remoteTrack.SSRC())
@@ -105,7 +108,7 @@ func (t *whipTrackHandler) startRTPReceiver(onDone func(err error)) {
 		for {
 			select {
 			case <-t.fuse.Watch():
-				logger.Debugw("stopping rtp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+				t.logger.Debugw("stopping rtp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
 				err = nil
 				return
 			default:
@@ -121,7 +124,7 @@ func (t *whipTrackHandler) startRTPReceiver(onDone func(err error)) {
 						continue
 					}
 
-					logger.Warnw("error reading rtp packets", err, "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+					t.logger.Warnw("error reading rtp packets", err, "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
 					return
 				}
 			}
@@ -141,7 +144,7 @@ func (t *whipTrackHandler) processRTPPacket() error {
 	}
 
 	t.firstPacket.Do(func() {
-		logger.Debugw("first packet received", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+		t.logger.Debugw("first packet received", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
 		t.sync.FirstPacketForTrack(pkt)
 	})
 
@@ -168,12 +171,12 @@ func (t *whipTrackHandler) processRTPPacket() error {
 
 func (t *whipTrackHandler) startRTCPReceiver() {
 	go func() {
-		logger.Infow("starting app source rtcp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+		t.logger.Infow("starting app source rtcp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
 
 		for {
 			select {
 			case <-t.fuse.Watch():
-				logger.Debugw("stopping app source rtcp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+				t.logger.Debugw("stopping app source rtcp receiver", "trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
 				return
 			default:
 				_ = t.receiver.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
@@ -190,7 +193,7 @@ func (t *whipTrackHandler) startRTCPReceiver() {
 						continue
 					}
 
-					logger.Warnw("error reading rtcp", err, "trackID", err, t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
+					t.logger.Warnw("error reading rtcp", err, "trackID", err, t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
 					return
 				}
 

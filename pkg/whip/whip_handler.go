@@ -25,6 +25,8 @@ const (
 // TODO log ingress id / resource ID
 
 type whipHandler struct {
+	logger logger.Logger
+
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
 	expectedTrackCount int
@@ -40,6 +42,7 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (
 	var err error
 
 	h := &whipHandler{
+		logger:        logger.GetLogger().WithValues("ingressID", ctx.Value("ingressID"), "resourceID", ctx.Value("resourceID")),
 		sync:          synchronizer.NewSynchronizer(nil),
 		result:        make(chan error, 1),
 		tracks:        make(map[string]*webrtc.TrackRemote),
@@ -57,7 +60,7 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (
 	}
 
 	webrtcSettings := &webrtc.SettingEngine{
-		LoggerFactory: pionlogger.NewLoggerFactory(logger.GetLogger()),
+		LoggerFactory: pionlogger.NewLoggerFactory(h.logger),
 	}
 
 	var icePortStart, icePortEnd uint16
@@ -146,7 +149,7 @@ loop:
 
 func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
 	defer func() {
-		logger.Infow("closing peer connection")
+		h.logger.Infow("closing peer connection")
 		h.pc.Close()
 	}()
 
@@ -211,7 +214,7 @@ func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnect
 
 	closeOnce := sync.Once{}
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
-		logger.Infow("Peer Connection State changed", "state", state.String())
+		h.logger.Infow("Peer Connection State changed", "state", state.String())
 
 		// TODO support ICE Restart
 		if state >= webrtc.PeerConnectionStateDisconnected {
@@ -265,7 +268,7 @@ func (h *whipHandler) getSDPAnswer(ctx context.Context, offer *webrtc.SessionDes
 
 func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 	kind := streamKindFromCodecType(track.Kind())
-	logger.Infow("track has started", "type", track.PayloadType(), "codec", track.Codec().MimeType, "kind", kind)
+	h.logger.Infow("track has started", "type", track.PayloadType(), "codec", track.Codec().MimeType, "kind", kind)
 
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
@@ -273,9 +276,9 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 
 	sync := h.sync.AddTrack(track, whipIdentity)
 
-	th, err := newWHIPTrackHandler(track, receiver, sync, h.writePLI, h.sync.OnRTCP)
+	th, err := newWHIPTrackHandler(h.logger, track, receiver, sync, h.writePLI, h.sync.OnRTCP)
 	if err != nil {
-		logger.Warnw("failed creating whip track handler", err, "trackID", track.ID(), "kind", kind)
+		h.logger.Warnw("failed creating whip track handler", err, "trackID", track.ID(), "kind", kind)
 		return
 	}
 	h.trackHandlers[kind] = th
@@ -283,18 +286,18 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 	select {
 	case h.trackAddedChan <- track:
 	default:
-		logger.Warnw("failed notifying of new track", errors.New("channel full"))
+		h.logger.Warnw("failed notifying of new track", errors.New("channel full"))
 	}
 }
 
 func (h *whipHandler) writePLI(ssrc webrtc.SSRC) {
-	logger.Debugw("sending PLI request", "ssrc", ssrc)
+	h.logger.Debugw("sending PLI request", "ssrc", ssrc)
 	pli := []rtcp.Packet{
 		&rtcp.PictureLossIndication{SenderSSRC: uint32(ssrc), MediaSSRC: uint32(ssrc)},
 	}
 	err := h.pc.WriteRTCP(pli)
 	if err != nil {
-		logger.Warnw("failed writing PLI", err, "ssrc", ssrc)
+		h.logger.Warnw("failed writing PLI", err, "ssrc", ssrc)
 	}
 }
 

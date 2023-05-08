@@ -103,7 +103,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 	return nil
 }
 
-func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (ready func(mimeTypes map[types.StreamKind]string, err error), err error) {
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (info *livekit.IngressInfo, ready func(mimeTypes map[types.StreamKind]string, err error), err error) {
 	res := make(chan publishResponse)
 	r := publishRequest{
 		streamKey: streamKey,
@@ -114,11 +114,11 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (ready 
 	var pRes publishResponse
 	select {
 	case <-s.shutdown.Watch():
-		return nil, errors.ErrServerShuttingDown
+		return nil, nil, errors.ErrServerShuttingDown
 	case s.publishRequests <- r:
 		pRes = <-res
 		if pRes.err != nil {
-			return nil, pRes.err
+			return nil, nil, pRes.err
 		}
 	}
 
@@ -140,7 +140,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (ready 
 		span.End()
 	}
 
-	return ready, nil
+	return pRes.resp.Info, ready, nil
 }
 
 func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inputType livekit.IngressInput) (*rpc.GetIngressInfoResponse, error) {

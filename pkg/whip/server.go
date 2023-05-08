@@ -14,6 +14,7 @@ import (
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/utils"
@@ -31,7 +32,7 @@ type WHIPServer struct {
 	cancel context.CancelFunc
 
 	conf      *config.Config
-	onPublish func(streamKey, resourceId string) (func(mimeTypes map[types.StreamKind]string, err error), error)
+	onPublish func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), error)
 	handlers  sync.Map
 	rpcClient rpc.IngressHandlerClient
 }
@@ -44,9 +45,13 @@ func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
 
 func (s *WHIPServer) Start(
 	conf *config.Config,
-	onPublish func(streamKey, resourceId string) (func(mimeTypes map[types.StreamKind]string, err error), error),
+	onPublish func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), error),
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
+
+	if onPublish == nil {
+		return psrpc.NewErrorf(psrpc.Internal, "no onPublish callback provided")
+	}
 
 	s.onPublish = onPublish
 	s.conf = conf
@@ -201,14 +206,13 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
 
-	var ready func(mimeTypes map[types.StreamKind]string, err error)
-	var err error
-	if s.onPublish != nil {
-		ready, err = s.onPublish(streamKey, resourceId)
-		if err != nil {
-			return "", "", err
-		}
+	info, ready, err := s.onPublish(streamKey, resourceId)
+	if err != nil {
+		return "", "", err
 	}
+
+	ctx = context.WithValue(ctx, "ingressID", info.IngressId)
+	ctx = context.WithValue(ctx, "resourceID", resourceId)
 
 	h, sdpResponse, err := NewWHIPHandler(ctx, s.conf, sdpOffer)
 	if err != nil {
