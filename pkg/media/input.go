@@ -80,9 +80,9 @@ func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 func CreateSource(ctx context.Context, p *params.Params) (Source, error) {
 	switch p.IngressInfo.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		return rtmp.NewHTTPRelaySource(ctx, p)
+		return rtmp.NewRTMPRelaySource(ctx, p)
 	case livekit.IngressInput_WHIP_INPUT:
-		return whip.NewWHIPSource(ctx, p)
+		return whip.NewWHIPRelaySource(ctx, p)
 	default:
 		return nil, ingress.ErrInvalidIngressType
 	}

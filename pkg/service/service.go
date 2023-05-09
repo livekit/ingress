@@ -14,6 +14,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/ingress/version"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
@@ -25,10 +26,14 @@ import (
 const shutdownTimer = time.Second * 5
 
 type publishRequest struct {
-	streamKey   string
-	inputType   livekit.IngressInput
-	extraParams any
-	result      chan<- error
+	streamKey string
+	inputType livekit.IngressInput
+	result    chan<- publishResponse
+}
+
+type publishResponse struct {
+	resp *rpc.GetIngressInfoResponse
+	err  error
 }
 
 type Service struct {
@@ -73,44 +78,73 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient) *Service {
 }
 
 func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
-	res := make(chan error)
+	ctx, span := tracer.Start(context.Background(), "Service.HandleRTMPPublishRequest")
+	defer span.End()
+
+	res := make(chan publishResponse)
 	r := publishRequest{
 		streamKey: streamKey,
 		inputType: livekit.IngressInput_RTMP_INPUT,
 		result:    res,
 	}
 
+	var pRes publishResponse
 	select {
 	case <-s.shutdown.Watch():
 		return errors.ErrServerShuttingDown
 	case s.publishRequests <- r:
-		err := <-res
-		return err
+		pRes = <-res
+		if pRes.err != nil {
+			return pRes.err
+		}
 	}
+
+	go s.manager.launchHandler(ctx, pRes.resp, nil)
+
+	return nil
 }
 
-func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId, sdpOffer string) error {
-	res := make(chan error)
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (info *livekit.IngressInfo, ready func(mimeTypes map[types.StreamKind]string, err error), err error) {
+	res := make(chan publishResponse)
 	r := publishRequest{
 		streamKey: streamKey,
 		inputType: livekit.IngressInput_WHIP_INPUT,
-		extraParams: params.WhipExtraParams{
-			ResourceId: resourceId,
-			SDPOffer:   sdpOffer,
-		},
-		result: res,
+		result:    res,
 	}
 
+	var pRes publishResponse
 	select {
 	case <-s.shutdown.Watch():
-		return errors.ErrServerShuttingDown
+		return nil, nil, errors.ErrServerShuttingDown
 	case s.publishRequests <- r:
-		err := <-res
-		return err
+		pRes = <-res
+		if pRes.err != nil {
+			return nil, nil, pRes.err
+		}
 	}
+
+	ready = func(mimeTypes map[types.StreamKind]string, err error) {
+		ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ready")
+		defer span.End()
+		if err != nil {
+			// Client failed to finalize session start
+			s.sendUpdate(ctx, pRes.resp.Info, err)
+			span.RecordError(err)
+			return
+		}
+
+		extraParams := params.WhipExtraParams{
+			ResourceId: resourceId,
+			MimeTypes:  mimeTypes,
+		}
+
+		go s.manager.launchHandler(ctx, pRes.resp, extraParams)
+	}
+
+	return pRes.resp.Info, ready, nil
 }
 
-func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inputType livekit.IngressInput, extraParams any) (*livekit.IngressInfo, error) {
+func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inputType livekit.IngressInput) (*rpc.GetIngressInfoResponse, error) {
 	resp, err := s.psrpcClient.GetIngressInfo(ctx, &rpc.GetIngressInfoRequest{
 		StreamKey: streamKey,
 	})
@@ -120,7 +154,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inpu
 
 	err = ingress.Validate(resp.Info)
 	if err != nil {
-		return resp.Info, err
+		return resp, err
 	}
 
 	if inputType != resp.Info.InputType {
@@ -138,9 +172,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inpu
 		StartedAt: time.Now().UnixNano(),
 	}
 
-	go s.manager.launchHandler(ctx, resp, extraParams)
-
-	return resp.Info, nil
+	return resp, nil
 }
 
 func (s *Service) Run() error {
@@ -173,16 +205,19 @@ func (s *Service) Run() error {
 		case req := <-s.publishRequests:
 			go func() {
 				ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
-				info, err := s.handleNewPublisher(ctx, req.streamKey, req.inputType, req.extraParams)
-				if info != nil {
-					s.sendUpdate(ctx, info, err)
+				defer span.End()
+				resp, err := s.handleNewPublisher(ctx, req.streamKey, req.inputType)
+				if resp != nil && resp.Info != nil {
+					s.sendUpdate(ctx, resp.Info, err)
 				}
 				if err != nil {
 					span.RecordError(err)
 				}
 				// Result channel should be buffered
-				req.result <- err
-				span.End()
+				req.result <- publishResponse{
+					resp: resp,
+					err:  err,
+				}
 			}()
 		}
 	}

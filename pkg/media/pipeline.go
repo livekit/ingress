@@ -44,8 +44,6 @@ func New(ctx context.Context, conf *config.Config, params *params.Params) (*Pipe
 	// initialize gst
 	gst.Init(nil)
 
-	logger.Debugw("listening", "url", params.Url)
-
 	input, err := NewInput(ctx, params)
 	if err != nil {
 		return nil, err

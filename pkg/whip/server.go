@@ -13,6 +13,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/utils"
@@ -20,23 +22,19 @@ import (
 )
 
 const (
-	sdpResponseTimeout = 5 * time.Second
-	rpcTimeout         = 5 * time.Second
+	sdpResponseTimeout  = 5 * time.Second
+	sessionStartTimeout = 10 * time.Second
+	rpcTimeout          = 5 * time.Second
 )
 
 type WHIPServer struct {
-	onPublish func(streamKey, resourceId, sdpOffer string) error
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	conf      *config.Config
+	onPublish func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), error)
 	handlers  sync.Map
 	rpcClient rpc.IngressHandlerClient
-}
-
-type handler struct {
-	sdpChan chan<- sdpRes
-}
-
-type sdpRes struct {
-	sdp string
-	err error
 }
 
 func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
@@ -45,21 +43,18 @@ func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
 	}
 }
 
-func (s *WHIPServer) handleError(err error, w http.ResponseWriter) {
-	var psrpcErr psrpc.Error
-	switch {
-	case errors.As(err, &psrpcErr):
-		w.WriteHeader(psrpcErr.ToHttp())
-		w.Write([]byte(psrpcErr.Error()))
-	case err == nil:
-		// Nothing, we already responded
-	default:
-		w.WriteHeader(http.StatusInternalServerError)
-	}
-}
+func (s *WHIPServer) Start(
+	conf *config.Config,
+	onPublish func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), error),
+) error {
+	s.ctx, s.cancel = context.WithCancel(context.Background())
 
-func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resourceId, sdpOffer string) error) error {
+	if onPublish == nil {
+		return psrpc.NewErrorf(psrpc.Internal, "no onPublish callback provided")
+	}
+
 	s.onPublish = onPublish
+	s.conf = conf
 
 	r := mux.NewRouter()
 
@@ -115,7 +110,10 @@ func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		_, err = s.rpcClient.DeleteWHIPResource(context.Background(), resourceID, req, psrpc.WithRequestTimeout(5*time.Second))
+		_, err = s.rpcClient.DeleteWHIPResource(s.ctx, resourceID, req, psrpc.WithRequestTimeout(5*time.Second))
+		if err == psrpc.ErrNoResponse {
+			err = errors.ErrIngressNotFound
+		}
 	}).Methods("DELETE")
 
 	// Trickle, ICE Restart
@@ -144,21 +142,35 @@ func (s *WHIPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 	return nil
 }
 
-func (s *WHIPServer) SetSDPResponse(resourceId string, sdp string, err error) error {
-	entry, ok := s.handlers.Load(resourceId)
-	if !ok {
-		return psrpc.NewErrorf(psrpc.NotFound, "unknown resource id")
-	}
-	sdpChan := entry.(chan sdpRes)
+func (s *WHIPServer) Stop() {
+	s.cancel()
+}
 
-	select {
-	case sdpChan <- sdpRes{sdp: sdp, err: err}:
-		// success
-	default:
-		return psrpc.NewErrorf(psrpc.Internal, "SDP response channel full")
+func (s *WHIPServer) AssociateRelay(resourceId string, kind types.StreamKind, w io.WriteCloser) error {
+	h, ok := s.handlers.Load(resourceId)
+	if ok && h != nil {
+		err := h.(*whipHandler).AssociateRelay(kind, w)
+		if err != nil {
+			return err
+		}
+	} else {
+		return errors.ErrIngressNotFound
 	}
 
 	return nil
+}
+
+func (s *WHIPServer) handleError(err error, w http.ResponseWriter) {
+	var psrpcErr psrpc.Error
+	switch {
+	case errors.As(err, &psrpcErr):
+		w.WriteHeader(psrpcErr.ToHttp())
+		w.Write([]byte(psrpcErr.Error()))
+	case err == nil:
+		// Nothing, we already responded
+	default:
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
 
 func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request, streamKey string) error {
@@ -189,30 +201,62 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 }
 
 func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, string, error) {
+	ctx, done := context.WithTimeout(s.ctx, sdpResponseTimeout)
+	defer done()
+
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
-	sdpChan := make(chan sdpRes, 1)
-	s.handlers.Store(resourceId, sdpChan)
-	defer s.handlers.Delete(resourceId)
 
-	if s.onPublish != nil {
-		err := s.onPublish(streamKey, resourceId, sdpOffer)
+	info, ready, err := s.onPublish(streamKey, resourceId)
+	if err != nil {
+		return "", "", err
+	}
+
+	ctx = context.WithValue(ctx, "ingressID", info.IngressId)
+	ctx = context.WithValue(ctx, "resourceID", resourceId)
+
+	h, sdpResponse, err := NewWHIPHandler(ctx, s.conf, sdpOffer)
+	if err != nil {
+		return "", "", err
+	}
+
+	go func() {
+		ctx, done := context.WithTimeout(s.ctx, sessionStartTimeout)
+		defer done()
+
+		var err error
+		var mimeTypes map[types.StreamKind]string
+		if ready != nil {
+			defer func() {
+				ready(mimeTypes, err)
+				if err != nil {
+					s.handlers.Delete(resourceId)
+				}
+			}()
+		}
+
+		s.handlers.Store(resourceId, h)
+
+		mimeTypes, err = h.Start(ctx)
 		if err != nil {
-			return "", "", err
+			return
 		}
-	}
 
-	var sdp string
-	select {
-	case res := <-sdpChan:
-		if res.err != nil {
-			return resourceId, "", res.err
-		}
-		sdp = res.sdp
-	case <-time.After(sdpResponseTimeout):
-		return resourceId, "", psrpc.NewErrorf(psrpc.Unavailable, "timeout waiting for sdp offer")
-	}
+		logger.Infow("all tracks ready")
 
-	return resourceId, sdp, nil
+		go func() {
+			defer func() {
+				s.handlers.Delete(resourceId)
+			}()
+
+			err := h.WaitForSessionEnd(s.ctx)
+			if err != nil {
+				logger.Warnw("WHIP session failed", err, "streamKey", streamKey, "resourceID", resourceId)
+				// The handler process should update the ingress info
+			}
+		}()
+	}()
+
+	return resourceId, sdpResponse, nil
 }
 
 func setCORSHeaders(w http.ResponseWriter, r *http.Request, resourceEndpoint bool) {

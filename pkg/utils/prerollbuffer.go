@@ -1,4 +1,4 @@
-package rtmp
+package utils
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ const (
 	maxBufferSize = 10000000
 )
 
-type prerollBuffer struct {
+type PrerollBuffer struct {
 	lock   sync.Mutex
 	buffer *bytes.Buffer
 	w      io.WriteCloser
@@ -20,14 +20,14 @@ type prerollBuffer struct {
 	onBufferReset func() error
 }
 
-func newPrerollBuffer(onBufferReset func() error) *prerollBuffer {
-	return &prerollBuffer{
+func NewPrerollBuffer(onBufferReset func() error) *PrerollBuffer {
+	return &PrerollBuffer{
 		buffer:        &bytes.Buffer{},
 		onBufferReset: onBufferReset,
 	}
 }
 
-func (pb *prerollBuffer) setWriter(w io.WriteCloser) error {
+func (pb *PrerollBuffer) SetWriter(w io.WriteCloser) error {
 	pb.lock.Lock()
 	defer pb.lock.Unlock()
 
@@ -42,7 +42,7 @@ func (pb *prerollBuffer) setWriter(w io.WriteCloser) error {
 	return nil
 }
 
-func (pb *prerollBuffer) Write(p []byte) (int, error) {
+func (pb *PrerollBuffer) Write(p []byte) (int, error) {
 	pb.lock.Lock()
 	defer pb.lock.Unlock()
 
@@ -63,7 +63,7 @@ func (pb *prerollBuffer) Write(p []byte) (int, error) {
 	return pb.w.Write(p)
 }
 
-func (pb *prerollBuffer) Close() error {
+func (pb *PrerollBuffer) Close() error {
 	pb.lock.Lock()
 	defer pb.lock.Unlock()
 
