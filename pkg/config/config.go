@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/redis"
 	"github.com/livekit/protocol/utils"
@@ -36,8 +37,10 @@ type Config struct {
 	WHIPPort       int           `yaml:"whip_port"` // -1 to disable WHIP
 	HTTPRelayPort  int           `yaml:"http_relay_port"`
 	Logging        logger.Config `yaml:"logging"`
+	Development    bool          `yaml:"development"`
 
-	Whip WhipConfig `yaml:"whip"`
+	// Used for WHIP transport
+	RTCConfig rtcconfig.RTCConfig `yaml:"rtc_config"`
 
 	// CPU costs for various ingress types
 	CPUCost CPUCostConfig `yaml:"cpu_cost"`
@@ -101,9 +104,9 @@ func (c *Config) InitWhipConf() error {
 		return nil
 	}
 
-	if len(c.Whip.ICEPortRange) != 2 {
-		logger.Infow("using default ICE port range", "range", DefaultICEPortRange)
-		c.Whip.ICEPortRange = DefaultICEPortRange
+	err := c.RTCConfig.Validate(c.Development)
+	if err != nil {
+		return err
 	}
 
 	return nil

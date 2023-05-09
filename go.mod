@@ -1,5 +1,7 @@
 module github.com/livekit/ingress
 
+replace github.com/livekit/mediatransportutil => ../mediatransportutil
+
 go 1.18
 
 require (
@@ -7,21 +9,22 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
-	github.com/livekit/protocol v1.5.6-0.20230501213748-b2974692ebfd
+	github.com/livekit/mediatransportutil v0.0.0-20230326055817-ed569ca13d26
+	github.com/livekit/protocol v1.5.6
 	github.com/livekit/psrpc v0.3.0
 	github.com/livekit/server-sdk-go v1.0.11-0.20230504163637-22d8afafa6b0
 	github.com/pion/interceptor v0.1.16
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/rtp v1.7.13
 	github.com/pion/webrtc/v3 v3.2.1
-	github.com/prometheus/client_golang v1.15.0
+	github.com/prometheus/client_golang v1.15.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.2
 	github.com/tinyzimmer/go-glib v0.0.25
 	github.com/tinyzimmer/go-gst v0.2.33
 	github.com/urfave/cli/v2 v2.25.1
 	github.com/yutopp/go-flv v0.2.0
-	go.uber.org/atomic v1.10.0
+	go.uber.org/atomic v1.11.0
 	google.golang.org/protobuf v1.30.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -45,7 +48,6 @@ require (
 	github.com/hashicorp/go-multierror v1.1.0 // indirect
 	github.com/jxskiss/base62 v1.1.0 // indirect
 	github.com/lithammer/shortuuid/v4 v4.0.0 // indirect
-	github.com/livekit/mediatransportutil v0.0.0-20230326055817-ed569ca13d26 // indirect
 	github.com/mackerelio/go-osstat v0.2.4 // indirect
 	github.com/magefile/mage v1.14.0 // indirect
 	github.com/mattn/go-pointer v0.0.1 // indirect
@@ -72,7 +74,7 @@ require (
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.42.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
-	github.com/redis/go-redis/v9 v9.0.3 // indirect
+	github.com/redis/go-redis/v9 v9.0.4 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/thoas/go-funk v0.9.3 // indirect
 	github.com/twitchtv/twirp v8.1.3+incompatible // indirect
@@ -87,5 +89,5 @@ require (
 	golang.org/x/sys v0.7.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	google.golang.org/genproto v0.0.0-20230403163135-c38d8f061ccd // indirect
-	google.golang.org/grpc v1.54.0 // indirect
+	google.golang.org/grpc v1.55.0 // indirect
 )

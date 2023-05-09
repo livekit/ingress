@@ -8,8 +8,8 @@ import (
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/logger/pionlogger"
 	"github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 	"github.com/livekit/server-sdk-go/pkg/synchronizer"
@@ -27,6 +27,7 @@ const (
 type whipHandler struct {
 	logger logger.Logger
 
+	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
 	expectedTrackCount int
@@ -59,24 +60,10 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (
 		return nil, "", err
 	}
 
-	webrtcSettings := &webrtc.SettingEngine{
-		LoggerFactory: pionlogger.NewLoggerFactory(h.logger),
+	h.rtcConfig, err = rtcconfig.NewWebRTCConfig(&conf.RTCConfig, conf.RTCConfig.NodeIP, conf.Development)
+	if err != nil {
+		return nil, "", err
 	}
-
-	var icePortStart, icePortEnd uint16
-
-	if len(conf.Whip.ICEPortRange) == 2 {
-		icePortStart = conf.Whip.ICEPortRange[0]
-		icePortEnd = conf.Whip.ICEPortRange[1]
-	}
-	if icePortStart != 0 || icePortEnd != 0 {
-		if err := webrtcSettings.SetEphemeralUDPPortRange(icePortStart, icePortEnd); err != nil {
-			return nil, "", err
-		}
-	}
-	webrtcSettings.SetIncludeLoopbackCandidate(conf.Whip.EnableLoopbackCandidate)
-	webrtcSettings.DisableSRTPReplayProtection(true)
-	webrtcSettings.DisableSRTCPReplayProtection(true)
 
 	m, err := newMediaEngine()
 	if err != nil {
@@ -95,7 +82,7 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (
 	}
 
 	// Create the API object with the MediaEngine
-	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithSettingEngine(*webrtcSettings), webrtc.WithInterceptorRegistry(i))
+	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithSettingEngine(h.rtcConfig.SettingEngine), webrtc.WithInterceptorRegistry(i))
 	h.pc, err = h.createPeerConnection(api)
 	if err != nil {
 		return nil, "", err
@@ -189,14 +176,8 @@ func (h *whipHandler) AssociateRelay(kind types.StreamKind, w io.WriteCloser) er
 }
 
 func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnection, error) {
-	config := webrtc.Configuration{
-		ICEServers:   []webrtc.ICEServer{},
-		SDPSemantics: webrtc.SDPSemanticsUnifiedPlanWithFallback,
-		BundlePolicy: webrtc.BundlePolicyBalanced,
-	}
-
 	// Create a new RTCPeerConnection
-	pc, err := api.NewPeerConnection(config)
+	pc, err := api.NewPeerConnection(h.rtcConfig.Configuration)
 	if err != nil {
 		return nil, err
 	}
