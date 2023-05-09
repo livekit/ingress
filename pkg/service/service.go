@@ -79,6 +79,8 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient) *Service {
 
 func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 	ctx, span := tracer.Start(context.Background(), "Service.HandleRTMPPublishRequest")
+	defer span.End()
+
 	res := make(chan publishResponse)
 	r := publishRequest{
 		streamKey: streamKey,
@@ -99,7 +101,6 @@ func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 
 	go s.manager.launchHandler(ctx, pRes.resp, nil)
 
-	span.End()
 	return nil
 }
 
