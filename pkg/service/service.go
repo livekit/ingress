@@ -124,10 +124,12 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (info *
 	}
 
 	ready = func(mimeTypes map[types.StreamKind]string, err error) {
-		ctx, span := tracer.Start(context.Background(), "Service.HandleRTMPPublishRequest.ready")
+		ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ready")
+		defer span.End()
 		if err != nil {
 			// Client failed to finalize session start
 			s.sendUpdate(ctx, pRes.resp.Info, err)
+			span.RecordError(err)
 			return
 		}
 
@@ -137,8 +139,6 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (info *
 		}
 
 		go s.manager.launchHandler(ctx, pRes.resp, extraParams)
-
-		span.End()
 	}
 
 	return pRes.resp.Info, ready, nil
@@ -205,6 +205,7 @@ func (s *Service) Run() error {
 		case req := <-s.publishRequests:
 			go func() {
 				ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
+				defer span.End()
 				resp, err := s.handleNewPublisher(ctx, req.streamKey, req.inputType)
 				if resp != nil && resp.Info != nil {
 					s.sendUpdate(ctx, resp.Info, err)
@@ -217,7 +218,6 @@ func (s *Service) Run() error {
 					resp: resp,
 					err:  err,
 				}
-				span.End()
 			}()
 		}
 	}
