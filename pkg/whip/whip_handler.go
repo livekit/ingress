@@ -60,7 +60,7 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (
 		return nil, "", err
 	}
 
-	h.rtcConfig, err = rtcconfig.NewWebRTCConfig(&conf.RTCConfig, conf.RTCConfig.NodeIP, conf.Development)
+	h.rtcConfig, err = rtcconfig.NewWebRTCConfig(&conf.RTCConfig, conf.Development)
 	if err != nil {
 		return nil, "", err
 	}
