@@ -80,6 +80,10 @@ func NewConfig(confString string) (*Config, error) {
 		return nil, err
 	}
 
+	if conf.Redis == nil {
+		return nil, psrpc.NewErrorf(psrpc.InvalidArgument, "redis configuration is required")
+	}
+
 	return conf, nil
 }
 
@@ -97,10 +101,6 @@ func (conf *Config) Init() error {
 	err := conf.InitWhipConf()
 	if err != nil {
 		return err
-	}
-
-	if conf.Redis == nil {
-		return psrpc.NewErrorf(psrpc.InvalidArgument, "redis configuration is required")
 	}
 
 	if err := conf.InitLogger(); err != nil {
