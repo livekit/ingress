@@ -46,7 +46,8 @@ type Config struct {
 	CPUCost CPUCostConfig `yaml:"cpu_cost"`
 
 	// internal
-	NodeID string `yaml:"-"`
+	ServiceName string `yaml:"-"`
+	NodeID      string `yaml:"-"`
 }
 
 type WhipConfig struct {
@@ -62,10 +63,11 @@ type CPUCostConfig struct {
 
 func NewConfig(confString string) (*Config, error) {
 	conf := &Config{
-		ApiKey:    os.Getenv("LIVEKIT_API_KEY"),
-		ApiSecret: os.Getenv("LIVEKIT_API_SECRET"),
-		WsUrl:     os.Getenv("LIVEKIT_WS_URL"),
-		NodeID:    utils.NewGuid("NE_"),
+		ApiKey:      os.Getenv("LIVEKIT_API_KEY"),
+		ApiSecret:   os.Getenv("LIVEKIT_API_SECRET"),
+		WsUrl:       os.Getenv("LIVEKIT_WS_URL"),
+		ServiceName: "ingress",
+		NodeID:      utils.NewGuid("NE_"),
 	}
 	if confString != "" {
 		if err := yaml.Unmarshal([]byte(confString), conf); err != nil {
@@ -73,6 +75,15 @@ func NewConfig(confString string) (*Config, error) {
 		}
 	}
 
+	err := conf.Init()
+	if err != nil {
+		return nil, err
+	}
+
+	return conf, nil
+}
+
+func (conf *Config) Init() error {
 	if conf.RTMPPort == 0 {
 		conf.RTMPPort = DefaultRTMPPort
 	}
@@ -85,18 +96,18 @@ func NewConfig(confString string) (*Config, error) {
 
 	err := conf.InitWhipConf()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if conf.Redis == nil {
-		return nil, psrpc.NewErrorf(psrpc.InvalidArgument, "redis configuration is required")
+		return psrpc.NewErrorf(psrpc.InvalidArgument, "redis configuration is required")
 	}
 
 	if err := conf.InitLogger(); err != nil {
-		return nil, err
+		return err
 	}
 
-	return conf, nil
+	return nil
 }
 
 func (c *Config) InitWhipConf() error {
@@ -120,7 +131,7 @@ func (c *Config) InitLogger(values ...interface{}) error {
 
 	values = append(c.GetLoggerValues(), values...)
 	l := zl.WithValues(values...)
-	logger.SetLogger(l, "ingress")
+	logger.SetLogger(l, c.ServiceName)
 	lksdk.SetLogger(l)
 
 	return nil
@@ -134,7 +145,7 @@ func (c *Config) GetLoggerValues() []interface{} {
 // To use with logrus
 func (c *Config) GetLoggerFields() logrus.Fields {
 	fields := logrus.Fields{
-		"logger": "ingress",
+		"logger": c.ServiceName,
 	}
 	v := c.GetLoggerValues()
 	for i := 0; i < len(v); i += 2 {
