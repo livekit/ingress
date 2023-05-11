@@ -28,7 +28,8 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 	psrpcClient, err := rpc.NewIOInfoClient("ingress_test_service", bus)
 	require.NoError(t, err)
 
-	conf.Whip.EnableLoopbackCandidate = true
+	conf.Config.RTCConfig.Validate(conf.Development)
+	conf.Config.RTCConfig.EnableLoopbackCandidate = true
 
 	svc := service.NewService(conf.Config, psrpcClient)
 
@@ -106,8 +107,11 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 		err := svc.Run()
 		require.NoError(t, err)
 	}()
-	time.Sleep(time.Second)
-	t.Cleanup(func() { svc.Stop(true) })
+	t.Cleanup(func() {
+		svc.Stop(true)
+	})
+
+	time.Sleep(1 * time.Second)
 
 	logger.Infow("whip url", "url", info.Url, "streamKey", info.StreamKey)
 
@@ -119,6 +123,10 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 	cmd := exec.Command(cmdString[0], cmdString[1:]...)
 	require.NoError(t, cmd.Start())
 
+	t.Cleanup(func() {
+		syscall.Kill(cmd.Process.Pid, syscall.SIGTERM)
+	})
+
 	time.Sleep(time.Second * 45)
 
 	_, err = commandPsrpcClient.DeleteIngress(context.Background(), info.IngressId, &livekit.DeleteIngressRequest{IngressId: info.IngressId})
@@ -129,5 +137,4 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 	final := <-updates
 	require.NotEqual(t, final.State.Status, livekit.IngressState_ENDPOINT_ERROR)
 
-	syscall.Kill(cmd.Process.Pid, syscall.SIGTERM)
 }

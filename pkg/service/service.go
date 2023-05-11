@@ -206,6 +206,7 @@ func (s *Service) Run() error {
 			go func() {
 				ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
 				defer span.End()
+
 				resp, err := s.handleNewPublisher(ctx, req.streamKey, req.inputType)
 				if resp != nil && resp.Info != nil {
 					s.sendUpdate(ctx, resp.Info, err)
