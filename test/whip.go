@@ -24,28 +24,18 @@ const (
 	whipClientPath = "livekit-whip-bot/cmd/whip-client/whip-client"
 )
 
-func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
-	psrpcClient, err := rpc.NewIOInfoClient("ingress_test_service", bus)
-	require.NoError(t, err)
-
-	conf.Config.RTCConfig.Validate(conf.Development)
-	conf.Config.RTCConfig.EnableLoopbackCandidate = true
-
-	svc := service.NewService(conf.Config, psrpcClient)
-
-	commandPsrpcClient, err := rpc.NewIngressHandlerClient("ingress_test_client", bus, psrpc.WithClientTimeout(5*time.Second))
-	require.NoError(t, err)
-
+func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, svc *service.Service, commandPsrpcClient rpc.IngressHandlerClient) {
 	whipsrv := whip.NewWHIPServer(commandPsrpcClient)
 	relay := service.NewRelay(nil, whipsrv)
 
-	err = whipsrv.Start(conf.Config, svc.HandleWHIPPublishRequest)
+	err := whipsrv.Start(conf.Config, svc.HandleWHIPPublishRequest)
 	require.NoError(t, err)
 	err = relay.Start(conf.Config)
 	require.NoError(t, err)
 
 	t.Cleanup(func() {
 		relay.Stop()
+		whipsrv.Stop()
 	})
 
 	updates := make(chan *rpc.UpdateIngressStateRequest, 10)
@@ -102,14 +92,6 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 
 	_, err = rpc.NewIOInfoServer("ingress_test_server", ios, bus)
 	require.NoError(t, err)
-
-	go func() {
-		err := svc.Run()
-		require.NoError(t, err)
-	}()
-	t.Cleanup(func() {
-		svc.Stop(true)
-	})
 
 	time.Sleep(1 * time.Second)
 
