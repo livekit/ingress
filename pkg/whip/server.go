@@ -183,12 +183,12 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 
 	sdpOffer := bytes.Buffer{}
 
-	logger.Debugw("new whip request", "streamKey", streamKey, "sdpOffer", string(sdpOffer.Bytes()))
-
 	_, err := io.Copy(&sdpOffer, r.Body)
 	if err != nil {
 		return err
 	}
+
+	logger.Debugw("new whip request", "streamKey", streamKey, "sdpOffer", string(sdpOffer.Bytes()))
 
 	resourceId, sdp, err := s.createStream(streamKey, string(sdpOffer.Bytes()))
 	if err != nil {

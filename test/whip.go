@@ -90,8 +90,11 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, svc *serv
 		return &rpc.GetIngressInfoResponse{Info: info, WsUrl: conf.WsUrl}, nil
 	}
 
-	_, err = rpc.NewIOInfoServer("ingress_test_server", ios, bus)
+	ioPsrpc, err := rpc.NewIOInfoServer("ingress_test_server", ios, bus)
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		ioPsrpc.Kill()
+	})
 
 	time.Sleep(1 * time.Second)
 
