@@ -54,7 +54,7 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, svc *serv
 		ParticipantName:     "ingress-test",
 		Reusable:            true,
 		StreamKey:           "ingress-test",
-		Url:                 "http://localhost:8080/w",
+		Url:                 fmt.Sprintf("http://localhost:%d/w", conf.Config.WHIPPort),
 		Audio: &livekit.IngressAudioOptions{
 			Name:   "audio",
 			Source: 0,

@@ -50,7 +50,7 @@ func GetDefaultConfig(t *testing.T) *TestConfig {
 	// Defaults
 	tc.RTMPPort = 1935
 	tc.HTTPRelayPort = 9090
-	tc.WHIPPort = 8080
+	tc.WHIPPort = 8099
 
 	tc.NodeID = "INGRESS_TEST"
 
