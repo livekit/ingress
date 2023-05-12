@@ -7,15 +7,18 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
 
-	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/psrpc"
+
+	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/service"
 )
 
 type TestConfig struct {
@@ -73,10 +76,33 @@ func getConfig(t *testing.T) *TestConfig {
 }
 
 func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
+	psrpcClient, err := rpc.NewIOInfoClient("ingress_test_service", bus)
+	require.NoError(t, err)
+
+	conf.Config.RTCConfig.Validate(conf.Development)
+	conf.Config.RTCConfig.EnableLoopbackCandidate = true
+
+	svc := service.NewService(conf.Config, psrpcClient)
+
+	commandPsrpcClient, err := rpc.NewIngressHandlerClient("ingress_test_client", bus, psrpc.WithClientTimeout(5*time.Second))
+	require.NoError(t, err)
+
+	go func() {
+		err := svc.Run()
+		require.NoError(t, err)
+	}()
+	t.Cleanup(func() {
+		svc.Stop(true)
+	})
+
 	if !conf.WhipOnly {
-		RunRTMPTest(t, conf, bus)
+		t.Run("RTMP", func(t *testing.T) {
+			RunRTMPTest(t, conf, bus, svc, commandPsrpcClient)
+		})
 	}
 	if !conf.RtmpOnly {
-		RunWHIPTest(t, conf, bus)
+		t.Run("WHIP", func(t *testing.T) {
+			RunWHIPTest(t, conf, bus, svc, commandPsrpcClient)
+		})
 	}
 }

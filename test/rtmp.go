@@ -19,19 +19,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func RunRTMPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
-	psrpcClient, err := rpc.NewIOInfoClient("ingress_test_service", bus)
-	require.NoError(t, err)
-
-	svc := service.NewService(conf.Config, psrpcClient)
-
-	commandPsrpcClient, err := rpc.NewIngressHandlerClient("ingress_test_client", bus, psrpc.WithClientTimeout(5*time.Second))
-	require.NoError(t, err)
-
+func RunRTMPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, svc *service.Service, commandPsrpcClient rpc.IngressHandlerClient) {
 	rtmpsrv := rtmp.NewRTMPServer()
 	relay := service.NewRelay(rtmpsrv, nil)
 
-	err = rtmpsrv.Start(conf.Config, svc.HandleRTMPPublishRequest)
+	err := rtmpsrv.Start(conf.Config, svc.HandleRTMPPublishRequest)
 	require.NoError(t, err)
 	err = relay.Start(conf.Config)
 	require.NoError(t, err)
@@ -96,12 +88,7 @@ func RunRTMPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 	_, err = rpc.NewIOInfoServer("ingress_test_server", ios, bus)
 	require.NoError(t, err)
 
-	go func() {
-		err := svc.Run()
-		require.NoError(t, err)
-	}()
 	time.Sleep(time.Second)
-	t.Cleanup(func() { svc.Stop(true) })
 
 	logger.Infow("rtmp url", "url", info.Url)
 
