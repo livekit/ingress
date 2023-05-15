@@ -49,6 +49,8 @@ func (s *WHIPServer) Start(
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
+	logger.Infow("starting WHIP server")
+
 	if onPublish == nil {
 		return psrpc.NewErrorf(psrpc.Internal, "no onPublish callback provided")
 	}
@@ -185,6 +187,8 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 	if err != nil {
 		return err
 	}
+
+	logger.Debugw("new whip request", "streamKey", streamKey, "sdpOffer", string(sdpOffer.Bytes()))
 
 	resourceId, sdp, err := s.createStream(streamKey, string(sdpOffer.Bytes()))
 	if err != nil {
