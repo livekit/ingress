@@ -14,6 +14,7 @@ import (
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
@@ -31,10 +32,11 @@ type WHIPServer struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	conf      *config.Config
-	onPublish func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), error)
-	handlers  sync.Map
-	rpcClient rpc.IngressHandlerClient
+	conf         *config.Config
+	webRTCConfig *rtcconfig.WebRTCConfig
+	onPublish    func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), error)
+	handlers     sync.Map
+	rpcClient    rpc.IngressHandlerClient
 }
 
 func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
@@ -57,6 +59,12 @@ func (s *WHIPServer) Start(
 
 	s.onPublish = onPublish
 	s.conf = conf
+
+	var err error
+	s.webRTCConfig, err = rtcconfig.NewWebRTCConfig(&conf.RTCConfig, conf.Development)
+	if err != nil {
+		return err
+	}
 
 	r := mux.NewRouter()
 
@@ -171,6 +179,7 @@ func (s *WHIPServer) handleError(err error, w http.ResponseWriter) {
 	case err == nil:
 		// Nothing, we already responded
 	default:
+		logger.Debugw("whip request failed", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 }
@@ -218,7 +227,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 	ctx = context.WithValue(ctx, "ingressID", info.IngressId)
 	ctx = context.WithValue(ctx, "resourceID", resourceId)
 
-	h, sdpResponse, err := NewWHIPHandler(ctx, s.conf, sdpOffer)
+	h, sdpResponse, err := NewWHIPHandler(ctx, s.conf, s.webRTCConfig, sdpOffer)
 	if err != nil {
 		return "", "", err
 	}
