@@ -39,11 +39,12 @@ type whipHandler struct {
 	trackAddedChan chan *webrtc.TrackRemote
 }
 
-func NewWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (*whipHandler, string, error) {
+func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcconfig.WebRTCConfig, sdpOffer string) (*whipHandler, string, error) {
 	var err error
 
 	h := &whipHandler{
 		logger:        logger.GetLogger().WithValues("ingressID", ctx.Value("ingressID"), "resourceID", ctx.Value("resourceID")),
+		rtcConfig:     webRTCConfig,
 		sync:          synchronizer.NewSynchronizer(nil),
 		result:        make(chan error, 1),
 		tracks:        make(map[string]*webrtc.TrackRemote),
@@ -56,11 +57,6 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, sdpOffer string) (
 	}
 	h.expectedTrackCount, err = getExpectedTrackCount(offer)
 	h.trackAddedChan = make(chan *webrtc.TrackRemote, h.expectedTrackCount)
-	if err != nil {
-		return nil, "", err
-	}
-
-	h.rtcConfig, err = rtcconfig.NewWebRTCConfig(&conf.RTCConfig, conf.Development)
 	if err != nil {
 		return nil, "", err
 	}
