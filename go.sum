@@ -76,8 +76,8 @@ github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e h1:Fw7uyi8OK3M7iAp
 github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e/go.mod h1:X+CliWDrjhm5C+NgmxVt2ncdO3MnKDlbZHTwkuf0808=
 github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1 h1:jm09419p0lqTkDaKb5iXdynYrzB84ErPPO4LbRASk58=
 github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1/go.mod h1:Rs3MhFwutWhGwmY1VQsygw28z5bWcnEYmS1OG9OxjOQ=
-github.com/livekit/mediatransportutil v0.0.0-20230510195846-5cbebf206ac4 h1:ThdqgLgqEy4t0BnQ25NHzMNZzPaVKDEoQqhf+2u60YU=
-github.com/livekit/mediatransportutil v0.0.0-20230510195846-5cbebf206ac4/go.mod h1:MRc0zSOSzXuFt0X218SgabzlaKevkvCckPgBEoHYc34=
+github.com/livekit/mediatransportutil v0.0.0-20230517210015-117bec6a19a8 h1:YgBDljjYPJc57sSwaoyUgiviThQDyS7SyWsXJSRsZH8=
+github.com/livekit/mediatransportutil v0.0.0-20230517210015-117bec6a19a8/go.mod h1:MRc0zSOSzXuFt0X218SgabzlaKevkvCckPgBEoHYc34=
 github.com/livekit/protocol v1.5.6 h1:2kwduElaTcYc4JKxs3aGp+jbMDC9g1z8L+ywlLBwMvo=
 github.com/livekit/protocol v1.5.6/go.mod h1:CtvrXHdVzapR+avHHBr3RnCwwM4wjCJv9LQ4UCA14TU=
 github.com/livekit/psrpc v0.3.0 h1:giBZsfM3CWA0oIYXofsMITbVQtyW7u/ES9sQmVspHPM=

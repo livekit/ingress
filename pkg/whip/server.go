@@ -126,10 +126,10 @@ func (s *WHIPServer) Start(
 		}
 	}).Methods("DELETE")
 
-	// Trickle, ICE Restart
-	//	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
-	//		// RPC call
-	//	}).Methods("PATCH")
+	// Trickle, ICE Restart unimplemented for now
+	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotImplemented)
+	}).Methods("PATCH")
 
 	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
 		setCORSHeaders(w, r, true)

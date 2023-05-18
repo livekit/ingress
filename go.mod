@@ -1,5 +1,7 @@
 module github.com/livekit/ingress
 
+replace github.com/livekit/psrpc => ../psrpc
+
 go 1.18
 
 require (
@@ -7,7 +9,7 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
-	github.com/livekit/mediatransportutil v0.0.0-20230510195846-5cbebf206ac4
+	github.com/livekit/mediatransportutil v0.0.0-20230517210015-117bec6a19a8
 	github.com/livekit/protocol v1.5.6
 	github.com/livekit/psrpc v0.3.0
 	github.com/livekit/server-sdk-go v1.0.11-0.20230504163637-22d8afafa6b0

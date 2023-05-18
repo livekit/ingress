@@ -55,7 +55,7 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcc
 		Type: webrtc.SDPTypeOffer,
 		SDP:  sdpOffer,
 	}
-	h.expectedTrackCount, err = getExpectedTrackCount(offer)
+	h.expectedTrackCount, err = validateOfferAndGetExpectedTrackCount(offer)
 	h.trackAddedChan = make(chan *webrtc.TrackRemote, h.expectedTrackCount)
 	if err != nil {
 		return nil, "", err
@@ -238,6 +238,21 @@ func (h *whipHandler) getSDPAnswer(ctx context.Context, offer *webrtc.SessionDes
 		return "", psrpc.NewErrorf(psrpc.DeadlineExceeded, "timed out while waiting for ICE candidate gathering")
 	}
 
+	parsedAnswer, err := h.pc.LocalDescription().Unmarshal()
+	if err != nil {
+		return "", err
+	}
+	if len(parsedAnswer.MediaDescriptions) != h.expectedTrackCount {
+		return "", errors.ErrUnsupportedDecodeFormat
+	}
+	for _, m := range parsedAnswer.MediaDescriptions {
+		// Pion puts a media description with fmt = 0 and no attributes for unsupported codecs
+		if len(m.Attributes) == 0 {
+			h.logger.Infow("unsupported codec in SDP offer")
+			return "", errors.ErrUnsupportedDecodeFormat
+		}
+	}
+
 	sdpAnswer := h.pc.LocalDescription().SDP
 
 	return sdpAnswer, nil
@@ -289,10 +304,19 @@ func streamKindFromCodecType(typ webrtc.RTPCodecType) types.StreamKind {
 	}
 }
 
-func getExpectedTrackCount(offer *webrtc.SessionDescription) (int, error) {
+func validateOfferAndGetExpectedTrackCount(offer *webrtc.SessionDescription) (int, error) {
 	parsed, err := offer.Unmarshal()
 	if err != nil {
 		return 0, err
+	}
+
+	mediaTypes := make(map[string]struct{})
+	for _, m := range parsed.MediaDescriptions {
+		if _, ok := mediaTypes[m.MediaName.Media]; ok {
+			// Duplicate track for a given type. Forbidden by the RFC
+			return 0, errors.ErrDuplicateTrack
+		}
+		mediaTypes[m.MediaName.Media] = struct{}{}
 	}
 
 	return len(parsed.MediaDescriptions), nil
