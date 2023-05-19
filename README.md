@@ -16,6 +16,7 @@ WebRTC is proving to be a versatile and scalable transport protocol both for med
 
 Universal Ingress is meant to be a versatile service supporting a variety of protocols, both using a push and pull model. Currently, the following protcols are supported:
 - RTMP
+- WHIP (https://datatracker.ietf.org/doc/draft-ietf-wish-whip/)
 
 ## Supported Output
 
@@ -58,11 +59,14 @@ health_port: if used, will open an http port for health checks
 prometheus_port: port used to collect prometheus metrics. Used for autoscaling
 log_level: debug, info, warn, or error (default info)
 rtmp_port: port to listen to incoming RTMP connection on (default 1935)
+whip_port: port to listen to incoming WHIP calls on (default 8080)
 http_relay_port: port used to relay data from the main service process to the per ingress handler process (default 9090)
+rtc_config: configuration for ICE and other RTC related settings, same settings livekit-server RTC configuration. Used for WHIP.
 
 # cpu costs for various Ingress types with their default values
 cpu_cost:
   rtmp_cpu_cost: 2.0
+  whip_cpu_cost: 2.0
 ```
 
 The config file can be added to a mounted volume with its location passed in the INGRESS_CONFIG_FILE env var, or its body can be passed in the INGRESS_CONFIG_BODY env var.
@@ -71,20 +75,22 @@ In order for the LiveKit server to be able to create Ingress sessions, an `ingre
 
 ```yaml
 ingress:
-  rtmp_base_url: rtmp url prefix pointing to the Ingress external IP address or load balancer
+  rtmp_base_url: RTMP url prefix pointing to the Ingress external IP address or load balancer
+  whip_base_url: WHIP url prefix pointing to the Ingress external IP address or load balancer
 ```
 
 For instance:
 ```yaml
 ingress:
   rtmp_base_url: rtmp://my.domain.com/x
+  whip_base_url: http://my.domain.com/w
 ```
 
-A stream key will be appended to this prefix to generate the ingress session specific rtmp publishing endpoint.
+A stream key will be appended to this prefix to generate the ingress session specific RTMP or WHIP publishing endpoint.
 
 ### Using the Ingress service
 
-#### RTMP
+#### RTMP and WHIP
 
 The first step in order to use the Ingress service is to create an ingress session and associate it with a room. This can be done with any of the server SDKs or with the [livekit-cli](https://github.com/livekit/livekit-cli). The syntax with the livekit-cli is as follow:
 
@@ -97,6 +103,7 @@ The request creation JSON file uses the following syntax:
 
 ```json
 {
+    "input_type": 0 for RTMP, 1 for WHIP
     "name": Name of the Ingress,
     "room_name": Name of the room to connect to,
     "participant_identity": Unique identity for the room participant the Ingress service will connect as,
@@ -112,7 +119,7 @@ It is possible to get details on all created Ingress with the `list-ingress` com
 livekit-cli list-ingress
 ```
 
-In particular, this will return the RTMP url to use to setup the RTMP encoder. 
+In particular, this will return the RTMP url WHIP endpoint to use to setup the encoder. 
 
 ### Running locally
 
