@@ -75,8 +75,8 @@ In order for the LiveKit server to be able to create Ingress sessions, an `ingre
 
 ```yaml
 ingress:
-  rtmp_base_url: rtmp url prefix pointing to the Ingress external IP address or load balancer
-  whip_base_url: whip url prefix pointing to the Ingress external IP address or load balancer
+  rtmp_base_url: RTMP url prefix pointing to the Ingress external IP address or load balancer
+  whip_base_url: WHIP url prefix pointing to the Ingress external IP address or load balancer
 ```
 
 For instance:
@@ -86,7 +86,7 @@ ingress:
   whip_base_url: http://my.domain.com/w
 ```
 
-A stream key will be appended to this prefix to generate the ingress session specific rtmp or whip publishing endpoint.
+A stream key will be appended to this prefix to generate the ingress session specific RTMP or WHIP publishing endpoint.
 
 ### Using the Ingress service
 
