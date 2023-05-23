@@ -7,6 +7,8 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/lksdk_output"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/logger"
@@ -30,16 +32,18 @@ type whipHandler struct {
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
+	sdkOutput          *lksdk_output.LKSDKOutput // only for passthrough
 	expectedTrackCount int
 	result             chan error
 
-	trackLock      sync.Mutex
-	tracks         map[string]*webrtc.TrackRemote
-	trackHandlers  map[types.StreamKind]*whipTrackHandler
-	trackAddedChan chan *webrtc.TrackRemote
+	trackLock           sync.Mutex
+	tracks              map[string]*webrtc.TrackRemote
+	trackHandlers       map[types.StreamKind]*whipTrackHandler
+	trackRelayMediaSink map[types.StreamKind]*RelayMediaSink // only for transcoding mode
+	trackAddedChan      chan *webrtc.TrackRemote
 }
 
-func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcconfig.WebRTCConfig, sdpOffer string) (*whipHandler, string, error) {
+func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcconfig.WebRTCConfig, p *params.Params, sdpOffer string) (*whipHandler, string, error) {
 	var err error
 
 	h := &whipHandler{
@@ -49,6 +53,10 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcc
 		result:        make(chan error, 1),
 		tracks:        make(map[string]*webrtc.TrackRemote),
 		trackHandlers: make(map[types.StreamKind]*whipTrackHandler),
+	}
+
+	if params.IsPassthough() {
+		sdkOutput, err := lksdk_output.NewLKSDKOutput(ctx, params)
 	}
 
 	offer := &webrtc.SessionDescription{
@@ -134,6 +142,9 @@ func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
 	defer func() {
 		h.logger.Infow("closing peer connection")
 		h.pc.Close()
+		if h.sdkOutput != nil {
+			h.sdkOutput.Close()
+		}
 	}()
 
 	var trackDoneCount int
@@ -158,7 +169,7 @@ func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
 func (h *whipHandler) AssociateRelay(kind types.StreamKind, w io.WriteCloser) error {
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
-	th := h.trackHandlers[kind]
+	th := h.trackRelayMediaSink[kind]
 	if th == nil {
 		return errors.ErrIngressNotFound
 	}
@@ -268,7 +279,13 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 
 	sync := h.sync.AddTrack(track, whipIdentity)
 
-	th, err := newWHIPTrackHandler(h.logger, track, receiver, sync, h.writePLI, h.sync.OnRTCP)
+	mediaSink, err := h.newMediaSink(kind)
+	if err != nil {
+		h.logger.Warnw("failed creating whip  media handler", err, "trackID", track.ID(), "kind", kind)
+		return
+	}
+
+	th, err := newWHIPTrackHandler(h.logger, track, receiver, sync, mediaSink, h.writePLI, h.sync.OnRTCP)
 	if err != nil {
 		h.logger.Warnw("failed creating whip track handler", err, "trackID", track.ID(), "kind", kind)
 		return
@@ -279,6 +296,23 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 	case h.trackAddedChan <- track:
 	default:
 		h.logger.Warnw("failed notifying of new track", errors.New("channel full"))
+	}
+}
+
+func (h *whipHandler) newMediaSink(track *webrtc.TrackRemote) (MediaSink, error) {
+	if h.sdkOutput != nil {
+		// pasthrough
+		return NewSDKMediaSink(h.writePLI(track.SSRC()))
+	} else {
+		kind := streamKindFromCodecType(track.Kind())
+
+		s, err := NewRelayMediaSink(h.logger.WithValues("trackID", track.ID(), "kind", kind))
+		if err != nil {
+			return nil, err
+		}
+
+		h.trackRelayMediaSink[kind] = s
+		return s, nil
 	}
 }
 
