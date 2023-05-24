@@ -55,8 +55,11 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcc
 		trackHandlers: make(map[types.StreamKind]*whipTrackHandler),
 	}
 
-	if params.IsPassthough() {
-		sdkOutput, err := lksdk_output.NewLKSDKOutput(ctx, params)
+	if p.IsPassthrough() {
+		h.sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, p)
+		if err != nil {
+			return nil, "", err
+		}
 	}
 
 	offer := &webrtc.SessionDescription{
@@ -271,7 +274,9 @@ func (h *whipHandler) getSDPAnswer(ctx context.Context, offer *webrtc.SessionDes
 
 func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 	kind := streamKindFromCodecType(track.Kind())
-	h.logger.Infow("track has started", "type", track.PayloadType(), "codec", track.Codec().MimeType, "kind", kind)
+	logger := h.logger.WithValues("trackID", track.ID(), "kind", kind)
+
+	logger.Infow("track has started", "type", track.PayloadType(), "codec", track.Codec().MimeType)
 
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
@@ -279,15 +284,15 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 
 	sync := h.sync.AddTrack(track, whipIdentity)
 
-	mediaSink, err := h.newMediaSink(kind)
+	mediaSink, err := h.newMediaSink(track)
 	if err != nil {
-		h.logger.Warnw("failed creating whip  media handler", err, "trackID", track.ID(), "kind", kind)
+		logger.Warnw("failed creating whip  media handler", err)
 		return
 	}
 
-	th, err := newWHIPTrackHandler(h.logger, track, receiver, sync, mediaSink, h.writePLI, h.sync.OnRTCP)
+	th, err := newWHIPTrackHandler(logger, track, receiver, sync, mediaSink, h.writePLI, h.sync.OnRTCP)
 	if err != nil {
-		h.logger.Warnw("failed creating whip track handler", err, "trackID", track.ID(), "kind", kind)
+		logger.Warnw("failed creating whip track handler", err)
 		return
 	}
 	h.trackHandlers[kind] = th
@@ -295,21 +300,20 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 	select {
 	case h.trackAddedChan <- track:
 	default:
-		h.logger.Warnw("failed notifying of new track", errors.New("channel full"))
+		logger.Warnw("failed notifying of new track", errors.New("channel full"))
 	}
 }
 
 func (h *whipHandler) newMediaSink(track *webrtc.TrackRemote) (MediaSink, error) {
 	if h.sdkOutput != nil {
 		// pasthrough
-		return NewSDKMediaSink(h.writePLI(track.SSRC()))
+		return NewSDKMediaSink(h.sdkOutput, track, func() {
+			h.writePLI(track.SSRC())
+		}), nil
 	} else {
 		kind := streamKindFromCodecType(track.Kind())
 
-		s, err := NewRelayMediaSink(h.logger.WithValues("trackID", track.ID(), "kind", kind))
-		if err != nil {
-			return nil, err
-		}
+		s := NewRelayMediaSink(h.logger.WithValues("trackID", track.ID(), "kind", kind))
 
 		h.trackRelayMediaSink[kind] = s
 		return s, nil

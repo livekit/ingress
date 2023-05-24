@@ -2,6 +2,7 @@ package whip
 
 import (
 	"io"
+	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/lksdk_output"
@@ -46,7 +47,7 @@ func NewSDKMediaSink(sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRem
 	return s
 }
 
-func (sp *SDKMediaSink) PushSample(s *media.Sample) error {
+func (sp *SDKMediaSink) PushSample(s *media.Sample, ts time.Duration) error {
 	select {
 	case <-sp.fuse.Watch():
 		return io.EOF

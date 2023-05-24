@@ -104,7 +104,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 	return nil
 }
 
-func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (info *livekit.IngressInfo, ready func(mimeTypes map[types.StreamKind]string, err error), err error) {
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (info *livekit.IngressInfo, ready func(mimeTypes map[types.StreamKind]string, err error), p *params.Params, err error) {
 	res := make(chan publishResponse)
 	r := publishRequest{
 		streamKey: streamKey,
@@ -115,13 +115,24 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (info *
 	var pRes publishResponse
 	select {
 	case <-s.shutdown.Watch():
-		return nil, nil, errors.ErrServerShuttingDown
+		return nil, nil, nil, errors.ErrServerShuttingDown
 	case s.publishRequests <- r:
 		pRes = <-res
 		if pRes.err != nil {
-			return nil, nil, pRes.err
+			return nil, nil, nil, pRes.err
 		}
 	}
+
+	extraParams := params.WhipExtraParams{
+		ResourceId: resourceId,
+	}
+
+	wsUrl := s.conf.WsUrl
+	if pRes.resp.WsUrl != nil {
+		wsUrl = pRes.resp.WsUrl
+	}
+
+	p := params.GetParams(context.Background, s.conf, pRes.resp.Info, wsUrl, pRes.resp.Token, extraParams)
 
 	ready = func(mimeTypes map[types.StreamKind]string, err error) {
 		ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ready")
@@ -133,15 +144,14 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (info *
 			return
 		}
 
-		extraParams := params.WhipExtraParams{
-			ResourceId: resourceId,
-			MimeTypes:  mimeTypes,
-		}
+		if !p.IsPassthrough() {
+			extraParams.MimeTypes = mimeTypes
 
-		go s.manager.launchHandler(ctx, pRes.resp, extraParams)
+			go s.manager.launchHandler(ctx, pRes.resp, extraParams)
+		}
 	}
 
-	return pRes.resp.Info, ready, nil
+	return pRes.resp.Info, ready, p, nil
 }
 
 func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inputType livekit.IngressInput) (*rpc.GetIngressInfoResponse, error) {

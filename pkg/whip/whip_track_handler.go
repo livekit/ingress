@@ -52,8 +52,6 @@ func newWHIPTrackHandler(
 	writePLI func(ssrc webrtc.SSRC),
 	onRTCP func(packet rtcp.Packet),
 ) (*whipTrackHandler, error) {
-	logger = logger.WithValues("trackID", t.remoteTrack.ID(), "kind", t.remoteTrack.Kind())
-
 	t := &whipTrackHandler{
 		logger:      logger,
 		remoteTrack: track,
@@ -204,7 +202,7 @@ func (t *whipTrackHandler) startRTCPReceiver() {
 	}()
 }
 
-func (t *whipTrackHandler) createSampleBuildler() (*MediaSink, error) {
+func (t *whipTrackHandler) createSampleBuildler() (*samplebuilder.SampleBuilder, error) {
 	var depacketizer rtp.Depacketizer
 	var maxLate uint16
 	var writePLI func()

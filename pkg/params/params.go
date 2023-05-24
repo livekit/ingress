@@ -108,6 +108,17 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 	return p, nil
 }
 
+func (p *Params) IsPassthrough() bool {
+	if p.IngressInfo.Audio == nil {
+		return false
+	}
+
+	_, ok := p.IngressInfo.Audio.EncodingOptions.(*livekit.IngressAudioOptions_Passthrough)
+
+	// Validation logic made sure that passthrough is either enabled or disabled for both audio and video
+	return ok
+}
+
 func getRTMPRelayUrl(conf *config.Config, streamKey string) string {
 	return fmt.Sprintf("http://localhost:%d/rtmp/%s", conf.HTTPRelayPort, streamKey)
 }
