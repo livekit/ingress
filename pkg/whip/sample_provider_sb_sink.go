@@ -2,6 +2,7 @@ package whip
 
 import (
 	"io"
+	"strings"
 	"time"
 
 	"github.com/frostbyte73/core"
@@ -32,7 +33,9 @@ func NewSDKMediaSink(sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRem
 
 	switch kind {
 	case types.Audio:
-		sdkOutput.AddAudioTrack(s, mimeType, false, false)
+		stereo := parseAudioFmtp(track.Codec().SDPFmtpLine)
+
+		sdkOutput.AddAudioTrack(s, mimeType, false, stereo)
 	case types.Video:
 		layers := []*livekit.VideoLayer{
 			&livekit.VideoLayer{Width: 1280, Height: 720},
@@ -88,4 +91,8 @@ func (sp *SDKMediaSink) SetWriter(w io.WriteCloser) error {
 
 func (sp *SDKMediaSink) Close() {
 	sp.fuse.Break()
+}
+
+func parseAudioFmtp(audioFmtp string) bool {
+	return strings.Index(audioFmtp, "sprop-stereo=1") >= 0
 }
