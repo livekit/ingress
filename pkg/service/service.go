@@ -123,16 +123,19 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (info *
 		}
 	}
 
-	extraParams := params.WhipExtraParams{
+	extraParams := &params.WhipExtraParams{
 		ResourceId: resourceId,
 	}
 
 	wsUrl := s.conf.WsUrl
-	if pRes.resp.WsUrl != nil {
+	if pRes.resp.WsUrl != "" {
 		wsUrl = pRes.resp.WsUrl
 	}
 
-	p := params.GetParams(context.Background, s.conf, pRes.resp.Info, wsUrl, pRes.resp.Token, extraParams)
+	p, err = params.GetParams(context.Background(), s.conf, pRes.resp.Info, wsUrl, pRes.resp.Token, extraParams)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	ready = func(mimeTypes map[types.StreamKind]string, err error) {
 		ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ready")

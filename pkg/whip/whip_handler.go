@@ -47,12 +47,13 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcc
 	var err error
 
 	h := &whipHandler{
-		logger:        logger.GetLogger().WithValues("ingressID", ctx.Value("ingressID"), "resourceID", ctx.Value("resourceID")),
-		rtcConfig:     webRTCConfig,
-		sync:          synchronizer.NewSynchronizer(nil),
-		result:        make(chan error, 1),
-		tracks:        make(map[string]*webrtc.TrackRemote),
-		trackHandlers: make(map[types.StreamKind]*whipTrackHandler),
+		logger:              logger.GetLogger().WithValues("ingressID", ctx.Value("ingressID"), "resourceID", ctx.Value("resourceID")),
+		rtcConfig:           webRTCConfig,
+		sync:                synchronizer.NewSynchronizer(nil),
+		result:              make(chan error, 1),
+		tracks:              make(map[string]*webrtc.TrackRemote),
+		trackHandlers:       make(map[types.StreamKind]*whipTrackHandler),
+		trackRelayMediaSink: make(map[types.StreamKind]*RelayMediaSink),
 	}
 
 	if p.IsPassthrough() {

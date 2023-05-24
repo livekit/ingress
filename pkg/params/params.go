@@ -136,6 +136,8 @@ func getAudioEncodingOptions(options *livekit.IngressAudioOptions) (*livekit.Ing
 		return getOptionsForAudioPreset(o.Preset)
 	case *livekit.IngressAudioOptions_Options:
 		return populateAudioEncodingOptionsDefaults(o.Options)
+	case *livekit.IngressAudioOptions_Passthrough:
+		return nil, nil
 	default:
 		return nil, errors.ErrInvalidAudioOptions
 	}
@@ -178,6 +180,8 @@ func getVideoEncodingOptions(options *livekit.IngressVideoOptions) (*livekit.Ing
 		return getOptionsForVideoPreset(o.Preset)
 	case *livekit.IngressVideoOptions_Options:
 		return populateVideoEncodingOptionsDefaults(o.Options)
+	case *livekit.IngressVideoOptions_Passthrough:
+		return nil, nil
 	default:
 		return nil, errors.ErrInvalidVideoOptions
 	}
