@@ -139,7 +139,7 @@ func runService(c *cli.Context) error {
 		}
 	}
 	if whipsrv != nil {
-		err = whipsrv.Start(conf, svc.HandleWHIPPublishRequest)
+		err = whipsrv.Start(conf, svc.HandleWHIPPublishRequest, svc)
 		if err != nil {
 			return err
 		}
@@ -178,22 +178,9 @@ func setupHealthHandlers(conf *config.Config, svc *service.Service) error {
 		return nil
 	}
 
-	healthHttpHandler := func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = w.Write([]byte("Healthy"))
-	}
-
-	availabilityHttpHandler := func(w http.ResponseWriter, _ *http.Request) {
-		if !svc.CanAccept() {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("No availability"))
-		}
-
-		_, _ = w.Write([]byte("Available"))
-	}
-
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", healthHttpHandler)
-	mux.HandleFunc("/availability", availabilityHttpHandler)
+	mux.HandleFunc("/", svc.HealthHandler)
+	mux.HandleFunc("/availability", svc.AvailabilityHandler)
 
 	go func() {
 		_ = http.ListenAndServe(fmt.Sprintf(":%d", conf.HealthPort), mux)
