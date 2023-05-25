@@ -37,8 +37,9 @@ func NewSDKMediaSink(sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRem
 
 		sdkOutput.AddAudioTrack(s, mimeType, false, stereo)
 	case types.Video:
+		// TODO extract proper dimensions from stream
 		layers := []*livekit.VideoLayer{
-			&livekit.VideoLayer{Width: 1280, Height: 720},
+			&livekit.VideoLayer{Width: 0, Height: 0, Quality: livekit.VideoQuality_HIGH},
 		}
 		sp := []lksdk_output.VideoSampleProvider{
 			s,

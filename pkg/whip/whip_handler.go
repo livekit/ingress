@@ -56,7 +56,7 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcc
 		trackRelayMediaSink: make(map[types.StreamKind]*RelayMediaSink),
 	}
 
-	if p.IsPassthrough() {
+	if p.IngressInfo.BypassTranscoding {
 		h.sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, p)
 		if err != nil {
 			return nil, "", err

@@ -147,7 +147,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (info *
 			return
 		}
 
-		if !p.IsPassthrough() {
+		if !p.IngressInfo.BypassTranscoding {
 			extraParams.MimeTypes = mimeTypes
 
 			go s.manager.launchHandler(ctx, pRes.resp, extraParams)
