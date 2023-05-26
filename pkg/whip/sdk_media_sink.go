@@ -158,13 +158,8 @@ func getVideoParams(mimeType string, s *media.Sample) (uint, uint, error) {
 }
 
 func getH264VideoParams(s *media.Sample) (uint, uint, error) {
-	if !avc.HasParameterSets(s.Data) {
-		return 0, 0, ErrParamsUnavailable
-	}
-
-	spss, _ := avc.GetParameterSetsFromByteStream(s.Data)
+	spss := avc.ExtractNalusOfTypeFromByteStream(avc.NALU_SPS, s.Data, true)
 	if len(spss) == 0 {
-		// Should not happen
 		return 0, 0, ErrParamsUnavailable
 	}
 
