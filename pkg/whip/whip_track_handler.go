@@ -63,7 +63,7 @@ func newWHIPTrackHandler(
 		fuse:        core.NewFuse(),
 	}
 
-	sb, err := t.createSampleBuildler()
+	sb, err := t.createSampleBuilder()
 	if err != nil {
 		return nil, err
 	}
@@ -202,7 +202,7 @@ func (t *whipTrackHandler) startRTCPReceiver() {
 	}()
 }
 
-func (t *whipTrackHandler) createSampleBuildler() (*samplebuilder.SampleBuilder, error) {
+func (t *whipTrackHandler) createSampleBuilder() (*samplebuilder.SampleBuilder, error) {
 	var depacketizer rtp.Depacketizer
 	var maxLate uint16
 	var writePLI func()

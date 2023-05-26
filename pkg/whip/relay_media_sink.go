@@ -4,9 +4,10 @@ import (
 	"io"
 	"time"
 
+	"github.com/pion/webrtc/v3/pkg/media"
+
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/logger"
-	"github.com/pion/webrtc/v3/pkg/media"
 )
 
 type RelayMediaSink struct {

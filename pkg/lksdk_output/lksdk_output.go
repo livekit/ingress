@@ -4,14 +4,14 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/livekit/protocol/livekit"
-	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/tracer"
-	lksdk "github.com/livekit/server-sdk-go"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
 
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/tracer"
+	lksdk "github.com/livekit/server-sdk-go"
 )
 
 type VideoSampleProvider interface {

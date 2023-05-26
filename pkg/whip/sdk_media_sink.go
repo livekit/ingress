@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/frostbyte73/core"
+	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v3/pkg/media"
+
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/psrpc"
-	"github.com/pion/webrtc/v3"
-	"github.com/pion/webrtc/v3/pkg/media"
 )
 
 type SDKMediaSink struct {
