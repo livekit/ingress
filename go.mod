@@ -28,6 +28,7 @@ require (
 )
 
 require (
+	github.com/Eyevinn/mp4ff v0.35.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
