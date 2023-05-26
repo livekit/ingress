@@ -285,3 +285,16 @@ func (s *Service) ListActiveIngress(ctx context.Context, _ *rpc.ListActiveIngres
 		IngressIds: s.ListIngress(),
 	}, nil
 }
+
+func (s *Service) AvailabilityHandler(w http.ResponseWriter, r *http.Request) {
+	if !s.CanAccept() {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte("No availability"))
+	}
+
+	_, _ = w.Write([]byte("Available"))
+}
+
+func (s *Service) HealthHandler(w http.ResponseWriter, r *http.Request) {
+	_, _ = w.Write([]byte("Healthy"))
+}

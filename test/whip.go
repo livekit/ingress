@@ -28,7 +28,7 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, svc *serv
 	whipsrv := whip.NewWHIPServer(commandPsrpcClient)
 	relay := service.NewRelay(nil, whipsrv)
 
-	err := whipsrv.Start(conf.Config, svc.HandleWHIPPublishRequest)
+	err := whipsrv.Start(conf.Config, svc.HandleWHIPPublishRequest, svc)
 	require.NoError(t, err)
 	err = relay.Start(conf.Config)
 	require.NoError(t, err)

@@ -29,6 +29,11 @@ const (
 	rpcTimeout          = 5 * time.Second
 )
 
+type HealthHandler interface {
+	HealthHandler(http.ResponseWriter, *http.Request)
+	AvailabilityHandler(http.ResponseWriter, *http.Request)
+}
+
 type WHIPServer struct {
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -49,6 +54,7 @@ func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
 func (s *WHIPServer) Start(
 	conf *config.Config,
 	onPublish func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), *params.Params, error),
+	healthHandler HealthHandler,
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
@@ -135,6 +141,11 @@ func (s *WHIPServer) Start(
 	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
 		setCORSHeaders(w, r, true)
 	}).Methods("OPTIONS")
+
+	// Expose the health and availability endpoints on the WHIP server as well to make
+	// deployment as a k8s ingress more straightforward
+	r.HandleFunc("/health", healthHandler.HealthHandler).Methods("GET")
+	r.HandleFunc("/availability", healthHandler.AvailabilityHandler).Methods("GET")
 
 	hs := &http.Server{
 		Addr:         fmt.Sprintf(":%d", conf.WHIPPort),
