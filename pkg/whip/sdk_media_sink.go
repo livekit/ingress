@@ -1,6 +1,7 @@
 package whip
 
 import (
+	"bytes"
 	"io"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/frostbyte73/core"
 	"github.com/pion/webrtc/v3"
 	"github.com/pion/webrtc/v3/pkg/media"
+	"golang.org/x/image/vp8"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
@@ -152,6 +154,8 @@ func getVideoParams(mimeType string, s *media.Sample) (uint, uint, error) {
 	switch strings.ToLower(mimeType) {
 	case strings.ToLower(webrtc.MimeTypeH264):
 		return getH264VideoParams(s)
+	case strings.ToLower(webrtc.MimeTypeVP8):
+		return getVP8VideoParams(s)
 	default:
 		return 0, 0, errors.ErrUnsupportedDecodeFormat
 	}
@@ -169,4 +173,17 @@ func getH264VideoParams(s *media.Sample) (uint, uint, error) {
 	}
 
 	return sps.Width, sps.Height, nil
+}
+
+func getVP8VideoParams(s *media.Sample) (uint, uint, error) {
+	d := vp8.NewDecoder()
+	b := bytes.NewReader(s.Data)
+
+	d.Init(b, b.Len())
+	fh, err := d.DecodeFrameHeader()
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return uint(fh.Width), uint(fh.Height), nil
 }
