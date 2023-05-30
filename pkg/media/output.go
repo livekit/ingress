@@ -259,7 +259,7 @@ func newOutput() (*Output, error) {
 
 	e := &Output{
 		sink:    sink,
-		samples: make(chan *media.Sample, 1000),
+		samples: make(chan *media.Sample, 100),
 	}
 
 	return e, nil

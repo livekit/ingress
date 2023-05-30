@@ -1,4 +1,4 @@
-package media
+package lksdk_output
 
 import (
 	"context"
@@ -6,24 +6,28 @@ import (
 
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
-	"github.com/tinyzimmer/go-gst/gst"
 
 	"github.com/livekit/ingress/pkg/params"
-	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
-	"github.com/livekit/protocol/utils"
 	lksdk "github.com/livekit/server-sdk-go"
 )
 
-type WebRTCSink struct {
+type VideoSampleProvider interface {
+	lksdk.SampleProvider
+
+	ForceKeyFrame() error
+}
+
+type LKSDKOutput struct {
 	room *lksdk.Room
 
 	params *params.Params
 }
 
-func NewWebRTCSink(ctx context.Context, p *params.Params) (*WebRTCSink, error) {
-	ctx, span := tracer.Start(ctx, "media.NewWebRTCSink")
+func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error) {
+	ctx, span := tracer.Start(ctx, "lksdk.NewLKSDKOutput")
 	defer span.End()
 
 	room, err := lksdk.ConnectToRoomWithToken(
@@ -38,30 +42,22 @@ func NewWebRTCSink(ctx context.Context, p *params.Params) (*WebRTCSink, error) {
 
 	p.SetRoomId(room.SID())
 
-	return &WebRTCSink{
+	return &LKSDKOutput{
 		room:   room,
 		params: p,
 	}, nil
 }
 
-func (s *WebRTCSink) addAudioTrack() (*Output, error) {
-	output, err := NewAudioOutput(s.params.AudioEncodingOptions)
+func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string, disableDTX bool, stereo bool) error {
 	opts := &lksdk.TrackPublicationOptions{
-		Name:       s.params.Audio.Name,
-		Source:     s.params.Video.Source,
-		DisableDTX: s.params.AudioEncodingOptions.DisableDtx,
-		Stereo:     s.params.AudioEncodingOptions.Channels > 1,
+		Name:   s.params.Audio.Name,
+		Source: s.params.Video.Source,
 	}
 
-	if err != nil {
-		logger.Errorw("could not create output", err)
-		return nil, err
-	}
-
-	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: utils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec)})
+	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: mimeType})
 	if err != nil {
 		logger.Errorw("could not create audio track", err)
-		return nil, err
+		return err
 	}
 
 	var pub *lksdk.LocalTrackPublication
@@ -82,18 +78,18 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 	pub, err = s.room.LocalParticipant.PublishTrack(track, opts)
 	if err != nil {
 		logger.Errorw("could not publish audio track", err)
-		return nil, err
+		return err
 	}
 
-	return output.Output, nil
+	return nil
 }
 
-func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
+func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*livekit.VideoLayer, mimeType string) error {
 	opts := &lksdk.TrackPublicationOptions{
 		Name:        s.params.Video.Name,
 		Source:      s.params.Video.Source,
-		VideoWidth:  int(s.params.VideoEncodingOptions.Layers[0].Width),
-		VideoHeight: int(s.params.VideoEncodingOptions.Layers[0].Height),
+		VideoWidth:  int(layers[0].Width),
+		VideoHeight: int(layers[0].Height),
 	}
 
 	var pub *lksdk.LocalTrackPublication
@@ -111,11 +107,9 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 		}
 	}
 
-	outputs := make([]*Output, 0)
 	tracks := make([]*lksdk.LocalSampleTrack, 0)
-	for _, layer := range s.params.VideoEncodingOptions.Layers {
-		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer)
-
+	for i, layer := range layers {
+		output := outputs[i]
 		onRTCP := func(pkt rtcp.Packet) {
 			switch pkt.(type) {
 			case *rtcp.PictureLossIndication:
@@ -126,12 +120,12 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 			}
 		}
 		track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{
-			MimeType: utils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec),
+			MimeType: mimeType,
 		},
 			lksdk.WithRTCPHandler(onRTCP), lksdk.WithSimulcast(s.params.IngressId, layer))
 		if err != nil {
 			logger.Errorw("could not create video track", err)
-			return nil, err
+			return err
 		}
 
 		track.OnBind(func() {
@@ -140,54 +134,21 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 			}
 		})
 		tracks = append(tracks, track)
-		outputs = append(outputs, output.Output)
 	}
 
 	pub, err = s.room.LocalParticipant.PublishSimulcastTrack(tracks, opts)
 	if err != nil {
 		logger.Errorw("could not publish video track", err)
-		return nil, err
+		return err
 	}
 	activeLayerCount = int32(len(tracks))
 
 	logger.Debugw("published video track")
 
-	return outputs, nil
+	return nil
 }
 
-func (s *WebRTCSink) AddTrack(kind types.StreamKind) (*gst.Bin, error) {
-	var bin *gst.Bin
-
-	switch kind {
-	case types.Audio:
-		output, err := s.addAudioTrack()
-		if err != nil {
-			logger.Errorw("could not add audio track", err)
-			return nil, err
-		}
-
-		bin = output.bin
-
-	case types.Video:
-		outputs, err := s.addVideoTrack()
-		if err != nil {
-			logger.Errorw("could not add video track", err)
-			return nil, err
-		}
-
-		pp, err := NewVideoOutputBin(s.params.VideoEncodingOptions, outputs)
-		if err != nil {
-			logger.Errorw("could not create tee", err)
-			return nil, err
-		}
-
-		bin = pp.GetBin()
-	}
-
-	return bin, nil
-}
-
-func (s *WebRTCSink) Close() {
+func (s *LKSDKOutput) Close() {
 	logger.Debugw("disconnecting from room")
 	s.room.Disconnect()
 }

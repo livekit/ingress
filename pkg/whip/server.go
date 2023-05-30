@@ -13,6 +13,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/livekit"
@@ -39,7 +40,7 @@ type WHIPServer struct {
 
 	conf         *config.Config
 	webRTCConfig *rtcconfig.WebRTCConfig
-	onPublish    func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), error)
+	onPublish    func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), *params.Params, error)
 	handlers     sync.Map
 	rpcClient    rpc.IngressHandlerClient
 }
@@ -52,7 +53,7 @@ func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
 
 func (s *WHIPServer) Start(
 	conf *config.Config,
-	onPublish func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), error),
+	onPublish func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), *params.Params, error),
 	healthHandler HealthHandler,
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -230,7 +231,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
 
-	info, ready, err := s.onPublish(streamKey, resourceId)
+	info, ready, p, err := s.onPublish(streamKey, resourceId)
 	if err != nil {
 		return "", "", err
 	}
@@ -238,7 +239,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 	ctx = context.WithValue(ctx, "ingressID", info.IngressId)
 	ctx = context.WithValue(ctx, "resourceID", resourceId)
 
-	h, sdpResponse, err := NewWHIPHandler(ctx, s.conf, s.webRTCConfig, sdpOffer)
+	h, sdpResponse, err := NewWHIPHandler(ctx, s.conf, s.webRTCConfig, p, sdpOffer)
 	if err != nil {
 		return "", "", err
 	}
