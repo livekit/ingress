@@ -3,12 +3,13 @@ module github.com/livekit/ingress
 go 1.18
 
 require (
+	github.com/Eyevinn/mp4ff v0.35.0
 	github.com/frostbyte73/core v0.0.9
 	github.com/gorilla/mux v1.8.0
 	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/mediatransportutil v0.0.0-20230517210015-117bec6a19a8
-	github.com/livekit/protocol v1.5.8-0.20230525225706-52cca4239cf2
+	github.com/livekit/protocol v1.5.8-0.20230530132912-262f7eca9bee
 	github.com/livekit/psrpc v0.3.1-0.20230518234341-6f6847e10b09
 	github.com/livekit/server-sdk-go v1.0.11-0.20230504163637-22d8afafa6b0
 	github.com/pion/interceptor v0.1.16
@@ -23,12 +24,12 @@ require (
 	github.com/urfave/cli/v2 v2.25.1
 	github.com/yutopp/go-flv v0.2.0
 	go.uber.org/atomic v1.11.0
+	golang.org/x/image v0.7.0
 	google.golang.org/protobuf v1.30.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
-	github.com/Eyevinn/mp4ff v0.35.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
@@ -84,7 +85,6 @@ require (
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.9.0 // indirect
 	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc // indirect
-	golang.org/x/image v0.7.0 // indirect
 	golang.org/x/net v0.10.0 // indirect
 	golang.org/x/sync v0.1.0 // indirect
 	golang.org/x/sys v0.8.0 // indirect

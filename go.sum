@@ -36,6 +36,7 @@ github.com/go-logr/logr v1.2.4/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbV
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
 github.com/go-logr/stdr v1.2.2/go.mod h1:mMo/vtBO5dYbehREoey6XUKy/eSumjCCveDpRre4VKE=
 github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0/go.mod h1:fyg7847qk6SyHyPtNmDHnmrv/HOrqktSC+C9fM+CJOE=
+github.com/go-test/deep v1.0.8 h1:TDsG77qcSprGbC6vTN8OuXp5g+J+b5Pcguhf7Zt61VM=
 github.com/go-test/deep v1.0.8/go.mod h1:5C2ZWiW0ErCdrYzpqxLbTX7MG14M9iiw8DgHncVwcsE=
 github.com/golang/protobuf v1.2.0/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5yJMmIC1U=
 github.com/golang/protobuf v1.3.5/go.mod h1:6O5/vntMXwX2lRkT1hjjk0nAC1IDOTvTlVgjlRvqsdk=
@@ -83,8 +84,8 @@ github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1 h1:jm09419p0lqTkD
 github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1/go.mod h1:Rs3MhFwutWhGwmY1VQsygw28z5bWcnEYmS1OG9OxjOQ=
 github.com/livekit/mediatransportutil v0.0.0-20230517210015-117bec6a19a8 h1:YgBDljjYPJc57sSwaoyUgiviThQDyS7SyWsXJSRsZH8=
 github.com/livekit/mediatransportutil v0.0.0-20230517210015-117bec6a19a8/go.mod h1:MRc0zSOSzXuFt0X218SgabzlaKevkvCckPgBEoHYc34=
-github.com/livekit/protocol v1.5.8-0.20230525225706-52cca4239cf2 h1:cE/OQiQyre2NFQlHwwZXGV97mTTFOHess37qkWt6Ctg=
-github.com/livekit/protocol v1.5.8-0.20230525225706-52cca4239cf2/go.mod h1:ZaOnsvP+JS4s7vI1UO+JVdBagvvLp/lBXDAl2hkDS0I=
+github.com/livekit/protocol v1.5.8-0.20230530132912-262f7eca9bee h1:/t8hngr0l0l4yMKMDAws1dLmcySibN746hYZ5gpH/t8=
+github.com/livekit/protocol v1.5.8-0.20230530132912-262f7eca9bee/go.mod h1:ZaOnsvP+JS4s7vI1UO+JVdBagvvLp/lBXDAl2hkDS0I=
 github.com/livekit/psrpc v0.3.1-0.20230518234341-6f6847e10b09 h1:mb6jRcg57U0HQ4tKRsueHHKcvTqBinL6+0Aa84vTtWk=
 github.com/livekit/psrpc v0.3.1-0.20230518234341-6f6847e10b09/go.mod h1:n6JntEg+zT6Ji8InoyTpV7wusPNwGqqtxmHlkNhDN0U=
 github.com/livekit/server-sdk-go v1.0.11-0.20230504163637-22d8afafa6b0 h1:FazC6kxZZJ9n8GsUlhfZNzXMfknb9tEMXbDMN1qgyFQ=
