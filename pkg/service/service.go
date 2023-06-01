@@ -152,7 +152,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			return nil, nil, nil, err
 		}
 
-		err = RegisterIngressRpcHandlers(rpcServer, pRes.resp.Info, extraParams)
+		err = RegisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -163,18 +163,20 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		defer span.End()
 		if err != nil {
 			// Client failed to finalize session start
-			s.sendUpdate(ctx, pRes.resp.Info, err)
+			s.sendUpdate(ctx, p.IngressInfo, err)
 			if p.IngressInfo.BypassTranscoding {
-				DeregisterIngressRpcHandlers(rpcServer, pRes.resp.Info, extraParams)
+				DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
 			}
 			span.RecordError(err)
 			return
 		}
 
 		if p.IngressInfo.BypassTranscoding {
-			s.sendUpdate(ctx, pRes.resp.Info, nil)
+			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
 
-			s.monitor.IngressStarted(pRes.resp.Info)
+			s.sendUpdate(ctx, p.IngressInfo, nil)
+
+			s.monitor.IngressStarted(p.IngressInfo)
 		} else {
 			extraParams.MimeTypes = mimeTypes
 
@@ -189,9 +191,9 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 
 			p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
 
-			s.sendUpdate(ctx, pRes.resp.Info, err)
-			s.monitor.IngressEnded(pRes.resp.Info)
-			DeregisterIngressRpcHandlers(rpcServer, pRes.resp.Info, extraParams)
+			s.sendUpdate(ctx, p.IngressInfo, err)
+			s.monitor.IngressEnded(p.IngressInfo)
+			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
 		}
 	}
 

@@ -153,15 +153,9 @@ loop:
 }
 
 func (h *whipHandler) Close() {
-	h.closeOnce.Do(func() {
-		h.sync.End()
-
-		h.trackLock.Lock()
-		for _, v := range h.trackHandlers {
-			v.Close()
-		}
-		h.trackLock.Unlock()
-	})
+	if h.pc != nil {
+		h.pc.Close()
+	}
 }
 
 func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
@@ -231,7 +225,15 @@ func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnect
 
 		// TODO support ICE Restart
 		if state >= webrtc.PeerConnectionStateDisconnected {
-			h.Close()
+			h.closeOnce.Do(func() {
+				h.sync.End()
+
+				h.trackLock.Lock()
+				for _, v := range h.trackHandlers {
+					v.Close()
+				}
+				h.trackLock.Unlock()
+			})
 		}
 	})
 
