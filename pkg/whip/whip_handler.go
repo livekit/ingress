@@ -10,7 +10,6 @@ import (
 	"github.com/pion/webrtc/v3"
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
@@ -50,12 +49,8 @@ type whipHandler struct {
 	trackAddedChan      chan *webrtc.TrackRemote
 }
 
-func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcconfig.WebRTCConfig, p *params.Params, sdpOffer string) (*whipHandler, string, error) {
-	var err error
-
-	h := &whipHandler{
-		logger:              logger.GetLogger().WithValues("ingressID", p.IngressInfo.IngressId, "resourceID", p.ExtraParams.(*params.WhipExtraParams).ResourceId),
-		params:              p,
+func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
+	return &whipHandler{
 		rtcConfig:           webRTCConfig,
 		sync:                synchronizer.NewSynchronizer(nil),
 		result:              make(chan error, 1),
@@ -63,11 +58,18 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcc
 		trackHandlers:       make(map[types.StreamKind]*whipTrackHandler),
 		trackRelayMediaSink: make(map[types.StreamKind]*RelayMediaSink),
 	}
+}
+
+func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer string) (string, error) {
+	var err error
+
+	h.logger = logger.GetLogger().WithValues("ingressID", p.IngressInfo.IngressId, "resourceID", p.ExtraParams.(*params.WhipExtraParams).ResourceId)
+	h.params = p
 
 	if p.IngressInfo.BypassTranscoding {
 		h.sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, p)
 		if err != nil {
-			return nil, "", err
+			return "", err
 		}
 	}
 
@@ -78,12 +80,12 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcc
 	h.expectedTrackCount, err = validateOfferAndGetExpectedTrackCount(offer)
 	h.trackAddedChan = make(chan *webrtc.TrackRemote, h.expectedTrackCount)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 
 	m, err := newMediaEngine()
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 
 	// Create a InterceptorRegistry. This is the user configurable RTP/RTCP Pipeline.
@@ -94,14 +96,14 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcc
 
 	// Use the default set of Interceptors
 	if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
-		return nil, "", err
+		return "", err
 	}
 
 	// Create the API object with the MediaEngine
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithSettingEngine(h.rtcConfig.SettingEngine), webrtc.WithInterceptorRegistry(i))
 	h.pc, err = h.createPeerConnection(api)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 	defer func() {
 		if err != nil {
@@ -111,10 +113,10 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcc
 
 	sdpAnswer, err := h.getSDPAnswer(ctx, offer)
 	if err != nil {
-		return nil, "", err
+		return "", err
 	}
 
-	return h, sdpAnswer, nil
+	return sdpAnswer, nil
 }
 
 func (h *whipHandler) Start(ctx context.Context) (map[types.StreamKind]string, error) {

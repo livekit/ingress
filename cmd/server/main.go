@@ -97,18 +97,6 @@ func runService(c *cli.Context) error {
 		return err
 	}
 
-	svc := service.NewService(conf, psrpcClient)
-
-	_, err = rpc.NewIngressInternalServer(conf.NodeID, svc, bus)
-	if err != nil {
-		return err
-	}
-
-	err = setupHealthHandlers(conf, svc)
-	if err != nil {
-		return err
-	}
-
 	stopChan := make(chan os.Signal, 1)
 	signal.Notify(stopChan, syscall.SIGTERM, syscall.SIGQUIT)
 
@@ -128,6 +116,18 @@ func runService(c *cli.Context) error {
 		}
 
 		whipsrv = whip.NewWHIPServer(psrpcWHIPClient)
+	}
+
+	svc := service.NewService(conf, psrpcClient, bus, whipsrv)
+
+	_, err = rpc.NewIngressInternalServer(conf.NodeID, svc, bus)
+	if err != nil {
+		return err
+	}
+
+	err = setupHealthHandlers(conf, svc)
+	if err != nil {
+		return err
 	}
 
 	relay := service.NewRelay(rtmpsrv, whipsrv)

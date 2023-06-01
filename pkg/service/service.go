@@ -45,6 +45,7 @@ type Service struct {
 	whipSrv *whip.WHIPServer
 
 	psrpcClient rpc.IOInfoClient
+	bus         psrpc.MessageBus
 
 	promServer *http.Server
 
@@ -61,6 +62,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		manager:         NewProcessManager(conf, monitor),
 		whipSrv:         whipSrv,
 		psrpcClient:     psrpcClient,
+		bus:             bus,
 		publishRequests: make(chan publishRequest, 5),
 		shutdown:        core.NewFuse(),
 	}
@@ -108,7 +110,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 	return nil
 }
 
-func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServer) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error), ended func(err error), err error) {
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error), ended func(err error), err error) {
 	res := make(chan publishResponse)
 	r := publishRequest{
 		streamKey: streamKey,
@@ -119,11 +121,11 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 	var pRes publishResponse
 	select {
 	case <-s.shutdown.Watch():
-		return nil, nil, nil, nil, errors.ErrServerShuttingDown
+		return nil, nil, nil, errors.ErrServerShuttingDown
 	case s.publishRequests <- r:
 		pRes = <-res
 		if pRes.err != nil {
-			return nil, nil, nil, nil, pRes.err
+			return nil, nil, nil, pRes.err
 		}
 	}
 
@@ -131,17 +133,18 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		ResourceId: resourceId,
 	}
 
+	var rpcServer rpc.IngressHandlerServer
 	if p.IngressInfo.BypassTranscoding {
 		// RPC is handled in the handler process when transcoding
 
-		rpcServer, err := rpc.NewIngressHandlerServer(conf.NodeID, ihs, bus)
+		rpcServer, err = rpc.NewIngressHandlerServer(s.conf.NodeID, ihs, s.bus)
 		if err != nil {
-			return nil
+			return nil, nil, nil, err
 		}
 
 		err = RegisterIngressRpcHandlers(rpcServer, pRes.resp.Info, extraParams)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 
@@ -152,7 +155,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 
 	p, err = params.GetParams(context.Background(), s.conf, pRes.resp.Info, wsUrl, pRes.resp.Token, extraParams)
 	if err != nil {
-		return nil, nil, nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	ready = func(mimeTypes map[types.StreamKind]string, err error) {
@@ -276,7 +279,12 @@ func (s *Service) Run() error {
 }
 
 func (s *Service) isIdle() bool {
-	return s.manager.isIdle() && s.whipSrv.IsIdle()
+	whipIdle := true
+	if s.whipSrv != nil {
+		whipIdle = s.whipSrv.IsIdle()
+	}
+
+	return s.manager.isIdle() && whipIdle
 }
 
 func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {
@@ -339,4 +347,34 @@ func (s *Service) AvailabilityHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Healthy"))
+}
+
+func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo, ep any) error {
+	if err := server.RegisterUpdateIngressTopic(info.IngressId); err != nil {
+		return err
+	}
+	if err := server.RegisterDeleteIngressTopic(info.IngressId); err != nil {
+		return err
+	}
+
+	if info.InputType == livekit.IngressInput_WHIP_INPUT {
+		resourceId := ep.(*params.WhipExtraParams).ResourceId
+
+		if err := server.RegisterDeleteWHIPResourceTopic(resourceId); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func DeregisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo, ep any) {
+	server.DeregisterUpdateIngressTopic(info.IngressId)
+	server.RegisterDeleteIngressTopic(info.IngressId)
+
+	if info.InputType == livekit.IngressInput_WHIP_INPUT {
+		resourceId := ep.(*params.WhipExtraParams).ResourceId
+
+		server.RegisterDeleteWHIPResourceTopic(resourceId)
+	}
 }

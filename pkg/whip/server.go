@@ -39,7 +39,7 @@ type WHIPServer struct {
 
 	conf         *config.Config
 	webRTCConfig *rtcconfig.WebRTCConfig
-	onPublish    func(streamKey, resourceId string) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error), func(error), error)
+	onPublish    func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error), func(error), error)
 	rpcClient    rpc.IngressHandlerClient
 
 	handlersLock sync.Mutex
@@ -55,7 +55,7 @@ func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
 
 func (s *WHIPServer) Start(
 	conf *config.Config,
-	onPublish func(streamKey, resourceId string) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error), func(error), error),
+	onPublish func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error), func(error), error),
 	healthHandler HealthHandler,
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -242,12 +242,14 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
 
-	p, ready, ended, err := s.onPublish(streamKey, resourceId)
+	h := NewWHIPHandler(s.webRTCConfig)
+
+	p, ready, ended, err := s.onPublish(streamKey, resourceId, h)
 	if err != nil {
 		return "", "", err
 	}
 
-	h, sdpResponse, err := NewWHIPHandler(ctx, s.conf, s.webRTCConfig, p, sdpOffer)
+	sdpResponse, err := h.Init(ctx, p, sdpOffer)
 	if err != nil {
 		return "", "", err
 	}
