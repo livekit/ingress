@@ -171,12 +171,18 @@ func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
 		m.requestGauge.With(prometheus.Labels{"type": "rtmp"}).Add(1)
+	case livekit.IngressInput_WHIP_INPUT:
+		m.requestGauge.With(prometheus.Labels{"type": "whip"}).Add(1)
 	}
+
 }
 
 func (m *Monitor) IngressEnded(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
 		m.requestGauge.With(prometheus.Labels{"type": "rtmp"}).Sub(1)
+	case livekit.IngressInput_WHIP_INPUT:
+		m.requestGauge.With(prometheus.Labels{"type": "whip"}).Sub(1)
+
 	}
 }

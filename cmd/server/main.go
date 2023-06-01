@@ -271,22 +271,8 @@ func setupHandlerRPCHandlers(conf *config.Config, handler *service.Handler, bus 
 	if err != nil {
 		return err
 	}
-	if err := rpcServer.RegisterUpdateIngressTopic(info.IngressId); err != nil {
-		return err
-	}
-	if err := rpcServer.RegisterDeleteIngressTopic(info.IngressId); err != nil {
-		return err
-	}
 
-	if info.InputType == livekit.IngressInput_WHIP_INPUT {
-		resourceId := ep.(*params.WhipExtraParams).ResourceId
-
-		if err := rpcServer.RegisterDeleteWHIPResourceTopic(resourceId); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return service.RegisterIngressRpcHandlers(rpcServer, info, ep)
 }
 
 func getConfig(c *cli.Context) (*config.Config, error) {

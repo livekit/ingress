@@ -35,6 +35,7 @@ type whipHandler struct {
 	sdkOutput          *lksdk_output.LKSDKOutput // only for passthrough
 	expectedTrackCount int
 	result             chan error
+	closeOnce          sync.Once
 
 	trackLock           sync.Mutex
 	tracks              map[string]*webrtc.TrackRemote
@@ -142,6 +143,18 @@ loop:
 	return mimeTypes, nil
 }
 
+func (h *whipHandler) Close() {
+	h.closeOnce.Do(func() {
+		h.sync.End()
+
+		h.trackLock.Lock()
+		for _, v := range h.trackHandlers {
+			v.Close()
+		}
+		h.trackLock.Unlock()
+	})
+}
+
 func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
 	defer func() {
 		h.logger.Infow("closing peer connection")
@@ -204,21 +217,12 @@ func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnect
 
 	pc.OnTrack(h.addTrack)
 
-	closeOnce := sync.Once{}
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		h.logger.Infow("Peer Connection State changed", "state", state.String())
 
 		// TODO support ICE Restart
 		if state >= webrtc.PeerConnectionStateDisconnected {
-			closeOnce.Do(func() {
-				h.sync.End()
-
-				h.trackLock.Lock()
-				for _, v := range h.trackHandlers {
-					v.Close()
-				}
-				h.trackLock.Unlock()
-			})
+			h.Close()
 		}
 	})
 

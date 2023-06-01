@@ -40,7 +40,7 @@ type WHIPServer struct {
 
 	conf         *config.Config
 	webRTCConfig *rtcconfig.WebRTCConfig
-	onPublish    func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), *params.Params, error)
+	onPublish    func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), func(error), *params.Params, error)
 	handlers     sync.Map
 	rpcClient    rpc.IngressHandlerClient
 }
@@ -53,7 +53,7 @@ func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
 
 func (s *WHIPServer) Start(
 	conf *config.Config,
-	onPublish func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), *params.Params, error),
+	onPublish func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), func(error), *params.Params, error),
 	healthHandler HealthHandler,
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -182,6 +182,17 @@ func (s *WHIPServer) AssociateRelay(resourceId string, kind types.StreamKind, w 
 	return nil
 }
 
+func (s *WHIPServer) CloseHandler(resourceId string) error {
+	h, ok := s.handlers.Load(resourceId)
+	if ok && h != nil {
+		h.(*whipHandler).Close()
+	} else {
+		return errors.ErrIngressNotFound
+	}
+
+	return nil
+}
+
 func (s *WHIPServer) handleError(err error, w http.ResponseWriter) {
 	var psrpcErr psrpc.Error
 	switch {
@@ -231,7 +242,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
 
-	info, ready, p, err := s.onPublish(streamKey, resourceId)
+	info, ready, ended, p, err := s.onPublish(streamKey, resourceId)
 	if err != nil {
 		return "", "", err
 	}
@@ -269,15 +280,19 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 		logger.Infow("all tracks ready")
 
 		go func() {
+			var err error
 			defer func() {
 				s.handlers.Delete(resourceId)
+				if err != nil {
+					logger.Warnw("WHIP session failed", err, "streamKey", streamKey, "resourceID", resourceId)
+				}
+
+				if ended != nil {
+					ended(err)
+				}
 			}()
 
-			err := h.WaitForSessionEnd(s.ctx)
-			if err != nil {
-				logger.Warnw("WHIP session failed", err, "streamKey", streamKey, "resourceID", resourceId)
-				// The handler process should update the ingress info
-			}
+			err = h.WaitForSessionEnd(s.ctx)
 		}()
 	}()
 
