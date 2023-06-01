@@ -184,6 +184,8 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ended")
 			defer span.End()
 
+			p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+
 			s.sendUpdate(ctx, pRes.resp.Info, err)
 			s.monitor.IngressEnded(pRes.resp.Info)
 			DeregisterIngressRpcHandlers(rpcServer, pRes.resp.Info, extraParams)

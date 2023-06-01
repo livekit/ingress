@@ -247,8 +247,6 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 		return "", "", err
 	}
 
-	info := p.IngressInfo
-
 	h, sdpResponse, err := NewWHIPHandler(ctx, s.conf, s.webRTCConfig, p, sdpOffer)
 	if err != nil {
 		return "", "", err

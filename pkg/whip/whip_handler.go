@@ -5,19 +5,24 @@ import (
 	"io"
 	"sync"
 
+	"github.com/pion/interceptor"
+	"github.com/pion/rtcp"
+	"github.com/pion/webrtc/v3"
+	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
+
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
+	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/rpc"
+	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 	"github.com/livekit/server-sdk-go/pkg/synchronizer"
-	"github.com/pion/interceptor"
-	"github.com/pion/rtcp"
-	"github.com/pion/webrtc/v3"
 )
 
 const (
@@ -28,6 +33,7 @@ const (
 
 type whipHandler struct {
 	logger logger.Logger
+	params *params.Params
 
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
@@ -49,6 +55,7 @@ func NewWHIPHandler(ctx context.Context, conf *config.Config, webRTCConfig *rtcc
 
 	h := &whipHandler{
 		logger:              logger.GetLogger().WithValues("ingressID", p.IngressInfo.IngressId, "resourceID", p.ExtraParams.(*params.WhipExtraParams).ResourceId),
+		params:              p,
 		rtcConfig:           webRTCConfig,
 		sync:                synchronizer.NewSynchronizer(nil),
 		result:              make(chan error, 1),
@@ -401,4 +408,32 @@ func newMediaEngine() (*webrtc.MediaEngine, error) {
 	}
 
 	return m, nil
+}
+
+// IngressHandler RPC interface
+func (h *whipHandler) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
+	_, span := tracer.Start(ctx, "whipHandler.UpdateIngress")
+	defer span.End()
+
+	h.Close()
+
+	return h.params.State, nil
+}
+
+func (h *whipHandler) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
+	_, span := tracer.Start(ctx, "whipHandler.DeleteIngress")
+	defer span.End()
+
+	h.Close()
+
+	return h.params.State, nil
+}
+
+func (h *whipHandler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {
+	_, span := tracer.Start(ctx, "whipHandler.DeleteWHIPResource")
+	defer span.End()
+
+	h.Close()
+
+	return &google_protobuf2.Empty{}, nil
 }
