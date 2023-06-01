@@ -16,7 +16,6 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
-	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/utils"
@@ -40,20 +39,23 @@ type WHIPServer struct {
 
 	conf         *config.Config
 	webRTCConfig *rtcconfig.WebRTCConfig
-	onPublish    func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), func(error), *params.Params, error)
-	handlers     sync.Map
+	onPublish    func(streamKey, resourceId string) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error), func(error), error)
 	rpcClient    rpc.IngressHandlerClient
+
+	handlersLock sync.Mutex
+	handlers     map[string]*whipHandler
 }
 
 func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
 	return &WHIPServer{
 		rpcClient: rpcClient,
+		handlers:  make(map[string]*whipHandler),
 	}
 }
 
 func (s *WHIPServer) Start(
 	conf *config.Config,
-	onPublish func(streamKey, resourceId string) (*livekit.IngressInfo, func(mimeTypes map[types.StreamKind]string, err error), func(error), *params.Params, error),
+	onPublish func(streamKey, resourceId string) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error), func(error), error),
 	healthHandler HealthHandler,
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -169,9 +171,11 @@ func (s *WHIPServer) Stop() {
 }
 
 func (s *WHIPServer) AssociateRelay(resourceId string, kind types.StreamKind, w io.WriteCloser) error {
-	h, ok := s.handlers.Load(resourceId)
+	s.handlersLock.Lock()
+	h, ok := s.handlers[resourceId]
+	s.handlersLock.Unlock()
 	if ok && h != nil {
-		err := h.(*whipHandler).AssociateRelay(kind, w)
+		err := h.AssociateRelay(kind, w)
 		if err != nil {
 			return err
 		}
@@ -182,15 +186,11 @@ func (s *WHIPServer) AssociateRelay(resourceId string, kind types.StreamKind, w 
 	return nil
 }
 
-func (s *WHIPServer) CloseHandler(resourceId string) error {
-	h, ok := s.handlers.Load(resourceId)
-	if ok && h != nil {
-		h.(*whipHandler).Close()
-	} else {
-		return errors.ErrIngressNotFound
-	}
+func (s *WHIPServer) IsIdle() bool {
+	s.handlersLock.Lock()
+	defer s.handlersLock.Unlock()
 
-	return nil
+	return len(s.handlers) == 0
 }
 
 func (s *WHIPServer) handleError(err error, w http.ResponseWriter) {
@@ -242,13 +242,12 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
 
-	info, ready, ended, p, err := s.onPublish(streamKey, resourceId)
+	p, ready, ended, err := s.onPublish(streamKey, resourceId)
 	if err != nil {
 		return "", "", err
 	}
 
-	ctx = context.WithValue(ctx, "ingressID", info.IngressId)
-	ctx = context.WithValue(ctx, "resourceID", resourceId)
+	info := p.IngressInfo
 
 	h, sdpResponse, err := NewWHIPHandler(ctx, s.conf, s.webRTCConfig, p, sdpOffer)
 	if err != nil {
@@ -265,12 +264,16 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 			defer func() {
 				ready(mimeTypes, err)
 				if err != nil {
-					s.handlers.Delete(resourceId)
+					s.handlersLock.Lock()
+					delete(s.handlers, resourceId)
+					s.handlersLock.Unlock()
 				}
 			}()
 		}
 
-		s.handlers.Store(resourceId, h)
+		s.handlersLock.Lock()
+		s.handlers[resourceId] = h
+		s.handlersLock.Unlock()
 
 		mimeTypes, err = h.Start(ctx)
 		if err != nil {
@@ -282,7 +285,10 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 		go func() {
 			var err error
 			defer func() {
-				s.handlers.Delete(resourceId)
+				s.handlersLock.Lock()
+				delete(s.handlers, resourceId)
+				s.handlersLock.Unlock()
+
 				if err != nil {
 					logger.Warnw("WHIP session failed", err, "streamKey", streamKey, "resourceID", resourceId)
 				}
