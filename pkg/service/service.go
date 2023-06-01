@@ -133,6 +133,16 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		ResourceId: resourceId,
 	}
 
+	wsUrl := s.conf.WsUrl
+	if pRes.resp.WsUrl != "" {
+		wsUrl = pRes.resp.WsUrl
+	}
+
+	p, err = params.GetParams(context.Background(), s.conf, pRes.resp.Info, wsUrl, pRes.resp.Token, extraParams)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	var rpcServer rpc.IngressHandlerServer
 	if p.IngressInfo.BypassTranscoding {
 		// RPC is handled in the handler process when transcoding
@@ -146,16 +156,6 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		if err != nil {
 			return nil, nil, nil, err
 		}
-	}
-
-	wsUrl := s.conf.WsUrl
-	if pRes.resp.WsUrl != "" {
-		wsUrl = pRes.resp.WsUrl
-	}
-
-	p, err = params.GetParams(context.Background(), s.conf, pRes.resp.Info, wsUrl, pRes.resp.Token, extraParams)
-	if err != nil {
-		return nil, nil, nil, err
 	}
 
 	ready = func(mimeTypes map[types.StreamKind]string, err error) {
