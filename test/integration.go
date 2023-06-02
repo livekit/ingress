@@ -18,7 +18,6 @@ import (
 	"github.com/livekit/psrpc"
 
 	"github.com/livekit/ingress/pkg/config"
-	"github.com/livekit/ingress/pkg/service"
 )
 
 type TestConfig struct {
@@ -82,27 +81,17 @@ func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 	conf.Config.RTCConfig.Validate(conf.Development)
 	conf.Config.RTCConfig.EnableLoopbackCandidate = true
 
-	svc := service.NewService(conf.Config, psrpcClient)
-
 	commandPsrpcClient, err := rpc.NewIngressHandlerClient("ingress_test_client", bus, psrpc.WithClientTimeout(5*time.Second))
 	require.NoError(t, err)
 
-	go func() {
-		err := svc.Run()
-		require.NoError(t, err)
-	}()
-	t.Cleanup(func() {
-		svc.Stop(true)
-	})
-
 	if !conf.WhipOnly {
 		t.Run("RTMP", func(t *testing.T) {
-			RunRTMPTest(t, conf, bus, svc, commandPsrpcClient)
+			RunRTMPTest(t, conf, bus, commandPsrpcClient, psrpcClient)
 		})
 	}
 	if !conf.RtmpOnly {
 		t.Run("WHIP", func(t *testing.T) {
-			RunWHIPTest(t, conf, bus, svc, commandPsrpcClient)
+			RunWHIPTest(t, conf, bus, commandPsrpcClient, psrpcClient)
 		})
 	}
 }
