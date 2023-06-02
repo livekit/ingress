@@ -15,12 +15,14 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/ingress/version"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
+	"github.com/livekit/psrpc"
 )
 
 const shutdownTimer = time.Second * 5
@@ -40,8 +42,10 @@ type Service struct {
 	conf    *config.Config
 	monitor *stats.Monitor
 	manager *ProcessManager
+	whipSrv *whip.WHIPServer
 
 	psrpcClient rpc.IOInfoClient
+	bus         psrpc.MessageBus
 
 	promServer *http.Server
 
@@ -49,14 +53,16 @@ type Service struct {
 	shutdown        core.Fuse
 }
 
-func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient) *Service {
+func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, whipSrv *whip.WHIPServer) *Service {
 	monitor := stats.NewMonitor()
 
 	s := &Service{
 		conf:            conf,
 		monitor:         monitor,
 		manager:         NewProcessManager(conf, monitor),
+		whipSrv:         whipSrv,
 		psrpcClient:     psrpcClient,
+		bus:             bus,
 		publishRequests: make(chan publishRequest, 5),
 		shutdown:        core.NewFuse(),
 	}
@@ -104,7 +110,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 	return nil
 }
 
-func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (info *livekit.IngressInfo, ready func(mimeTypes map[types.StreamKind]string, err error), p *params.Params, err error) {
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error), ended func(err error), err error) {
 	res := make(chan publishResponse)
 	r := publishRequest{
 		streamKey: streamKey,
@@ -137,24 +143,61 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (info *
 		return nil, nil, nil, err
 	}
 
+	var rpcServer rpc.IngressHandlerServer
+	if p.IngressInfo.BypassTranscoding {
+		// RPC is handled in the handler process when transcoding
+
+		rpcServer, err = rpc.NewIngressHandlerServer(s.conf.NodeID, ihs, s.bus)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		err = RegisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
 	ready = func(mimeTypes map[types.StreamKind]string, err error) {
 		ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ready")
 		defer span.End()
 		if err != nil {
 			// Client failed to finalize session start
-			s.sendUpdate(ctx, pRes.resp.Info, err)
+			s.sendUpdate(ctx, p.IngressInfo, err)
+			if p.IngressInfo.BypassTranscoding {
+				DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
+			}
 			span.RecordError(err)
 			return
 		}
 
-		if !p.IngressInfo.BypassTranscoding {
+		if p.IngressInfo.BypassTranscoding {
+			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
+
+			s.sendUpdate(ctx, p.IngressInfo, nil)
+
+			s.monitor.IngressStarted(p.IngressInfo)
+		} else {
 			extraParams.MimeTypes = mimeTypes
 
 			go s.manager.launchHandler(ctx, pRes.resp, extraParams)
 		}
 	}
 
-	return pRes.resp.Info, ready, p, nil
+	if p.IngressInfo.BypassTranscoding {
+		ended = func(err error) {
+			ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ended")
+			defer span.End()
+
+			p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+
+			s.sendUpdate(ctx, p.IngressInfo, err)
+			s.monitor.IngressEnded(p.IngressInfo)
+			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
+		}
+	}
+
+	return p, ready, ended, nil
 }
 
 func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inputType livekit.IngressInput) (*rpc.GetIngressInfoResponse, error) {
@@ -237,6 +280,15 @@ func (s *Service) Run() error {
 	}
 }
 
+func (s *Service) isIdle() bool {
+	whipIdle := true
+	if s.whipSrv != nil {
+		whipIdle = s.whipSrv.IsIdle()
+	}
+
+	return s.manager.isIdle() && whipIdle
+}
+
 func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {
 	state := info.State
 	if state == nil {
@@ -297,4 +349,34 @@ func (s *Service) AvailabilityHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Healthy"))
+}
+
+func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo, ep any) error {
+	if err := server.RegisterUpdateIngressTopic(info.IngressId); err != nil {
+		return err
+	}
+	if err := server.RegisterDeleteIngressTopic(info.IngressId); err != nil {
+		return err
+	}
+
+	if info.InputType == livekit.IngressInput_WHIP_INPUT {
+		resourceId := ep.(*params.WhipExtraParams).ResourceId
+
+		if err := server.RegisterDeleteWHIPResourceTopic(resourceId); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func DeregisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo, ep any) {
+	server.DeregisterUpdateIngressTopic(info.IngressId)
+	server.RegisterDeleteIngressTopic(info.IngressId)
+
+	if info.InputType == livekit.IngressInput_WHIP_INPUT {
+		resourceId := ep.(*params.WhipExtraParams).ResourceId
+
+		server.RegisterDeleteWHIPResourceTopic(resourceId)
+	}
 }

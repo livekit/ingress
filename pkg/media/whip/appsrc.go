@@ -91,11 +91,11 @@ func (w *whipAppSource) Start(ctx context.Context) error {
 	return nil
 }
 
-func (w *whipAppSource) Close() error {
+func (w *whipAppSource) Close() <-chan error {
 	logger.Debugw("WHIP app source relay Close called", "resourceID", w.resourceId, "kind", w.trackKind)
 	w.fuse.Break()
 
-	return <-w.result
+	return w.result
 }
 
 func (w *whipAppSource) GetAppSource() *app.Source {
@@ -113,8 +113,13 @@ func (w *whipAppSource) copyRelayedData(r io.Reader) error {
 		case nil:
 			// continue
 		case io.EOF:
-			// relay stopped without a clean session shutdown
-			return io.ErrUnexpectedEOF
+			if w.fuse.IsBroken() {
+				// client closed the peer connection at the same time as it sent the DELETE request
+				return io.EOF
+			} else {
+				// relay stopped without a clean session shutdown
+				return io.ErrUnexpectedEOF
+			}
 		default:
 			return err
 		}

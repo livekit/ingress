@@ -60,8 +60,14 @@ func (s *WHIPSource) Start(ctx context.Context) error {
 
 func (s *WHIPSource) Close() error {
 	var errs utils.ErrArray
+	errChans := make([]<-chan error, 0)
 	for _, t := range s.trackSrc {
-		err := t.Close()
+		errChans = append(errChans, t.Close())
+	}
+
+	for _, errChan := range errChans {
+		err := <-errChan
+
 		switch err {
 		case nil, io.EOF:
 			// success

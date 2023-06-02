@@ -67,7 +67,7 @@ func (m *Monitor) Start(conf *config.Config) error {
 		Subsystem:   "ingress",
 		Name:        "requests",
 		ConstLabels: prometheus.Labels{"node_id": conf.NodeID},
-	}, []string{"type"})
+	}, []string{"type", "transcoding"})
 
 	prometheus.MustRegister(m.promCPULoad, promNodeAvailable, m.requestGauge)
 
@@ -97,9 +97,18 @@ func (m *Monitor) checkCPUConfig(costConfig config.CPUCostConfig) error {
 		)
 	}
 
+	if costConfig.WHIPBypassTranscodingCpuCost < 0.05 {
+		logger.Warnw("whip input with transcoding bypassed requirement too low", nil,
+			"config value", costConfig.WHIPCpuCost,
+			"minimum value", 0.05,
+			"recommended value", 0.1,
+		)
+	}
+
 	requirements := []float64{
 		costConfig.RTMPCpuCost,
 		costConfig.WHIPCpuCost,
+		costConfig.WHIPBypassTranscodingCpuCost,
 	}
 	sort.Float64s(requirements)
 	m.maxCost = requirements[len(requirements)-1]
@@ -151,8 +160,13 @@ func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 		accept = available > m.cpuCostConfig.RTMPCpuCost
 		cpuHold = m.cpuCostConfig.RTMPCpuCost
 	case livekit.IngressInput_WHIP_INPUT:
-		accept = available > m.cpuCostConfig.WHIPCpuCost
-		cpuHold = m.cpuCostConfig.WHIPCpuCost
+		if info.BypassTranscoding {
+			accept = available > m.cpuCostConfig.WHIPBypassTranscodingCpuCost
+			cpuHold = m.cpuCostConfig.WHIPBypassTranscodingCpuCost
+		} else {
+			accept = available > m.cpuCostConfig.WHIPCpuCost
+			cpuHold = m.cpuCostConfig.WHIPCpuCost
+		}
 
 	default:
 		logger.Errorw("unsupported request type", errors.New("invalid parameter"))
@@ -170,13 +184,19 @@ func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "rtmp"}).Add(1)
+		m.requestGauge.With(prometheus.Labels{"type": "rtmp", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Add(1)
+	case livekit.IngressInput_WHIP_INPUT:
+		m.requestGauge.With(prometheus.Labels{"type": "whip", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Add(1)
 	}
+
 }
 
 func (m *Monitor) IngressEnded(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "rtmp"}).Sub(1)
+		m.requestGauge.With(prometheus.Labels{"type": "rtmp", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Sub(1)
+	case livekit.IngressInput_WHIP_INPUT:
+		m.requestGauge.With(prometheus.Labels{"type": "whip", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Sub(1)
+
 	}
 }
