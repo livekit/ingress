@@ -10,18 +10,25 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/psrpc"
-	"github.com/stretchr/testify/require"
 )
 
-func RunRTMPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, svc *service.Service, commandPsrpcClient rpc.IngressHandlerClient) {
+func RunRTMPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient) {
 	rtmpsrv := rtmp.NewRTMPServer()
 	relay := service.NewRelay(rtmpsrv, nil)
+
+	svc := service.NewService(conf.Config, psrpcClient, bus, nil)
+	go func() {
+		err := svc.Run()
+		require.NoError(t, err)
+	}()
 
 	err := rtmpsrv.Start(conf.Config, svc.HandleRTMPPublishRequest)
 	require.NoError(t, err)
@@ -31,6 +38,7 @@ func RunRTMPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, svc *serv
 	t.Cleanup(func() {
 		relay.Stop()
 		rtmpsrv.Stop()
+		svc.Stop(true)
 	})
 
 	updates := make(chan *rpc.UpdateIngressStateRequest, 10)

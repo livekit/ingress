@@ -11,22 +11,29 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/livekit/ingress/pkg/service"
 	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/psrpc"
-	"github.com/stretchr/testify/require"
 )
 
 const (
 	whipClientPath = "livekit-whip-bot/cmd/whip-client/whip-client"
 )
 
-func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, svc *service.Service, commandPsrpcClient rpc.IngressHandlerClient) {
+func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient) {
 	whipsrv := whip.NewWHIPServer(commandPsrpcClient)
 	relay := service.NewRelay(nil, whipsrv)
+
+	svc := service.NewService(conf.Config, psrpcClient, bus, whipsrv)
+	go func() {
+		err := svc.Run()
+		require.NoError(t, err)
+	}()
 
 	err := whipsrv.Start(conf.Config, svc.HandleWHIPPublishRequest, svc)
 	require.NoError(t, err)
@@ -36,6 +43,7 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, svc *serv
 	t.Cleanup(func() {
 		relay.Stop()
 		whipsrv.Stop()
+		svc.Stop(true)
 	})
 
 	updates := make(chan *rpc.UpdateIngressStateRequest, 10)

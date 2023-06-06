@@ -19,8 +19,9 @@ type Monitor struct {
 	cpuCostConfig config.CPUCostConfig
 	maxCost       float64
 
-	promCPULoad  prometheus.Gauge
-	requestGauge *prometheus.GaugeVec
+	promCPULoad       prometheus.Gauge
+	requestGauge      *prometheus.GaugeVec
+	promNodeAvailable prometheus.GaugeFunc
 
 	cpuStats *utils.CPUStats
 
@@ -50,7 +51,7 @@ func (m *Monitor) Start(conf *config.Config) error {
 		Name:        "cpu_load",
 		ConstLabels: prometheus.Labels{"node_id": conf.NodeID, "node_type": "INGRESS"},
 	})
-	promNodeAvailable := prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+	m.promNodeAvailable = prometheus.NewGaugeFunc(prometheus.GaugeOpts{
 		Namespace:   "livekit",
 		Subsystem:   "ingress",
 		Name:        "available",
@@ -69,7 +70,7 @@ func (m *Monitor) Start(conf *config.Config) error {
 		ConstLabels: prometheus.Labels{"node_id": conf.NodeID},
 	}, []string{"type", "transcoding"})
 
-	prometheus.MustRegister(m.promCPULoad, promNodeAvailable, m.requestGauge)
+	prometheus.MustRegister(m.promCPULoad, m.promNodeAvailable, m.requestGauge)
 
 	return nil
 }
@@ -78,6 +79,10 @@ func (m *Monitor) Stop() {
 	if m.cpuStats != nil {
 		m.cpuStats.Stop()
 	}
+
+	prometheus.Unregister(m.promCPULoad)
+	prometheus.Unregister(m.requestGauge)
+	prometheus.Unregister(m.promNodeAvailable)
 }
 
 func (m *Monitor) checkCPUConfig(costConfig config.CPUCostConfig) error {
