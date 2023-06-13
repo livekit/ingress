@@ -22,7 +22,8 @@ const (
 // Output manages GStreamer elements that converts & encodes video to the specification that's
 // suitable for WebRTC
 type Output struct {
-	bin *gst.Bin
+	bin    *gst.Bin
+	logger logger.Logger
 
 	elements []*gst.Element
 	enc      *gst.Element
@@ -50,6 +51,8 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 	if err != nil {
 		return nil, err
 	}
+
+	e.logger = logger.GetLogger().WithValues("kind", "video", "layer", layer.Quality.String())
 
 	videoScale, err := gst.NewElement("videoscale")
 	if err != nil {
@@ -143,6 +146,8 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions) (*AudioOutput,
 	if err != nil {
 		return nil, err
 	}
+
+	e.logger = logger.GetLogger().WithValues("kind", "audio")
 
 	audioConvert, err := gst.NewElement("audioconvert")
 	if err != nil {
@@ -297,7 +302,7 @@ func (e *Output) ForceKeyFrame() error {
 }
 
 func (e *Output) handleEOS(_ *app.Sink) {
-	logger.Infow("app sink EOS")
+	e.logger.Infow("app sink EOS")
 
 	e.fuse.Break()
 }
@@ -307,7 +312,7 @@ func (e *Output) writeSample(sample *media.Sample) error {
 	case e.samples <- sample:
 		return nil
 	default:
-		logger.Warnw("sample channel full", nil)
+		e.logger.Warnw("sample channel full", nil)
 		select {
 		case e.samples <- sample:
 			return nil
@@ -317,6 +322,18 @@ func (e *Output) writeSample(sample *media.Sample) error {
 	}
 }
 
+var cnt int
+
+func (e *VideoOutput) NextSample() (media.Sample, error) {
+	cnt++
+	if cnt == 200 {
+		e.logger.Infow("FAKE ERROR")
+		return media.Sample{}, io.EOF
+	}
+
+	return e.Output.NextSample()
+}
+
 func (e *Output) NextSample() (media.Sample, error) {
 	var sample *media.Sample
 
@@ -324,6 +341,7 @@ func (e *Output) NextSample() (media.Sample, error) {
 	case sample = <-e.samples:
 	case <-e.fuse.Watch():
 	}
+
 	if sample == nil {
 		return media.Sample{}, io.EOF
 	}
@@ -332,13 +350,13 @@ func (e *Output) NextSample() (media.Sample, error) {
 }
 
 func (e *Output) OnBind() error {
-	logger.Infow("sample provider bound")
+	e.logger.Infow("sample provider bound")
 
 	return nil
 }
 
 func (e *Output) OnUnbind() error {
-	logger.Infow("sample provider unbound")
+	e.logger.Infow("sample provider unbound")
 
 	e.fuse.Break()
 
