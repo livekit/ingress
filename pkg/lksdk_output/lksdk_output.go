@@ -68,6 +68,8 @@ func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string
 				logger.Errorw("could not unpublish audio track", err)
 			}
 		}
+		// ensure that OnUnbind is called as it may not be in case of read failure
+		output.OnUnbind()
 	}
 	track.OnBind(func() {
 		if err := track.StartWrite(output, onComplete); err != nil {
@@ -95,21 +97,24 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 	var pub *lksdk.LocalTrackPublication
 	var err error
 	var activeLayerCount int32
-	onComplete := func() {
-		logger.Debugw("video track layer write complete")
-		if pub != nil {
-			if atomic.AddInt32(&activeLayerCount, -1) == 0 {
-				logger.Debugw("unpublishing video track")
-				if err := s.room.LocalParticipant.UnpublishTrack(pub.SID()); err != nil {
-					logger.Errorw("could not unpublish video track", err)
-				}
-			}
-		}
-	}
 
 	tracks := make([]*lksdk.LocalSampleTrack, 0)
 	for i, layer := range layers {
 		output := outputs[i]
+		onComplete := func() {
+			logger.Debugw("video track layer write complete", "layer", layer.Quality.String())
+			if pub != nil {
+				if atomic.AddInt32(&activeLayerCount, -1) == 0 {
+					logger.Debugw("unpublishing video track")
+					if err := s.room.LocalParticipant.UnpublishTrack(pub.SID()); err != nil {
+						logger.Errorw("could not unpublish video track", err)
+					}
+				}
+			}
+			// ensure that OnUnbind is called as it may not be in case of read failure
+			output.OnUnbind()
+		}
+
 		onRTCP := func(pkt rtcp.Packet) {
 			switch pkt.(type) {
 			case *rtcp.PictureLossIndication:

@@ -2,9 +2,11 @@ package errors
 
 import (
 	"errors"
+	"io"
+
+	"github.com/tinyzimmer/go-gst/gst"
 
 	"github.com/livekit/psrpc"
-	"github.com/tinyzimmer/go-gst/gst"
 )
 
 var (
@@ -49,4 +51,15 @@ func ErrHttpRelayFailure(statusCode int) psrpc.Error {
 	// Any failure in the relay between the handler and the service is treated as internal
 
 	return psrpc.NewErrorf(psrpc.Internal, "HTTP request failed with code %d", statusCode)
+}
+
+func ErrorToGstFlowReturn(err error) gst.FlowReturn {
+	switch errors.Unwrap(err) {
+	case nil:
+		return gst.FlowOK
+	case io.EOF:
+		return gst.FlowEOS
+	default:
+		return gst.FlowError
+	}
 }

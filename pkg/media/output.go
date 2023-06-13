@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/frostbyte73/core"
 	"github.com/pion/webrtc/v3/pkg/media"
 	"github.com/pion/webrtc/v3/pkg/media/h264reader"
 	"github.com/tinyzimmer/go-gst/gst"
@@ -21,13 +22,15 @@ const (
 // Output manages GStreamer elements that converts & encodes video to the specification that's
 // suitable for WebRTC
 type Output struct {
-	bin *gst.Bin
+	bin    *gst.Bin
+	logger logger.Logger
 
 	elements []*gst.Element
 	enc      *gst.Element
 	sink     *app.Sink
 
 	samples chan *media.Sample
+	fuse    core.Fuse
 }
 
 // FIXME Use generics instead?
@@ -48,6 +51,8 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 	if err != nil {
 		return nil, err
 	}
+
+	e.logger = logger.GetLogger().WithValues("kind", "video", "layer", layer.Quality.String())
 
 	videoScale, err := gst.NewElement("videoscale")
 	if err != nil {
@@ -141,6 +146,8 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions) (*AudioOutput,
 	if err != nil {
 		return nil, err
 	}
+
+	e.logger = logger.GetLogger().WithValues("kind", "audio")
 
 	audioConvert, err := gst.NewElement("audioconvert")
 	if err != nil {
@@ -260,6 +267,7 @@ func newOutput() (*Output, error) {
 	e := &Output{
 		sink:    sink,
 		samples: make(chan *media.Sample, 100),
+		fuse:    core.NewFuse(),
 	}
 
 	return e, nil
@@ -294,21 +302,28 @@ func (e *Output) ForceKeyFrame() error {
 }
 
 func (e *Output) handleEOS(_ *app.Sink) {
-	close(e.samples)
+	e.logger.Infow("app sink EOS")
+
+	e.fuse.Break()
 }
 
-func (e *Output) writeSample(sample *media.Sample) {
+func (e *Output) writeSample(sample *media.Sample) error {
 	select {
 	case e.samples <- sample:
-		// continue
-	default:
-		logger.Warnw("sample channel full", nil)
-		e.samples <- sample
+		return nil
+	case <-e.fuse.Watch():
+		return io.EOF
 	}
 }
 
 func (e *Output) NextSample() (media.Sample, error) {
-	sample := <-e.samples
+	var sample *media.Sample
+
+	select {
+	case sample = <-e.samples:
+	case <-e.fuse.Watch():
+	}
+
 	if sample == nil {
 		return media.Sample{}, io.EOF
 	}
@@ -317,10 +332,16 @@ func (e *Output) NextSample() (media.Sample, error) {
 }
 
 func (e *Output) OnBind() error {
+	e.logger.Infow("sample provider bound")
+
 	return nil
 }
 
 func (e *Output) OnUnbind() error {
+	e.logger.Infow("sample provider unbound")
+
+	e.fuse.Break()
+
 	return nil
 }
 
@@ -339,6 +360,7 @@ func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 
 	duration := buffer.Duration()
 
+	var err error
 	switch e.codec {
 	case livekit.VideoCodec_H264_BASELINE:
 		data := buffer.Bytes()
@@ -376,20 +398,20 @@ func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 				zeroes = 0
 			}
 		}
-		e.writeSample(&media.Sample{
+		err = e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
 			Duration: duration,
 		})
 
 	case livekit.VideoCodec_VP8:
 		// untested
-		e.writeSample(&media.Sample{
+		err = e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
 			Duration: duration,
 		})
 	}
 
-	return gst.FlowOK
+	return errors.ErrorToGstFlowReturn(err)
 }
 
 func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
@@ -407,13 +429,15 @@ func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 
 	duration := buffer.Duration()
 
+	var err error
+
 	switch e.codec {
 	case livekit.AudioCodec_OPUS:
-		e.writeSample(&media.Sample{
+		err = e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
 			Duration: duration,
 		})
 	}
 
-	return gst.FlowOK
+	return errors.ErrorToGstFlowReturn(err)
 }

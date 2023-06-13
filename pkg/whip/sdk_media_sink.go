@@ -81,10 +81,16 @@ func (sp *SDKMediaSink) NextSample() (media.Sample, error) {
 }
 
 func (sp *SDKMediaSink) OnBind() error {
+	sp.logger.Infow("media sink bound")
+
 	return nil
 }
 
 func (sp *SDKMediaSink) OnUnbind() error {
+	sp.logger.Infow("media sink unbound")
+
+	sp.Close()
+
 	return nil
 }
 

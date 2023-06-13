@@ -89,6 +89,12 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPs
 							Height:  720,
 							Bitrate: 3000000,
 						},
+						{
+							Quality: livekit.VideoQuality_LOW,
+							Width:   640,
+							Height:  360,
+							Bitrate: 1000000,
+						},
 					},
 				},
 			},
