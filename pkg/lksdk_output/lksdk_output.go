@@ -102,7 +102,7 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 	for i, layer := range layers {
 		output := outputs[i]
 		onComplete := func() {
-			logger.Debugw("video track layer write complete")
+			logger.Debugw("video track layer write complete", "layer", layer.Quality.String())
 			if pub != nil {
 				if atomic.AddInt32(&activeLayerCount, -1) == 0 {
 					logger.Debugw("unpublishing video track")

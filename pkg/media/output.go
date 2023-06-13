@@ -311,27 +311,9 @@ func (e *Output) writeSample(sample *media.Sample) error {
 	select {
 	case e.samples <- sample:
 		return nil
-	default:
-		e.logger.Warnw("sample channel full", nil)
-		select {
-		case e.samples <- sample:
-			return nil
-		case <-e.fuse.Watch():
-			return io.EOF
-		}
+	case <-e.fuse.Watch():
+		return io.EOF
 	}
-}
-
-var cnt int
-
-func (e *VideoOutput) NextSample() (media.Sample, error) {
-	cnt++
-	if cnt == 200 {
-		e.logger.Infow("FAKE ERROR")
-		return media.Sample{}, io.EOF
-	}
-
-	return e.Output.NextSample()
 }
 
 func (e *Output) NextSample() (media.Sample, error) {
