@@ -34,6 +34,8 @@ func (rs *RelayMediaSink) SetWriter(w io.WriteCloser) error {
 	return rs.mediaBuffer.SetWriter(w)
 }
 
-func (rs *RelayMediaSink) Close() {
+func (rs *RelayMediaSink) Close() error {
 	rs.mediaBuffer.Close()
+
+	return nil
 }

@@ -8,10 +8,10 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
-	github.com/livekit/mediatransportutil v0.0.0-20230517210015-117bec6a19a8
+	github.com/livekit/mediatransportutil v0.0.0-20230612070454-d5299b956135
 	github.com/livekit/protocol v1.5.8-0.20230614173826-89359963fc24
 	github.com/livekit/psrpc v0.3.1
-	github.com/livekit/server-sdk-go v1.0.11-0.20230504163637-22d8afafa6b0
+	github.com/livekit/server-sdk-go v1.0.12-0.20230614223322-5fdaa0386d4a
 	github.com/pion/interceptor v0.1.17
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/rtp v1.7.13
@@ -51,7 +51,7 @@ require (
 	github.com/klauspost/compress v1.16.5 // indirect
 	github.com/lithammer/shortuuid/v4 v4.0.0 // indirect
 	github.com/mackerelio/go-osstat v0.2.4 // indirect
-	github.com/magefile/mage v1.14.0 // indirect
+	github.com/magefile/mage v1.15.0 // indirect
 	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/mitchellh/mapstructure v1.4.1 // indirect

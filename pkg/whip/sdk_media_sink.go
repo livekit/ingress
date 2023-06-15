@@ -106,8 +106,10 @@ func (sp *SDKMediaSink) SetWriter(w io.WriteCloser) error {
 	return psrpc.Unimplemented
 }
 
-func (sp *SDKMediaSink) Close() {
+func (sp *SDKMediaSink) Close() error {
 	sp.fuse.Break()
+
+	return nil
 }
 
 func (sp *SDKMediaSink) ensureTrackInitialized(s *media.Sample) error {
