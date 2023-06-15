@@ -31,14 +31,15 @@ type MediaSink interface {
 }
 
 type whipTrackHandler struct {
-	logger      logger.Logger
-	remoteTrack *webrtc.TrackRemote
-	receiver    *webrtc.RTPReceiver
-	jb          *jitter.Buffer
-	mediaSink   MediaSink
-	sync        *synchronizer.TrackSynchronizer
-	writePLI    func(ssrc webrtc.SSRC)
-	onRTCP      func(packet rtcp.Packet)
+	logger       logger.Logger
+	remoteTrack  *webrtc.TrackRemote
+	receiver     *webrtc.RTPReceiver
+	depacketizer rtp.Depacketizer
+	jb           *jitter.Buffer
+	mediaSink    MediaSink
+	sync         *synchronizer.TrackSynchronizer
+	writePLI     func(ssrc webrtc.SSRC)
+	onRTCP       func(packet rtcp.Packet)
 
 	firstPacket sync.Once
 	fuse        core.Fuse
@@ -69,6 +70,12 @@ func newWHIPTrackHandler(
 		return nil, err
 	}
 	t.jb = jb
+
+	depacketizer, err := t.createDepacketizer()
+	if err != nil {
+		return nil, err
+	}
+	t.depacketizer = depacketizer
 
 	return t, nil
 }
@@ -162,7 +169,12 @@ func (t *whipTrackHandler) processRTPPacket() error {
 				return err
 			}
 
-			_, err = buffer.Write(pkt.Payload)
+			buf, err := t.depacketizer.Unmarshal(pkt.Payload)
+			if err != nil {
+				return err
+			}
+
+			_, err = buffer.Write(buf)
 			if err != nil {
 				return err
 			}
@@ -222,24 +234,45 @@ func (t *whipTrackHandler) startRTCPReceiver() {
 	}()
 }
 
-func (t *whipTrackHandler) createJitterBuffer() (*jitter.Buffer, error) {
+func (t *whipTrackHandler) createDepacketizer() (rtp.Depacketizer, error) {
 	var depacketizer rtp.Depacketizer
-	var maxLatency time.Duration
-	options := []jitter.Option{jitter.WithLogger(t.logger)}
 
 	switch strings.ToLower(t.remoteTrack.Codec().MimeType) {
 	case strings.ToLower(webrtc.MimeTypeVP8):
 		depacketizer = &codecs.VP8Packet{}
+
+	case strings.ToLower(webrtc.MimeTypeH264):
+		depacketizer = &codecs.H264Packet{}
+
+	case strings.ToLower(webrtc.MimeTypeOpus):
+		depacketizer = &codecs.OpusPacket{}
+
+	default:
+		return nil, errors.ErrUnsupportedDecodeFormat
+	}
+
+	return depacketizer, nil
+}
+
+func (t *whipTrackHandler) createJitterBuffer() (*jitter.Buffer, error) {
+	var maxLatency time.Duration
+	options := []jitter.Option{jitter.WithLogger(t.logger)}
+
+	depacketizer, err := t.createDepacketizer()
+	if err != nil {
+		return nil, err
+	}
+
+	switch strings.ToLower(t.remoteTrack.Codec().MimeType) {
+	case strings.ToLower(webrtc.MimeTypeVP8):
 		maxLatency = maxVideoLatency
 		options = append(options, jitter.WithPacketDroppedHandler(func() { t.writePLI(t.remoteTrack.SSRC()) }))
 
 	case strings.ToLower(webrtc.MimeTypeH264):
-		depacketizer = &codecs.H264Packet{}
 		maxLatency = maxVideoLatency
 		options = append(options, jitter.WithPacketDroppedHandler(func() { t.writePLI(t.remoteTrack.SSRC()) }))
 
 	case strings.ToLower(webrtc.MimeTypeOpus):
-		depacketizer = &codecs.OpusPacket{}
 		maxLatency = maxAudioLatency
 		// No PLI for audio
 
