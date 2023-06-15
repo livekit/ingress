@@ -26,7 +26,7 @@ const (
 
 type MediaSink interface {
 	PushSample(s *media.Sample, ts time.Duration) error
-	Close()
+	Close() error
 }
 
 type whipTrackHandler struct {

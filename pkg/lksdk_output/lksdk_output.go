@@ -68,8 +68,7 @@ func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string
 				logger.Errorw("could not unpublish audio track", err)
 			}
 		}
-		// ensure that OnUnbind is called as it may not be in case of read failure
-		output.OnUnbind()
+		output.Close()
 	}
 	track.OnBind(func() {
 		if err := track.StartWrite(output, onComplete); err != nil {
@@ -111,8 +110,7 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 					}
 				}
 			}
-			// ensure that OnUnbind is called as it may not be in case of read failure
-			output.OnUnbind()
+			output.Close()
 		}
 
 		onRTCP := func(pkt rtcp.Packet) {
