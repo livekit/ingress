@@ -9,13 +9,13 @@ require (
 	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/mediatransportutil v0.0.0-20230517210015-117bec6a19a8
-	github.com/livekit/protocol v1.5.8-0.20230530132912-262f7eca9bee
-	github.com/livekit/psrpc v0.3.1-0.20230518234341-6f6847e10b09
+	github.com/livekit/protocol v1.5.8-0.20230614173826-89359963fc24
+	github.com/livekit/psrpc v0.3.1
 	github.com/livekit/server-sdk-go v1.0.11-0.20230504163637-22d8afafa6b0
-	github.com/pion/interceptor v0.1.16
+	github.com/pion/interceptor v0.1.17
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/rtp v1.7.13
-	github.com/pion/webrtc/v3 v3.2.4
+	github.com/pion/webrtc/v3 v3.2.9
 	github.com/prometheus/client_golang v1.15.1
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.4
@@ -54,7 +54,7 @@ require (
 	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
 	github.com/mitchellh/mapstructure v1.4.1 // indirect
-	github.com/nats-io/nats.go v1.25.0 // indirect
+	github.com/nats-io/nats.go v1.26.0 // indirect
 	github.com/nats-io/nkeys v0.4.4 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pion/datachannel v1.5.5 // indirect
@@ -65,7 +65,7 @@ require (
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pion/sctp v1.8.7 // indirect
 	github.com/pion/sdp/v3 v3.0.6 // indirect
-	github.com/pion/srtp/v2 v2.0.14 // indirect
+	github.com/pion/srtp/v2 v2.0.15 // indirect
 	github.com/pion/stun v0.6.0 // indirect
 	github.com/pion/transport/v2 v2.2.1 // indirect
 	github.com/pion/turn/v2 v2.1.0 // indirect
@@ -74,7 +74,7 @@ require (
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.42.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
-	github.com/redis/go-redis/v9 v9.0.4 // indirect
+	github.com/redis/go-redis/v9 v9.0.5 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/thoas/go-funk v0.9.3 // indirect
 	github.com/twitchtv/twirp v8.1.3+incompatible // indirect
@@ -83,9 +83,9 @@ require (
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.9.0 // indirect
-	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc // indirect
+	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1 // indirect
 	golang.org/x/net v0.10.0 // indirect
-	golang.org/x/sync v0.1.0 // indirect
+	golang.org/x/sync v0.2.0 // indirect
 	golang.org/x/sys v0.8.0 // indirect
 	golang.org/x/text v0.9.0 // indirect
 	google.golang.org/genproto v0.0.0-20230403163135-c38d8f061ccd // indirect
