@@ -1,6 +1,7 @@
 package whip
 
 import (
+	"bytes"
 	"io"
 	"net"
 	"strings"
@@ -10,7 +11,7 @@ import (
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/server-sdk-go/pkg/samplebuilder"
+	"github.com/livekit/server-sdk-go/pkg/jitter"
 	"github.com/livekit/server-sdk-go/pkg/synchronizer"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
@@ -20,8 +21,8 @@ import (
 )
 
 const (
-	maxVideoLate = 300 // nearly 2s for fhd video
-	maxAudioLate = 25  // 4s for audio
+	maxVideoLatency = 600 * time.Millisecond
+	maxAudioLatency = time.Second
 )
 
 type MediaSink interface {
@@ -33,7 +34,7 @@ type whipTrackHandler struct {
 	logger      logger.Logger
 	remoteTrack *webrtc.TrackRemote
 	receiver    *webrtc.RTPReceiver
-	sb          *samplebuilder.SampleBuilder
+	jb          *jitter.Buffer
 	mediaSink   MediaSink
 	sync        *synchronizer.TrackSynchronizer
 	writePLI    func(ssrc webrtc.SSRC)
@@ -63,11 +64,11 @@ func newWHIPTrackHandler(
 		fuse:        core.NewFuse(),
 	}
 
-	sb, err := t.createSampleBuilder()
+	jb, err := t.createJitterBuffer()
 	if err != nil {
 		return nil, err
 	}
-	t.sb = sb
+	t.jb = jb
 
 	return t, nil
 }
@@ -142,19 +143,38 @@ func (t *whipTrackHandler) processRTPPacket() error {
 
 	t.firstPacket.Do(func() {
 		t.logger.Debugw("first packet received")
-		t.sync.FirstPacketForTrack(pkt)
+		t.sync.Initialize(pkt)
 	})
 
-	t.sb.Push(pkt)
+	t.jb.Push(pkt)
+
 	for {
-		s, rtpTs := t.sb.PopWithTimestamp()
-		if s == nil {
+		pkts := t.jb.Pop(false)
+		if len(pkts) == 0 {
 			break
 		}
 
-		ts, err := t.sync.GetPTS(rtpTs)
-		if err != nil {
-			return err
+		var ts time.Duration
+		var buffer bytes.Buffer // TODO reuse the same buffer across calls, after resetting it if buffer allocation is a performane bottleneck
+		for _, pkt := range pkts {
+			ts, err = t.sync.GetPTS(pkt)
+			if err != nil {
+				return err
+			}
+
+			_, err = buffer.Write(pkt.Payload)
+			if err != nil {
+				return err
+			}
+		}
+
+		// This returns the average duration, not the actual duration of the specific sample
+		// SampleBuilder is using the duration of the previous sample, which is inaccurate as well
+		sampleDuration := t.sync.GetFrameDuration()
+
+		s := &media.Sample{
+			Data:     buffer.Bytes(),
+			Duration: sampleDuration,
 		}
 
 		err = t.mediaSink.PushSample(s, ts)
@@ -202,35 +222,34 @@ func (t *whipTrackHandler) startRTCPReceiver() {
 	}()
 }
 
-func (t *whipTrackHandler) createSampleBuilder() (*samplebuilder.SampleBuilder, error) {
+func (t *whipTrackHandler) createJitterBuffer() (*jitter.Buffer, error) {
 	var depacketizer rtp.Depacketizer
-	var maxLate uint16
-	var writePLI func()
+	var maxLatency time.Duration
+	options := []jitter.Option{jitter.WithLogger(t.logger)}
 
 	switch strings.ToLower(t.remoteTrack.Codec().MimeType) {
 	case strings.ToLower(webrtc.MimeTypeVP8):
 		depacketizer = &codecs.VP8Packet{}
-		maxLate = maxVideoLate
-		writePLI = func() { t.writePLI(t.remoteTrack.SSRC()) }
+		maxLatency = maxVideoLatency
+		options = append(options, jitter.WithPacketDroppedHandler(func() { t.writePLI(t.remoteTrack.SSRC()) }))
 
 	case strings.ToLower(webrtc.MimeTypeH264):
 		depacketizer = &codecs.H264Packet{}
-		maxLate = maxVideoLate
-		writePLI = func() { t.writePLI(t.remoteTrack.SSRC()) }
+		maxLatency = maxVideoLatency
+		options = append(options, jitter.WithPacketDroppedHandler(func() { t.writePLI(t.remoteTrack.SSRC()) }))
 
 	case strings.ToLower(webrtc.MimeTypeOpus):
 		depacketizer = &codecs.OpusPacket{}
-		maxLate = maxAudioLate
+		maxLatency = maxAudioLatency
 		// No PLI for audio
 
 	default:
 		return nil, errors.ErrUnsupportedDecodeFormat
 	}
 
-	sb := samplebuilder.New(
-		maxLate, depacketizer, t.remoteTrack.Codec().ClockRate,
-		samplebuilder.WithPacketDroppedHandler(writePLI),
-	)
+	clockRate := t.remoteTrack.Codec().ClockRate
 
-	return sb, nil
+	jb := jitter.NewBuffer(depacketizer, clockRate, maxLatency, options...)
+
+	return jb, nil
 }
