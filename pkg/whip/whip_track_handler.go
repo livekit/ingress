@@ -169,6 +169,11 @@ func (t *whipTrackHandler) processRTPPacket() error {
 				return err
 			}
 
+			if len(pkt.Payload) <= 2 {
+				// Padding
+				continue
+			}
+
 			buf, err := t.depacketizer.Unmarshal(pkt.Payload)
 			if err != nil {
 				return err
