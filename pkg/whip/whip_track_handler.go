@@ -165,7 +165,10 @@ func (t *whipTrackHandler) processRTPPacket() error {
 		var buffer bytes.Buffer // TODO reuse the same buffer across calls, after resetting it if buffer allocation is a performane bottleneck
 		for _, pkt := range pkts {
 			ts, err = t.sync.GetPTS(pkt)
-			if err != nil {
+			switch err {
+			case nil, synchronizer.ErrBackwardsPTS:
+				err = nil
+			default:
 				return err
 			}
 
