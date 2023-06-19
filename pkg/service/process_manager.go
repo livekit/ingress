@@ -13,7 +13,6 @@ import (
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/config"
-	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
@@ -27,18 +26,18 @@ type process struct {
 }
 
 type ProcessManager struct {
-	conf    *config.Config
-	monitor *stats.Monitor
+	conf *config.Config
+	sm   *SessionManager
 
 	mu             sync.RWMutex
 	activeHandlers map[string]*process
 	onFatal        func(info *livekit.IngressInfo, err error)
 }
 
-func NewProcessManager(conf *config.Config, monitor *stats.Monitor) *ProcessManager {
+func NewProcessManager(conf *config.Config, sm *SessionManager) *ProcessManager {
 	return &ProcessManager{
 		conf:           conf,
-		monitor:        monitor,
+		sm:             sm,
 		activeHandlers: make(map[string]*process),
 	}
 }
@@ -100,7 +99,7 @@ func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngress
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	s.monitor.IngressStarted(resp.Info)
+	s.sm.IngressStarted(resp.Info.IngressId, SessionType_HandlerProcess)
 	h := &process{
 		info:   resp.Info,
 		cmd:    cmd,
@@ -123,30 +122,12 @@ func (s *ProcessManager) awaitCleanup(h *process) {
 	}
 
 	h.closed.Break()
-	s.monitor.IngressEnded(h.info)
+	s.sm.IngressEnded(h.info.IngressId)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	delete(s.activeHandlers, h.info.IngressId)
-}
-
-func (s *ProcessManager) isIdle() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	return len(s.activeHandlers) == 0
-}
-
-func (s *ProcessManager) listIngress() []string {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	ingressIDs := make([]string, 0, len(s.activeHandlers))
-	for ingressID := range s.activeHandlers {
-		ingressIDs = append(ingressIDs, ingressID)
-	}
-	return ingressIDs
 }
 
 func (s *ProcessManager) killAll() {

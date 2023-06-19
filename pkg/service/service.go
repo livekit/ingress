@@ -42,6 +42,7 @@ type Service struct {
 	conf    *config.Config
 	monitor *stats.Monitor
 	manager *ProcessManager
+	sm      *SessionManager
 	whipSrv *whip.WHIPServer
 
 	psrpcClient rpc.IOInfoClient
@@ -55,11 +56,13 @@ type Service struct {
 
 func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, whipSrv *whip.WHIPServer) *Service {
 	monitor := stats.NewMonitor()
+	sm := NewSessionManager(monitor)
 
 	s := &Service{
 		conf:            conf,
 		monitor:         monitor,
-		manager:         NewProcessManager(conf, monitor),
+		sm:              sm,
+		manager:         NewProcessManager(conf, sm),
 		whipSrv:         whipSrv,
 		psrpcClient:     psrpcClient,
 		bus:             bus,
@@ -176,7 +179,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 
 			s.sendUpdate(ctx, p.IngressInfo, nil)
 
-			s.monitor.IngressStarted(p.IngressInfo)
+			s.sm.IngressStarted(p.IngressInfo.IngressId, SessionType_Service)
 		} else {
 			extraParams.MimeTypes = mimeTypes
 
@@ -192,7 +195,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
 
 			s.sendUpdate(ctx, p.IngressInfo, err)
-			s.monitor.IngressEnded(p.IngressInfo)
+			s.sm.IngressEnded(p.IngressInfo.IngressId)
 			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
 		}
 	}
@@ -254,9 +257,15 @@ func (s *Service) Run() error {
 		select {
 		case <-s.shutdown.Watch():
 			logger.Infow("shutting down")
-			for !s.manager.isIdle() {
+			for !s.sm.IsIdle() {
+				logger.Debugw("instance waiting for sessions to finish", "sessions_count", len(s.ListIngress()))
 				time.Sleep(shutdownTimer)
 			}
+
+			if s.monitor != nil {
+				s.monitor.Stop()
+			}
+
 			return nil
 		case req := <-s.publishRequests:
 			go func() {
@@ -278,15 +287,6 @@ func (s *Service) Run() error {
 			}()
 		}
 	}
-}
-
-func (s *Service) isIdle() bool {
-	whipIdle := true
-	if s.whipSrv != nil {
-		whipIdle = s.whipSrv.IsIdle()
-	}
-
-	return s.manager.isIdle() && whipIdle
 }
 
 func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {
@@ -314,11 +314,7 @@ func (s *Service) CanAccept() bool {
 }
 
 func (s *Service) Stop(kill bool) {
-	s.shutdown.Once(func() {
-		if s.monitor != nil {
-			s.monitor.Stop()
-		}
-	})
+	s.shutdown.Break()
 
 	if kill {
 		s.manager.killAll()
@@ -326,7 +322,7 @@ func (s *Service) Stop(kill bool) {
 }
 
 func (s *Service) ListIngress() []string {
-	return s.manager.listIngress()
+	return s.sm.ListIngress()
 }
 
 func (s *Service) ListActiveIngress(ctx context.Context, _ *rpc.ListActiveIngressRequest) (*rpc.ListActiveIngressResponse, error) {
