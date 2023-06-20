@@ -2,9 +2,12 @@ package media
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/frostbyte73/core"
+	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-glib/glib"
 	"github.com/tinyzimmer/go-gst/gst"
 
@@ -180,6 +183,9 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 		p.loop.Quit()
 		return false
 
+	case gst.MessageStreamCollection:
+		p.handleStreamCollectionMessage(msg)
+
 	case gst.MessageTag, gst.MessageStateChanged:
 		// ignore
 
@@ -188,6 +194,32 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 	}
 
 	return true
+}
+
+func (p *Pipeline) handleStreamCollectionMessage(msg *gst.Message) {
+	collection := msg.ParseStreamCollection()
+	if collection == nil {
+		return
+	}
+
+	for i := uint(0); i < collection.GetSize(); i++ {
+		stream := collection.GetStreamAt(i)
+
+		caps := stream.Caps()
+		if caps == nil || caps.GetSize() == 0 {
+			continue
+		}
+
+		gstStruct := stream.Caps().GetStructureAt(0)
+
+		kind, mime := getMimeTypeAndKindFromGstMimeType(gstStruct)
+		fmt.Println("STREAM", kind, mime)
+
+	}
+
+	if p.onStatusUpdate != nil {
+		p.onStatusUpdate(context.Background(), p.GetInfo())
+	}
 }
 
 func (p *Pipeline) SendEOS(ctx context.Context) {
@@ -202,4 +234,39 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 		logger.Debugw("sending EOS to pipeline")
 		p.pipeline.SendEvent(gst.NewEOSEvent())
 	})
+}
+
+func getMimeTypeAndKindFromGstMimeType(gstStruct *gst.Structure) (types.StreamKind, string) {
+	kind := types.Unknown
+	mime := ""
+
+	gstMimeType := gstStruct.Name()
+
+	switch {
+	case strings.HasPrefix(gstMimeType, "audio"):
+		kind = types.Audio
+	case strings.HasPrefix(gstMimeType, "video"):
+		kind = types.Video
+	}
+
+	switch strings.ToLower(gstMimeType) {
+	case "video/x-h264":
+		mime = webrtc.MimeTypeH264
+	case "audio/mpeg":
+		mime = gstMimeType
+		var version int
+
+		val, err := gstStruct.GetValue("mpegversion")
+		if err == nil {
+			version, _ = val.(int)
+		}
+
+		if version == 4 {
+			mime = "audio/aac"
+		}
+	default:
+		mime = gstMimeType
+	}
+
+	return kind, mime
 }
