@@ -137,7 +137,6 @@ func (sp *SDKMediaSink) ensureTrackInitialized(s *media.Sample) error {
 			return err
 		}
 
-		// TODO extract proper dimensions from stream
 		layers := []*livekit.VideoLayer{
 			&livekit.VideoLayer{Width: uint32(w), Height: uint32(h), Quality: livekit.VideoQuality_HIGH},
 		}

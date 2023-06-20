@@ -2,7 +2,6 @@ package media
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -212,9 +211,16 @@ func (p *Pipeline) handleStreamCollectionMessage(msg *gst.Message) {
 
 		gstStruct := stream.Caps().GetStructureAt(0)
 
-		kind, mime := getMimeTypeAndKindFromGstMimeType(gstStruct)
-		fmt.Println("STREAM", kind, mime)
+		kind := getKindFromGstMimeType(gstStruct)
+		switch kind {
+		case types.Audio:
+			audioState := getAudioState(gstStruct)
 
+			p.IngressInfo.State.Audio = audioState
+		case types.Video:
+			videoState := getVideoState(gstStruct)
+			p.IngressInfo.State.Video = videoState
+		}
 	}
 
 	if p.onStatusUpdate != nil {
@@ -236,22 +242,24 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 	})
 }
 
-func getMimeTypeAndKindFromGstMimeType(gstStruct *gst.Structure) (types.StreamKind, string) {
-	kind := types.Unknown
-	mime := ""
-
+func getKindFromGstMimeType(gstStruct *gst.Structure) types.StreamKind {
 	gstMimeType := gstStruct.Name()
 
 	switch {
 	case strings.HasPrefix(gstMimeType, "audio"):
-		kind = types.Audio
+		return types.Audio
 	case strings.HasPrefix(gstMimeType, "video"):
-		kind = types.Video
+		return types.Video
+	default:
+		return types.Unknown
 	}
+}
+
+func getAudioState(gstStruct *gst.Structure) *livekit.InputAudioState {
+	mime := ""
+	gstMimeType := gstStruct.Name()
 
 	switch strings.ToLower(gstMimeType) {
-	case "video/x-h264":
-		mime = webrtc.MimeTypeH264
 	case "audio/mpeg":
 		mime = gstMimeType
 		var version int
@@ -268,5 +276,61 @@ func getMimeTypeAndKindFromGstMimeType(gstStruct *gst.Structure) (types.StreamKi
 		mime = gstMimeType
 	}
 
-	return kind, mime
+	audioState := &livekit.InputAudioState{
+		MimeType: mime,
+	}
+
+	val, err := gstStruct.GetValue("channels")
+	if err == nil {
+		channels, _ := val.(int)
+		audioState.Channels = uint32(channels)
+	}
+
+	val, err = gstStruct.GetValue("rate")
+	if err == nil {
+		rate, _ := val.(int)
+		audioState.SampleRate = uint32(rate)
+	}
+
+	return audioState
+}
+
+func getVideoState(gstStruct *gst.Structure) *livekit.InputVideoState {
+	mime := ""
+
+	gstMimeType := gstStruct.Name()
+
+	switch strings.ToLower(gstMimeType) {
+	case "video/x-h264":
+		mime = webrtc.MimeTypeH264
+	default:
+		mime = gstMimeType
+	}
+
+	videoState := &livekit.InputVideoState{
+		MimeType: mime,
+	}
+
+	val, err := gstStruct.GetValue("width")
+	if err == nil {
+		width, _ := val.(int)
+		videoState.Width = uint32(width)
+	}
+
+	val, err = gstStruct.GetValue("height")
+	if err == nil {
+		height, _ := val.(int)
+		videoState.Height = uint32(height)
+	}
+
+	val, err = gstStruct.GetValue("framerate")
+	if err == nil {
+		fpsFrac, _ := val.(*gst.FractionValue)
+
+		if fpsFrac.Denom() != 0 {
+			videoState.Framerate = float64(fpsFrac.Num()) / float64(fpsFrac.Denom())
+		}
+	}
+
+	return videoState
 }
