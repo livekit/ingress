@@ -63,10 +63,10 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer string) (string, error) {
 	var err error
 
-	h.logger = logger.GetLogger().WithValues("ingressID", p.Info.IngressId, "resourceID", p.ExtraParams.(*params.WhipExtraParams).ResourceId)
+	h.logger = logger.GetLogger().WithValues("ingressID", p.IngressId, "resourceID", p.ExtraParams.(*params.WhipExtraParams).ResourceId)
 	h.params = p
 
-	if p.Info.BypassTranscoding {
+	if p.BypassTranscoding {
 		h.sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, p)
 		if err != nil {
 			return "", err

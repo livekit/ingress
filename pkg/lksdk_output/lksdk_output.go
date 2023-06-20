@@ -50,8 +50,8 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 
 func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string, disableDTX bool, stereo bool) error {
 	opts := &lksdk.TrackPublicationOptions{
-		Name:   s.params.Info.Audio.Name,
-		Source: s.params.Info.Video.Source,
+		Name:   s.params.Audio.Name,
+		Source: s.params.Video.Source,
 	}
 
 	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: mimeType})
@@ -87,8 +87,8 @@ func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string
 
 func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*livekit.VideoLayer, mimeType string) error {
 	opts := &lksdk.TrackPublicationOptions{
-		Name:        s.params.Info.Video.Name,
-		Source:      s.params.Info.Video.Source,
+		Name:        s.params.Video.Name,
+		Source:      s.params.Video.Source,
 		VideoWidth:  int(layers[0].Width),
 		VideoHeight: int(layers[0].Height),
 	}
@@ -125,7 +125,7 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 		track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{
 			MimeType: mimeType,
 		},
-			lksdk.WithRTCPHandler(onRTCP), lksdk.WithSimulcast(s.params.Info.IngressId, layer))
+			lksdk.WithRTCPHandler(onRTCP), lksdk.WithSimulcast(s.params.IngressId, layer))
 		if err != nil {
 			logger.Errorw("could not create video track", err)
 			return err

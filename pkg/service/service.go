@@ -147,7 +147,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 	}
 
 	var rpcServer rpc.IngressHandlerServer
-	if p.Info.BypassTranscoding {
+	if p.BypassTranscoding {
 		// RPC is handled in the handler process when transcoding
 
 		rpcServer, err = rpc.NewIngressHandlerServer(s.conf.NodeID, ihs, s.bus)
@@ -155,7 +155,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			return nil, nil, nil, err
 		}
 
-		err = RegisterIngressRpcHandlers(rpcServer, p.Info, p.ExtraParams)
+		err = RegisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -170,18 +170,18 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
 			p.SendStateUpdate(ctx)
 
-			if p.Info.BypassTranscoding {
-				DeregisterIngressRpcHandlers(rpcServer, p.Info, p.ExtraParams)
+			if p.BypassTranscoding {
+				DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
 			}
 			span.RecordError(err)
 			return
 		}
 
-		if p.Info.BypassTranscoding {
+		if p.BypassTranscoding {
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
 			p.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(p.Info.IngressId, SessionType_Service)
+			s.sm.IngressStarted(p.IngressId, SessionType_Service)
 		} else {
 			extraParams.MimeTypes = mimeTypes
 
@@ -189,7 +189,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		}
 	}
 
-	if p.Info.BypassTranscoding {
+	if p.BypassTranscoding {
 		ended = func(err error) {
 			ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ended")
 			defer span.End()
@@ -202,8 +202,8 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			}
 
 			p.SendStateUpdate(ctx)
-			s.sm.IngressEnded(p.Info.IngressId)
-			DeregisterIngressRpcHandlers(rpcServer, p.Info, p.ExtraParams)
+			s.sm.IngressEnded(p.IngressId)
+			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
 		}
 	}
 

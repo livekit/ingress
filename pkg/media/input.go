@@ -78,7 +78,7 @@ func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 }
 
 func CreateSource(ctx context.Context, p *params.Params) (Source, error) {
-	switch p.Info.InputType {
+	switch p.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
 		return rtmp.NewRTMPRelaySource(ctx, p)
 	case livekit.IngressInput_WHIP_INPUT:

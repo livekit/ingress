@@ -20,7 +20,7 @@ type Params struct {
 	stateLock   sync.Mutex
 	psrpcClient rpc.IOInfoClient
 
-	Info *livekit.IngressInfo
+	*livekit.IngressInfo
 	*config.Config
 
 	AudioEncodingOptions *livekit.IngressAudioEncodingOptions
@@ -102,7 +102,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 
 	p := &Params{
 		psrpcClient:          psrpcClient,
-		Info:                 infoCopy,
+		IngressInfo:          infoCopy,
 		Config:               conf,
 		AudioEncodingOptions: audioEncodingOptions,
 		VideoEncodingOptions: videoEncodingOptions,
@@ -214,36 +214,36 @@ func (p *Params) CopyInfo() *livekit.IngressInfo {
 	p.stateLock.Lock()
 	defer p.stateLock.Unlock()
 
-	return proto.Clone(p.Info).(*livekit.IngressInfo)
+	return proto.Clone(p.IngressInfo).(*livekit.IngressInfo)
 }
 
 func (p *Params) SetStatus(status livekit.IngressState_Status, errString string) {
 	p.stateLock.Lock()
 	defer p.stateLock.Unlock()
 
-	p.Info.State.Status = status
-	p.Info.State.Error = errString
+	p.State.Status = status
+	p.State.Error = errString
 }
 
 func (p *Params) SetRoomId(roomId string) {
 	p.stateLock.Lock()
 	defer p.stateLock.Unlock()
 
-	p.Info.State.RoomId = roomId
+	p.State.RoomId = roomId
 }
 
 func (p *Params) SetInputAudioState(audioState *livekit.InputAudioState) {
 	p.stateLock.Lock()
 	defer p.stateLock.Unlock()
 
-	p.Info.State.Audio = audioState
+	p.State.Audio = audioState
 }
 
 func (p *Params) SetInputVideoState(videoState *livekit.InputVideoState) {
 	p.stateLock.Lock()
 	defer p.stateLock.Unlock()
 
-	p.Info.State.Video = videoState
+	p.State.Video = videoState
 }
 
 func (p *Params) SendStateUpdate(ctx context.Context) {
