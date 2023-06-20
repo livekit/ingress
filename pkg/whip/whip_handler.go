@@ -323,7 +323,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 func (h *whipHandler) newMediaSink(track *webrtc.TrackRemote) (MediaSink, error) {
 	if h.sdkOutput != nil {
 		// pasthrough
-		return NewSDKMediaSink(h.logger, h.sdkOutput, track, func() {
+		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, func() {
 			h.writePLI(track.SSRC())
 		}), nil
 	} else {
