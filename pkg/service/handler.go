@@ -45,9 +45,10 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	h.pipeline = p
 
 	// start ingress
-	result := make(chan *livekit.IngressInfo, 1)
+	result := make(chan struct{}, 1)
 	go func() {
-		result <- p.Run(ctx)
+		p.Run(ctx)
+		result <- struct{}{}
 		h.done.Break()
 	}()
 
@@ -60,9 +61,8 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 			p.SendEOS(ctx)
 			kill = nil
 
-		case res := <-result:
+		case <-result:
 			// ingress finished
-			h.sendUpdate(ctx, res)
 			return
 		}
 	}
@@ -105,7 +105,7 @@ func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, 
 
 	// build/verify params
 	var p *media.Pipeline
-	params, err := params.GetParams(ctx, h.conf, info, wsUrl, token, extraParams)
+	params, err := params.GetParams(ctx, h.rpcClient, h.conf, info, wsUrl, token, extraParams)
 	if err == nil {
 		// create the pipeline
 		p, err = media.New(ctx, h.conf, params)
@@ -122,7 +122,6 @@ func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, 
 		return nil, err
 	}
 
-	p.OnStatusUpdate(h.sendUpdate)
 	return p, nil
 }
 

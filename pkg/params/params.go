@@ -11,11 +11,14 @@ import (
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/rpc"
 	"google.golang.org/protobuf/proto"
 )
 
 type Params struct {
-	stateLock sync.Mutex
+	stateLock   sync.Mutex
+	psrpcClient rpc.IOInfoClient
 
 	Info *livekit.IngressInfo
 	*config.Config
@@ -39,7 +42,7 @@ type WhipExtraParams struct {
 	MimeTypes  map[types.StreamKind]string `json:"mime_types"`
 }
 
-func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressInfo, wsUrl, token string, ep any) (*Params, error) {
+func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token string, ep any) (*Params, error) {
 	var err error
 
 	relayUrl := ""
@@ -98,6 +101,7 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 	}
 
 	p := &Params{
+		psrpcClient:          psrpcClient,
 		Info:                 infoCopy,
 		Config:               conf,
 		AudioEncodingOptions: audioEncodingOptions,
@@ -240,4 +244,16 @@ func (p *Params) SetInputVideoState(videoState *livekit.InputVideoState) {
 	defer p.stateLock.Unlock()
 
 	p.Info.State.Video = videoState
+}
+
+func (p *Params) SendStateUpdate(ctx context.Context) {
+	info := p.CopyInfo()
+
+	_, err := p.psrpcClient.UpdateIngressState(ctx, &rpc.UpdateIngressStateRequest{
+		IngressId: info.IngressId,
+		State:     info.State,
+	})
+	if err != nil {
+		logger.Errorw("failed to send update", err)
+	}
 }

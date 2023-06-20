@@ -32,8 +32,7 @@ type Pipeline struct {
 	sink     *WebRTCSink
 	input    *Input
 
-	onStatusUpdate func(context.Context, *livekit.IngressInfo)
-	closed         core.Fuse
+	closed core.Fuse
 }
 
 func New(ctx context.Context, conf *config.Config, params *params.Params) (*Pipeline, error) {
@@ -88,11 +87,9 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
 		}
 
-		if p.onStatusUpdate != nil {
-			// Is it ok to send this message here? The update handler is not waiting for a response but still doing I/O.
-			// We could send this in a separate goroutine, but this would make races more likely.
-			p.onStatusUpdate(context.Background(), p.CopyInfo())
-		}
+		// Is it ok to send this message here? The update handler is not waiting for a response but still doing I/O.
+		// We could send this in a separate goroutine, but this would make races more likely.
+		p.SendStateUpdate(context.Background())
 	}()
 
 	bin, err := p.sink.AddTrack(kind)
@@ -118,13 +115,13 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 	})
 }
 
-func (p *Pipeline) OnStatusUpdate(f func(context.Context, *livekit.IngressInfo)) {
-	p.onStatusUpdate = f
-}
-
-func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
+func (p *Pipeline) Run(ctx context.Context) {
 	ctx, span := tracer.Start(ctx, "Pipeline.Run")
 	defer span.End()
+
+	defer func() {
+		p.SendStateUpdate(ctx)
+	}()
 
 	// add watch
 	p.loop = glib.NewMainLoop(glib.MainContextDefault(), false)
@@ -135,7 +132,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 		span.RecordError(err)
 		logger.Errorw("failed to set pipeline state", err)
 		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
-		return p.CopyInfo()
+		return
 	}
 
 	err := p.input.Start(ctx)
@@ -143,7 +140,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 		span.RecordError(err)
 		logger.Errorw("failed to start input", err)
 		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
-		return p.CopyInfo()
+		return
 	}
 
 	// run main loop
@@ -159,7 +156,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
 	}
 
-	return p.Params.CopyInfo()
+	return
 }
 
 func (p *Pipeline) messageWatch(msg *gst.Message) bool {
@@ -218,9 +215,7 @@ func (p *Pipeline) handleStreamCollectionMessage(msg *gst.Message) {
 		}
 	}
 
-	if p.onStatusUpdate != nil {
-		p.onStatusUpdate(context.Background(), p.CopyInfo())
-	}
+	p.SendStateUpdate(context.Background())
 }
 
 func (p *Pipeline) SendEOS(ctx context.Context) {
@@ -228,9 +223,7 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 	defer span.End()
 
 	p.closed.Once(func() {
-		if p.onStatusUpdate != nil {
-			p.onStatusUpdate(ctx, p.CopyInfo())
-		}
+		p.SendStateUpdate(ctx)
 
 		logger.Debugw("sending EOS to pipeline")
 		p.pipeline.SendEvent(gst.NewEOSEvent())

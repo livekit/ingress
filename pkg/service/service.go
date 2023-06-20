@@ -141,7 +141,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		wsUrl = pRes.resp.WsUrl
 	}
 
-	p, err = params.GetParams(context.Background(), s.conf, pRes.resp.Info, wsUrl, pRes.resp.Token, extraParams)
+	p, err = params.GetParams(context.Background(), s.psrpcClient, s.conf, pRes.resp.Info, wsUrl, pRes.resp.Token, extraParams)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -166,7 +166,10 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		defer span.End()
 		if err != nil {
 			// Client failed to finalize session start
-			s.sendUpdate(ctx, p.CopyInfo(), err)
+			logger.Warnw("ingress failed", err)
+			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+			p.SendStateUpdate(ctx)
+
 			if p.Info.BypassTranscoding {
 				DeregisterIngressRpcHandlers(rpcServer, p.Info, p.ExtraParams)
 			}
@@ -176,8 +179,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 
 		if p.Info.BypassTranscoding {
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
-
-			s.sendUpdate(ctx, p.CopyInfo(), nil)
+			p.SendStateUpdate(ctx)
 
 			s.sm.IngressStarted(p.Info.IngressId, SessionType_Service)
 		} else {
@@ -192,9 +194,14 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ended")
 			defer span.End()
 
-			p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+			if err == nil {
+				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+			} else {
+				logger.Warnw("ingress failed", err)
+				p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+			}
 
-			s.sendUpdate(ctx, p.CopyInfo(), err)
+			p.SendStateUpdate(ctx)
 			s.sm.IngressEnded(p.Info.IngressId)
 			DeregisterIngressRpcHandlers(rpcServer, p.Info, p.ExtraParams)
 		}
