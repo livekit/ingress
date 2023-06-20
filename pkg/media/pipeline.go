@@ -260,6 +260,8 @@ func getAudioState(gstStruct *gst.Structure) *livekit.InputAudioState {
 		if version == 4 {
 			mime = "audio/aac"
 		}
+	case "audio/x-opus":
+		mime = webrtc.MimeTypeOpus
 	default:
 		mime = gstMimeType
 	}
