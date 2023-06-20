@@ -3,6 +3,7 @@ package params
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/livekit/ingress/pkg/config"
@@ -14,8 +15,10 @@ import (
 )
 
 type Params struct {
+	stateLock sync.Mutex
+
+	Info *livekit.IngressInfo
 	*config.Config
-	*livekit.IngressInfo
 
 	AudioEncodingOptions *livekit.IngressAudioEncodingOptions
 	VideoEncodingOptions *livekit.IngressVideoEncodingOptions
@@ -95,7 +98,7 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 	}
 
 	p := &Params{
-		IngressInfo:          infoCopy,
+		Info:                 infoCopy,
 		Config:               conf,
 		AudioEncodingOptions: audioEncodingOptions,
 		VideoEncodingOptions: videoEncodingOptions,
@@ -203,11 +206,38 @@ func populateVideoEncodingOptionsDefaults(options *livekit.IngressVideoEncodingO
 	return o, nil
 }
 
+func (p *Params) CopyInfo() *livekit.IngressInfo {
+	p.stateLock.Lock()
+	defer p.stateLock.Unlock()
+
+	return proto.Clone(p.Info).(*livekit.IngressInfo)
+}
+
 func (p *Params) SetStatus(status livekit.IngressState_Status, errString string) {
-	p.State.Status = status
-	p.State.Error = errString
+	p.stateLock.Lock()
+	defer p.stateLock.Unlock()
+
+	p.Info.State.Status = status
+	p.Info.State.Error = errString
 }
 
 func (p *Params) SetRoomId(roomId string) {
-	p.State.RoomId = roomId
+	p.stateLock.Lock()
+	defer p.stateLock.Unlock()
+
+	p.Info.State.RoomId = roomId
+}
+
+func (p *Params) SetInputAudioState(audioState *livekit.InputAudioState) {
+	p.stateLock.Lock()
+	defer p.stateLock.Unlock()
+
+	p.Info.State.Audio = audioState
+}
+
+func (p *Params) SetInputVideoState(videoState *livekit.InputVideoState) {
+	p.stateLock.Lock()
+	defer p.stateLock.Unlock()
+
+	p.Info.State.Video = videoState
 }

@@ -91,7 +91,7 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 		if p.onStatusUpdate != nil {
 			// Is it ok to send this message here? The update handler is not waiting for a response but still doing I/O.
 			// We could send this in a separate goroutine, but this would make races more likely.
-			p.onStatusUpdate(context.Background(), p.GetInfo())
+			p.onStatusUpdate(context.Background(), p.CopyInfo())
 		}
 	}()
 
@@ -118,10 +118,6 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 	})
 }
 
-func (p *Pipeline) GetInfo() *livekit.IngressInfo {
-	return p.Params.IngressInfo
-}
-
 func (p *Pipeline) OnStatusUpdate(f func(context.Context, *livekit.IngressInfo)) {
 	p.onStatusUpdate = f
 }
@@ -139,7 +135,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 		span.RecordError(err)
 		logger.Errorw("failed to set pipeline state", err)
 		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
-		return p.GetInfo()
+		return p.CopyInfo()
 	}
 
 	err := p.input.Start(ctx)
@@ -147,7 +143,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 		span.RecordError(err)
 		logger.Errorw("failed to start input", err)
 		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
-		return p.GetInfo()
+		return p.CopyInfo()
 	}
 
 	// run main loop
@@ -163,7 +159,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
 	}
 
-	return p.GetInfo()
+	return p.Params.CopyInfo()
 }
 
 func (p *Pipeline) messageWatch(msg *gst.Message) bool {
@@ -215,16 +211,15 @@ func (p *Pipeline) handleStreamCollectionMessage(msg *gst.Message) {
 		switch kind {
 		case types.Audio:
 			audioState := getAudioState(gstStruct)
-
-			p.IngressInfo.State.Audio = audioState
+			p.SetInputAudioState(audioState)
 		case types.Video:
 			videoState := getVideoState(gstStruct)
-			p.IngressInfo.State.Video = videoState
+			p.SetInputVideoState(videoState)
 		}
 	}
 
 	if p.onStatusUpdate != nil {
-		p.onStatusUpdate(context.Background(), p.GetInfo())
+		p.onStatusUpdate(context.Background(), p.CopyInfo())
 	}
 }
 
@@ -234,7 +229,7 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 
 	p.closed.Once(func() {
 		if p.onStatusUpdate != nil {
-			p.onStatusUpdate(ctx, p.GetInfo())
+			p.onStatusUpdate(ctx, p.CopyInfo())
 		}
 
 		logger.Debugw("sending EOS to pipeline")

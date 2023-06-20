@@ -74,7 +74,7 @@ func (h *Handler) killAndReturnState(ctx context.Context) (*livekit.IngressState
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-h.done.Watch():
-		return h.pipeline.State, nil
+		return h.pipeline.CopyInfo().State, nil
 	}
 }
 
@@ -113,7 +113,7 @@ func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, 
 
 	if err != nil {
 		if params != nil {
-			info = params.IngressInfo
+			info = params.CopyInfo()
 		}
 
 		info.State.Error = err.Error()

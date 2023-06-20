@@ -147,7 +147,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 	}
 
 	var rpcServer rpc.IngressHandlerServer
-	if p.IngressInfo.BypassTranscoding {
+	if p.Info.BypassTranscoding {
 		// RPC is handled in the handler process when transcoding
 
 		rpcServer, err = rpc.NewIngressHandlerServer(s.conf.NodeID, ihs, s.bus)
@@ -155,7 +155,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			return nil, nil, nil, err
 		}
 
-		err = RegisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
+		err = RegisterIngressRpcHandlers(rpcServer, p.Info, p.ExtraParams)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -166,20 +166,20 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		defer span.End()
 		if err != nil {
 			// Client failed to finalize session start
-			s.sendUpdate(ctx, p.IngressInfo, err)
-			if p.IngressInfo.BypassTranscoding {
-				DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
+			s.sendUpdate(ctx, p.CopyInfo(), err)
+			if p.Info.BypassTranscoding {
+				DeregisterIngressRpcHandlers(rpcServer, p.Info, p.ExtraParams)
 			}
 			span.RecordError(err)
 			return
 		}
 
-		if p.IngressInfo.BypassTranscoding {
+		if p.Info.BypassTranscoding {
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
 
-			s.sendUpdate(ctx, p.IngressInfo, nil)
+			s.sendUpdate(ctx, p.CopyInfo(), nil)
 
-			s.sm.IngressStarted(p.IngressInfo.IngressId, SessionType_Service)
+			s.sm.IngressStarted(p.Info.IngressId, SessionType_Service)
 		} else {
 			extraParams.MimeTypes = mimeTypes
 
@@ -187,16 +187,16 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		}
 	}
 
-	if p.IngressInfo.BypassTranscoding {
+	if p.Info.BypassTranscoding {
 		ended = func(err error) {
 			ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ended")
 			defer span.End()
 
 			p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
 
-			s.sendUpdate(ctx, p.IngressInfo, err)
-			s.sm.IngressEnded(p.IngressInfo.IngressId)
-			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
+			s.sendUpdate(ctx, p.CopyInfo(), err)
+			s.sm.IngressEnded(p.Info.IngressId)
+			DeregisterIngressRpcHandlers(rpcServer, p.Info, p.ExtraParams)
 		}
 	}
 
@@ -289,6 +289,7 @@ func (s *Service) Run() error {
 	}
 }
 
+// TODO refactor, set state on Params
 func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {
 	state := info.State
 	if state == nil {
