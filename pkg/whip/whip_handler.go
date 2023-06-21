@@ -63,10 +63,10 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer string) (string, error) {
 	var err error
 
-	h.logger = logger.GetLogger().WithValues("ingressID", p.IngressInfo.IngressId, "resourceID", p.ExtraParams.(*params.WhipExtraParams).ResourceId)
+	h.logger = logger.GetLogger().WithValues("ingressID", p.IngressId, "resourceID", p.ExtraParams.(*params.WhipExtraParams).ResourceId)
 	h.params = p
 
-	if p.IngressInfo.BypassTranscoding {
+	if p.BypassTranscoding {
 		h.sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, p)
 		if err != nil {
 			return "", err
@@ -323,7 +323,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 func (h *whipHandler) newMediaSink(track *webrtc.TrackRemote) (MediaSink, error) {
 	if h.sdkOutput != nil {
 		// pasthrough
-		return NewSDKMediaSink(h.logger, h.sdkOutput, track, func() {
+		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, func() {
 			h.writePLI(track.SSRC())
 		}), nil
 	} else {
@@ -421,7 +421,7 @@ func (h *whipHandler) UpdateIngress(ctx context.Context, req *livekit.UpdateIngr
 
 	h.Close()
 
-	return h.params.State, nil
+	return h.params.CopyInfo().State, nil
 }
 
 func (h *whipHandler) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
@@ -430,7 +430,7 @@ func (h *whipHandler) DeleteIngress(ctx context.Context, req *livekit.DeleteIngr
 
 	h.Close()
 
-	return h.params.State, nil
+	return h.params.CopyInfo().State, nil
 }
 
 func (h *whipHandler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {

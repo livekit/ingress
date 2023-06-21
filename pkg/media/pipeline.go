@@ -2,9 +2,11 @@ package media
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/frostbyte73/core"
+	"github.com/pion/webrtc/v3"
 	"github.com/tinyzimmer/go-glib/glib"
 	"github.com/tinyzimmer/go-gst/gst"
 
@@ -30,8 +32,7 @@ type Pipeline struct {
 	sink     *WebRTCSink
 	input    *Input
 
-	onStatusUpdate func(context.Context, *livekit.IngressInfo)
-	closed         core.Fuse
+	closed core.Fuse
 }
 
 func New(ctx context.Context, conf *config.Config, params *params.Params) (*Pipeline, error) {
@@ -86,11 +87,9 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
 		}
 
-		if p.onStatusUpdate != nil {
-			// Is it ok to send this message here? The update handler is not waiting for a response but still doing I/O.
-			// We could send this in a separate goroutine, but this would make races more likely.
-			p.onStatusUpdate(context.Background(), p.GetInfo())
-		}
+		// Is it ok to send this message here? The update handler is not waiting for a response but still doing I/O.
+		// We could send this in a separate goroutine, but this would make races more likely.
+		p.SendStateUpdate(context.Background())
 	}()
 
 	bin, err := p.sink.AddTrack(kind)
@@ -116,17 +115,13 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 	})
 }
 
-func (p *Pipeline) GetInfo() *livekit.IngressInfo {
-	return p.Params.IngressInfo
-}
-
-func (p *Pipeline) OnStatusUpdate(f func(context.Context, *livekit.IngressInfo)) {
-	p.onStatusUpdate = f
-}
-
-func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
+func (p *Pipeline) Run(ctx context.Context) {
 	ctx, span := tracer.Start(ctx, "Pipeline.Run")
 	defer span.End()
+
+	defer func() {
+		p.SendStateUpdate(ctx)
+	}()
 
 	// add watch
 	p.loop = glib.NewMainLoop(glib.MainContextDefault(), false)
@@ -137,7 +132,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 		span.RecordError(err)
 		logger.Errorw("failed to set pipeline state", err)
 		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
-		return p.GetInfo()
+		return
 	}
 
 	err := p.input.Start(ctx)
@@ -145,7 +140,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 		span.RecordError(err)
 		logger.Errorw("failed to start input", err)
 		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
-		return p.GetInfo()
+		return
 	}
 
 	// run main loop
@@ -161,7 +156,7 @@ func (p *Pipeline) Run(ctx context.Context) *livekit.IngressInfo {
 		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
 	}
 
-	return p.GetInfo()
+	return
 }
 
 func (p *Pipeline) messageWatch(msg *gst.Message) bool {
@@ -180,6 +175,9 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 		p.loop.Quit()
 		return false
 
+	case gst.MessageStreamCollection:
+		p.handleStreamCollectionMessage(msg)
+
 	case gst.MessageTag, gst.MessageStateChanged:
 		// ignore
 
@@ -190,16 +188,137 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 	return true
 }
 
+func (p *Pipeline) handleStreamCollectionMessage(msg *gst.Message) {
+	collection := msg.ParseStreamCollection()
+	if collection == nil {
+		return
+	}
+
+	for i := uint(0); i < collection.GetSize(); i++ {
+		stream := collection.GetStreamAt(i)
+
+		caps := stream.Caps()
+		if caps == nil || caps.GetSize() == 0 {
+			continue
+		}
+
+		gstStruct := stream.Caps().GetStructureAt(0)
+
+		kind := getKindFromGstMimeType(gstStruct)
+		switch kind {
+		case types.Audio:
+			audioState := getAudioState(gstStruct)
+			p.SetInputAudioState(context.Background(), audioState, true)
+		case types.Video:
+			videoState := getVideoState(gstStruct)
+			p.SetInputVideoState(context.Background(), videoState, true)
+		}
+	}
+}
+
 func (p *Pipeline) SendEOS(ctx context.Context) {
 	ctx, span := tracer.Start(ctx, "Pipeline.SendEOS")
 	defer span.End()
 
 	p.closed.Once(func() {
-		if p.onStatusUpdate != nil {
-			p.onStatusUpdate(ctx, p.GetInfo())
-		}
+		p.SendStateUpdate(ctx)
 
 		logger.Debugw("sending EOS to pipeline")
 		p.pipeline.SendEvent(gst.NewEOSEvent())
 	})
+}
+
+func getKindFromGstMimeType(gstStruct *gst.Structure) types.StreamKind {
+	gstMimeType := gstStruct.Name()
+
+	switch {
+	case strings.HasPrefix(gstMimeType, "audio"):
+		return types.Audio
+	case strings.HasPrefix(gstMimeType, "video"):
+		return types.Video
+	default:
+		return types.Unknown
+	}
+}
+
+func getAudioState(gstStruct *gst.Structure) *livekit.InputAudioState {
+	mime := ""
+	gstMimeType := gstStruct.Name()
+
+	switch strings.ToLower(gstMimeType) {
+	case "audio/mpeg":
+		mime = gstMimeType
+		var version int
+
+		val, err := gstStruct.GetValue("mpegversion")
+		if err == nil {
+			version, _ = val.(int)
+		}
+
+		if version == 4 {
+			mime = "audio/aac"
+		}
+	case "audio/x-opus":
+		mime = webrtc.MimeTypeOpus
+	default:
+		mime = gstMimeType
+	}
+
+	audioState := &livekit.InputAudioState{
+		MimeType: mime,
+	}
+
+	val, err := gstStruct.GetValue("channels")
+	if err == nil {
+		channels, _ := val.(int)
+		audioState.Channels = uint32(channels)
+	}
+
+	val, err = gstStruct.GetValue("rate")
+	if err == nil {
+		rate, _ := val.(int)
+		audioState.SampleRate = uint32(rate)
+	}
+
+	return audioState
+}
+
+func getVideoState(gstStruct *gst.Structure) *livekit.InputVideoState {
+	mime := ""
+
+	gstMimeType := gstStruct.Name()
+
+	switch strings.ToLower(gstMimeType) {
+	case "video/x-h264":
+		mime = webrtc.MimeTypeH264
+	default:
+		mime = gstMimeType
+	}
+
+	videoState := &livekit.InputVideoState{
+		MimeType: mime,
+	}
+
+	val, err := gstStruct.GetValue("width")
+	if err == nil {
+		width, _ := val.(int)
+		videoState.Width = uint32(width)
+	}
+
+	val, err = gstStruct.GetValue("height")
+	if err == nil {
+		height, _ := val.(int)
+		videoState.Height = uint32(height)
+	}
+
+	val, err = gstStruct.GetValue("framerate")
+	if err == nil {
+		fpsFrac, _ := val.(*gst.FractionValue)
+
+		if fpsFrac.Denom() != 0 {
+			videoState.Framerate = float64(fpsFrac.Num()) / float64(fpsFrac.Denom())
+		}
+	}
+
+	return videoState
 }

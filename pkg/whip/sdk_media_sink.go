@@ -2,6 +2,7 @@ package whip
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"strings"
 	"time"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -26,6 +28,7 @@ var (
 
 type SDKMediaSink struct {
 	logger    logger.Logger
+	params    *params.Params
 	writePLI  func()
 	track     *webrtc.TrackRemote
 	sdkOutput *lksdk_output.LKSDKOutput
@@ -35,9 +38,10 @@ type SDKMediaSink struct {
 	trackInitialized bool
 }
 
-func NewSDKMediaSink(l logger.Logger, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, writePLI func()) *SDKMediaSink {
+func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, writePLI func()) *SDKMediaSink {
 	s := &SDKMediaSink{
 		logger:       l,
+		params:       p,
 		writePLI:     writePLI,
 		track:        track,
 		sdkOutput:    sdkOutput,
@@ -123,6 +127,8 @@ func (sp *SDKMediaSink) ensureTrackInitialized(s *media.Sample) error {
 	switch kind {
 	case types.Audio:
 		stereo := parseAudioFmtp(sp.track.Codec().SDPFmtpLine)
+		audioState := getAudioState(sp.track.Codec().MimeType, stereo, sp.track.Codec().ClockRate)
+		sp.params.SetInputAudioState(context.Background(), audioState, true)
 
 		sp.logger.Infow("adding audio track", "stereo", stereo, "codec", mimeType)
 		sp.sdkOutput.AddAudioTrack(sp, mimeType, false, stereo)
@@ -137,13 +143,15 @@ func (sp *SDKMediaSink) ensureTrackInitialized(s *media.Sample) error {
 			return err
 		}
 
-		// TODO extract proper dimensions from stream
 		layers := []*livekit.VideoLayer{
 			&livekit.VideoLayer{Width: uint32(w), Height: uint32(h), Quality: livekit.VideoQuality_HIGH},
 		}
 		s := []lksdk_output.VideoSampleProvider{
 			sp,
 		}
+
+		videoState := getVideoState(sp.track.Codec().MimeType, w, h)
+		sp.params.SetInputVideoState(context.Background(), videoState, true)
 
 		sp.logger.Infow("adding video track", "width", w, "height", h, "codec", mimeType)
 		sp.sdkOutput.AddVideoTrack(s, layers, mimeType)
@@ -194,4 +202,25 @@ func getVP8VideoParams(s *media.Sample) (uint, uint, error) {
 	}
 
 	return uint(fh.Width), uint(fh.Height), nil
+}
+
+func getAudioState(mimeType string, stereo bool, samplerate uint32) *livekit.InputAudioState {
+	channels := uint32(1)
+	if stereo {
+		channels = 2
+	}
+
+	return &livekit.InputAudioState{
+		MimeType:   mimeType,
+		Channels:   channels,
+		SampleRate: samplerate,
+	}
+}
+
+func getVideoState(mimeType string, w uint, h uint) *livekit.InputVideoState {
+	return &livekit.InputVideoState{
+		MimeType: mimeType,
+		Width:    uint32(w),
+		Height:   uint32(h),
+	}
 }

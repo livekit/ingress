@@ -3,19 +3,26 @@ package params
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
+
+	"google.golang.org/protobuf/proto"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
-	"google.golang.org/protobuf/proto"
+	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/rpc"
 )
 
 type Params struct {
-	*config.Config
+	stateLock   sync.Mutex
+	psrpcClient rpc.IOInfoClient
+
 	*livekit.IngressInfo
+	*config.Config
 
 	AudioEncodingOptions *livekit.IngressAudioEncodingOptions
 	VideoEncodingOptions *livekit.IngressVideoEncodingOptions
@@ -36,7 +43,7 @@ type WhipExtraParams struct {
 	MimeTypes  map[types.StreamKind]string `json:"mime_types"`
 }
 
-func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressInfo, wsUrl, token string, ep any) (*Params, error) {
+func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token string, ep any) (*Params, error) {
 	var err error
 
 	relayUrl := ""
@@ -95,6 +102,7 @@ func GetParams(ctx context.Context, conf *config.Config, info *livekit.IngressIn
 	}
 
 	p := &Params{
+		psrpcClient:          psrpcClient,
 		IngressInfo:          infoCopy,
 		Config:               conf,
 		AudioEncodingOptions: audioEncodingOptions,
@@ -203,11 +211,66 @@ func populateVideoEncodingOptionsDefaults(options *livekit.IngressVideoEncodingO
 	return o, nil
 }
 
+func (p *Params) CopyInfo() *livekit.IngressInfo {
+	p.stateLock.Lock()
+	defer p.stateLock.Unlock()
+
+	return proto.Clone(p.IngressInfo).(*livekit.IngressInfo)
+}
+
 func (p *Params) SetStatus(status livekit.IngressState_Status, errString string) {
+	p.stateLock.Lock()
+	defer p.stateLock.Unlock()
+
 	p.State.Status = status
 	p.State.Error = errString
 }
 
 func (p *Params) SetRoomId(roomId string) {
+	p.stateLock.Lock()
+	defer p.stateLock.Unlock()
+
 	p.State.RoomId = roomId
+}
+
+func (p *Params) SetInputAudioState(ctx context.Context, audioState *livekit.InputAudioState, sendUpdateIfModified bool) {
+	p.stateLock.Lock()
+	modified := false
+
+	if !proto.Equal(audioState, p.State.Audio) {
+		modified = true
+		p.State.Audio = audioState
+	}
+	p.stateLock.Unlock()
+
+	if modified && sendUpdateIfModified {
+		p.SendStateUpdate(ctx)
+	}
+}
+
+func (p *Params) SetInputVideoState(ctx context.Context, videoState *livekit.InputVideoState, sendUpdateIfModified bool) {
+	p.stateLock.Lock()
+	modified := false
+
+	if !proto.Equal(videoState, p.State.Video) {
+		modified = true
+		p.State.Video = videoState
+	}
+	p.stateLock.Unlock()
+
+	if modified && sendUpdateIfModified {
+		p.SendStateUpdate(ctx)
+	}
+}
+
+func (p *Params) SendStateUpdate(ctx context.Context) {
+	info := p.CopyInfo()
+
+	_, err := p.psrpcClient.UpdateIngressState(ctx, &rpc.UpdateIngressStateRequest{
+		IngressId: info.IngressId,
+		State:     info.State,
+	})
+	if err != nil {
+		logger.Errorw("failed to send update", err)
+	}
 }

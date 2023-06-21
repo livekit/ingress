@@ -4,7 +4,7 @@ type StreamKind string
 
 const (
 	Audio       StreamKind = "audio"
-	Video                  = "video"
-	Interleaved            = "interleaved"
-	Unknown                = "unknown"
+	Video       StreamKind = "video"
+	Interleaved StreamKind = "interleaved"
+	Unknown     StreamKind = "unknown"
 )

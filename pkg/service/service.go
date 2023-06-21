@@ -141,13 +141,13 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		wsUrl = pRes.resp.WsUrl
 	}
 
-	p, err = params.GetParams(context.Background(), s.conf, pRes.resp.Info, wsUrl, pRes.resp.Token, extraParams)
+	p, err = params.GetParams(context.Background(), s.psrpcClient, s.conf, pRes.resp.Info, wsUrl, pRes.resp.Token, extraParams)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
 	var rpcServer rpc.IngressHandlerServer
-	if p.IngressInfo.BypassTranscoding {
+	if p.BypassTranscoding {
 		// RPC is handled in the handler process when transcoding
 
 		rpcServer, err = rpc.NewIngressHandlerServer(s.conf.NodeID, ihs, s.bus)
@@ -166,20 +166,22 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		defer span.End()
 		if err != nil {
 			// Client failed to finalize session start
-			s.sendUpdate(ctx, p.IngressInfo, err)
-			if p.IngressInfo.BypassTranscoding {
+			logger.Warnw("ingress failed", err)
+			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+			p.SendStateUpdate(ctx)
+
+			if p.BypassTranscoding {
 				DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
 			}
 			span.RecordError(err)
 			return
 		}
 
-		if p.IngressInfo.BypassTranscoding {
+		if p.BypassTranscoding {
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
+			p.SendStateUpdate(ctx)
 
-			s.sendUpdate(ctx, p.IngressInfo, nil)
-
-			s.sm.IngressStarted(p.IngressInfo.IngressId, SessionType_Service)
+			s.sm.IngressStarted(p.IngressId, SessionType_Service)
 		} else {
 			extraParams.MimeTypes = mimeTypes
 
@@ -187,15 +189,20 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		}
 	}
 
-	if p.IngressInfo.BypassTranscoding {
+	if p.BypassTranscoding {
 		ended = func(err error) {
 			ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ended")
 			defer span.End()
 
-			p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+			if err == nil {
+				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+			} else {
+				logger.Warnw("ingress failed", err)
+				p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+			}
 
-			s.sendUpdate(ctx, p.IngressInfo, err)
-			s.sm.IngressEnded(p.IngressInfo.IngressId)
+			p.SendStateUpdate(ctx)
+			s.sm.IngressEnded(p.IngressId)
 			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
 		}
 	}
