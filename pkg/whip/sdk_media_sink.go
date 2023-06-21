@@ -128,7 +128,7 @@ func (sp *SDKMediaSink) ensureTrackInitialized(s *media.Sample) error {
 	case types.Audio:
 		stereo := parseAudioFmtp(sp.track.Codec().SDPFmtpLine)
 		audioState := getAudioState(sp.track.Codec().MimeType, stereo, sp.track.Codec().ClockRate)
-		sp.params.SetInputAudioState(audioState)
+		sp.params.SetInputAudioState(context.Background(), audioState, true)
 
 		sp.logger.Infow("adding audio track", "stereo", stereo, "codec", mimeType)
 		sp.sdkOutput.AddAudioTrack(sp, mimeType, false, stereo)
@@ -151,13 +151,12 @@ func (sp *SDKMediaSink) ensureTrackInitialized(s *media.Sample) error {
 		}
 
 		videoState := getVideoState(sp.track.Codec().MimeType, w, h)
-		sp.params.SetInputVideoState(videoState)
+		sp.params.SetInputVideoState(context.Background(), videoState, true)
 
 		sp.logger.Infow("adding video track", "width", w, "height", h, "codec", mimeType)
 		sp.sdkOutput.AddVideoTrack(s, layers, mimeType)
 	}
 
-	sp.params.SendStateUpdate(context.Background())
 	sp.trackInitialized = true
 
 	return nil

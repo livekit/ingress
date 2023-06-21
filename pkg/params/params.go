@@ -6,6 +6,8 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/protobuf/proto"
+
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/types"
@@ -13,7 +15,6 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
-	"google.golang.org/protobuf/proto"
 )
 
 type Params struct {
@@ -232,18 +233,34 @@ func (p *Params) SetRoomId(roomId string) {
 	p.State.RoomId = roomId
 }
 
-func (p *Params) SetInputAudioState(audioState *livekit.InputAudioState) {
+func (p *Params) SetInputAudioState(ctx context.Context, audioState *livekit.InputAudioState, sendUpdateIfModified bool) {
 	p.stateLock.Lock()
-	defer p.stateLock.Unlock()
+	modified := false
 
-	p.State.Audio = audioState
+	if !proto.Equal(audioState, p.State.Audio) {
+		modified = true
+		p.State.Audio = audioState
+	}
+	p.stateLock.Unlock()
+
+	if modified && sendUpdateIfModified {
+		p.SendStateUpdate(ctx)
+	}
 }
 
-func (p *Params) SetInputVideoState(videoState *livekit.InputVideoState) {
+func (p *Params) SetInputVideoState(ctx context.Context, videoState *livekit.InputVideoState, sendUpdateIfModified bool) {
 	p.stateLock.Lock()
-	defer p.stateLock.Unlock()
+	modified := false
 
-	p.State.Video = videoState
+	if !proto.Equal(videoState, p.State.Video) {
+		modified = true
+		p.State.Video = videoState
+	}
+	p.stateLock.Unlock()
+
+	if modified && sendUpdateIfModified {
+		p.SendStateUpdate(ctx)
+	}
 }
 
 func (p *Params) SendStateUpdate(ctx context.Context) {

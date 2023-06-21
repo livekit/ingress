@@ -296,7 +296,6 @@ func (s *Service) Run() error {
 	}
 }
 
-// TODO refactor, set state on Params
 func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {
 	state := info.State
 	if state == nil {

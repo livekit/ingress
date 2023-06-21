@@ -208,14 +208,12 @@ func (p *Pipeline) handleStreamCollectionMessage(msg *gst.Message) {
 		switch kind {
 		case types.Audio:
 			audioState := getAudioState(gstStruct)
-			p.SetInputAudioState(audioState)
+			p.SetInputAudioState(context.Background(), audioState, true)
 		case types.Video:
 			videoState := getVideoState(gstStruct)
-			p.SetInputVideoState(videoState)
+			p.SetInputVideoState(context.Background(), videoState, true)
 		}
 	}
-
-	p.SendStateUpdate(context.Background())
 }
 
 func (p *Pipeline) SendEOS(ctx context.Context) {
