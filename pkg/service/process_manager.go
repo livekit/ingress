@@ -99,7 +99,7 @@ func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngress
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	s.sm.IngressStarted(resp.Info.IngressId, SessionType_HandlerProcess)
+	s.sm.IngressStarted(resp.Info, SessionType_HandlerProcess)
 	h := &process{
 		info:   resp.Info,
 		cmd:    cmd,
@@ -122,7 +122,7 @@ func (s *ProcessManager) awaitCleanup(h *process) {
 	}
 
 	h.closed.Break()
-	s.sm.IngressEnded(h.info.IngressId)
+	s.sm.IngressEnded(h.info)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

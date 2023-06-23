@@ -4,6 +4,7 @@ import (
 	"sync"
 
 	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 )
 
@@ -28,22 +29,26 @@ func NewSessionManager(monitor *stats.Monitor) *SessionManager {
 	}
 }
 
-func (sm *SessionManager) IngressStarted(ingressID string, t SessionType) {
-	logger.Infow("ingress started", "ingressID", ingressID, "type", t)
+func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, t SessionType) {
+	logger.Infow("ingress started", "ingressID", info.IngressId, "type", t)
 
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 
-	sm.sessions[ingressID] = t
+	sm.sessions[info.IngressId] = t
+
+	sm.monitor.IngressStarted(info)
 }
 
-func (sm *SessionManager) IngressEnded(ingressID string) {
-	logger.Infow("ingress ended", "ingressID", ingressID)
+func (sm *SessionManager) IngressEnded(info *livekit.IngressInfo) {
+	logger.Infow("ingress ended", "ingressID", info.IngressId)
 
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 
-	delete(sm.sessions, ingressID)
+	delete(sm.sessions, info.IngressId)
+
+	sm.monitor.IngressEnded(info)
 }
 
 func (sm *SessionManager) IsIdle() bool {

@@ -181,7 +181,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
 			p.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(p.IngressId, SessionType_Service)
+			s.sm.IngressStarted(p.IngressInfo, SessionType_Service)
 		} else {
 			extraParams.MimeTypes = mimeTypes
 
@@ -202,7 +202,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			}
 
 			p.SendStateUpdate(ctx)
-			s.sm.IngressEnded(p.IngressId)
+			s.sm.IngressEnded(p.IngressInfo)
 			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
 		}
 	}
