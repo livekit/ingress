@@ -50,12 +50,6 @@ type Config struct {
 	NodeID      string `yaml:"-"`
 }
 
-type WhipConfig struct {
-	// TODO add IceLite, NAT1To1IPs
-	ICEPortRange            []uint16 `yaml:"ice_port_range"`
-	EnableLoopbackCandidate bool     `yaml:"enable_loopback_candidate"`
-}
-
 type CPUCostConfig struct {
 	RTMPCpuCost                  float64 `yaml:"rtmp_cpu_cost"`
 	WHIPCpuCost                  float64 `yaml:"whip_cpu_cost"`
