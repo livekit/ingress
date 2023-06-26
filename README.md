@@ -175,7 +175,7 @@ ingress --config=config.yaml
 #### Running with Docker
 
 To run against a local LiveKit server, a Redis server must be running locally. The Ingress service must be instructed to connect to LiveKit server and Redis on the host. The host network is accessible from within the container on IP:
-- 192.168.65.2 on MacOS and Windows
+- host.docker.internal on MacOS and Windows
 - 172.17.0.1 on linux
 
 Create a file named `config.yaml` with the following content:
@@ -184,17 +184,21 @@ Create a file named `config.yaml` with the following content:
 log_level: debug
 api_key: <your-api-key>
 api_secret: <your-api-secret>
-ws_url: ws://192.168.65.2:7880 (or ws://172.17.0.1:7880 on linux)
+ws_url: ws://host.docker.internal:7880 (or ws://172.17.0.1:7880 on linux)
 redis:
-  address: 192.168.65.2:6379 (or 172.17.0.1:6379 on linux)
+  address: host.docker.internal:6379 (or 172.17.0.1:6379 on linux)
 ```
+
+In order to be able to use establish WHIP sessions over UDP, the container must be run with host networking enabled. 
 
 Then to run the service:
 
 ```shell
 docker run --rm \
-    -e INGRESS_CONFIG_BODY=`cat config.yaml` \
+    -e INGRESS_CONFIG_BODY="`cat config.yaml`" \
     -p 1935:1935 \
+    -p 8080:8080 \
+    --network host \
     livekit/ingress
 ```
 
