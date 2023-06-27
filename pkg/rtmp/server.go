@@ -204,7 +204,8 @@ func (h *RTMPHandler) OnSetDataFrame(timestamp uint32, data *rtmpmsg.NetStreamSe
 		Timestamp: timestamp,
 		Data:      &script,
 	}); err != nil {
-		h.log.Errorw("failed to forward script data", err)
+		h.log.Warnw("failed to forward script data", err)
+		return err
 	}
 
 	return nil
@@ -239,8 +240,8 @@ func (h *RTMPHandler) OnAudio(timestamp uint32, payload io.Reader) error {
 		Timestamp: timestamp,
 		Data:      &audio,
 	}); err != nil {
-		// log and continue, or fail and let sender reconnect?
-		h.log.Errorw("failed to write audio", err)
+		h.log.Warnw("failed to write audio", err)
+		return err
 	}
 
 	return nil
@@ -283,7 +284,8 @@ func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
 		Timestamp: timestamp,
 		Data:      &video,
 	}); err != nil {
-		h.log.Errorw("Failed to write video", err)
+		h.log.Warnw("Failed to write video", err)
+		return err
 	}
 
 	return nil

@@ -2,7 +2,6 @@ package errors
 
 import (
 	"errors"
-	"fmt"
 	"io"
 
 	"github.com/tinyzimmer/go-gst/gst"
@@ -59,7 +58,6 @@ func ErrorToGstFlowReturn(err error) gst.FlowReturn {
 	case err == nil:
 		return gst.FlowOK
 	case errors.Is(err, io.EOF):
-		fmt.Println("ErrorToGstFlowReturn EOS")
 		return gst.FlowEOS
 	default:
 		return gst.FlowError
