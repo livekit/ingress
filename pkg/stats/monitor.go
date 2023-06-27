@@ -5,6 +5,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/frostbyte73/core"
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 
@@ -26,10 +27,14 @@ type Monitor struct {
 	cpuStats *utils.CPUStats
 
 	pendingCPUs atomic.Float64
+
+	shutdown core.Fuse
 }
 
 func NewMonitor() *Monitor {
-	return &Monitor{}
+	return &Monitor{
+		shutdown: core.NewFuse(),
+	}
 }
 
 func (m *Monitor) Start(conf *config.Config) error {
@@ -75,6 +80,12 @@ func (m *Monitor) Start(conf *config.Config) error {
 	return nil
 }
 
+// Server is shutting down, but may stay up for some time for draining
+func (m *Monitor) Shutdown() {
+	m.shutdown.Break()
+}
+
+// Stop the monitor before server termination
 func (m *Monitor) Stop() {
 	if m.cpuStats != nil {
 		m.cpuStats.Stop()
@@ -150,6 +161,10 @@ func (m *Monitor) GetCPULoad() float64 {
 }
 
 func (m *Monitor) CanAcceptIngress() bool {
+	if m.shutdown.IsBroken() {
+		return false
+	}
+
 	available := m.cpuStats.GetCPUIdle() - m.pendingCPUs.Load()
 
 	return available > m.maxCost
