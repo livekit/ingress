@@ -2,6 +2,7 @@ package errors
 
 import (
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/tinyzimmer/go-gst/gst"
@@ -54,10 +55,11 @@ func ErrHttpRelayFailure(statusCode int) psrpc.Error {
 }
 
 func ErrorToGstFlowReturn(err error) gst.FlowReturn {
-	switch errors.Unwrap(err) {
-	case nil:
+	switch {
+	case err == nil:
 		return gst.FlowOK
-	case io.EOF:
+	case errors.Is(err, io.EOF):
+		fmt.Println("ErrorToGstFlowReturn EOS")
 		return gst.FlowEOS
 	default:
 		return gst.FlowError

@@ -146,6 +146,8 @@ func (p *Pipeline) Run(ctx context.Context) {
 	// run main loop
 	p.loop.Run()
 
+	logger.Infow("GST pipeline stopped")
+
 	err = p.input.Close()
 	p.sink.Close()
 
