@@ -86,7 +86,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 	return s
 }
 
-func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
+func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) error {
 	ctx, span := tracer.Start(context.Background(), "Service.HandleRTMPPublishRequest")
 	defer span.End()
 
@@ -210,7 +210,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 	return p, ready, ended, nil
 }
 
-func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inputType livekit.IngressInput) (*rpc.GetIngressInfoResponse, error) {
+func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, resourceId string, inputType livekit.IngressInput) (*rpc.GetIngressInfoResponse, error) {
 	resp, err := s.psrpcClient.GetIngressInfo(ctx, &rpc.GetIngressInfoRequest{
 		StreamKey: streamKey,
 	})
@@ -234,8 +234,9 @@ func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inpu
 	}
 
 	resp.Info.State = &livekit.IngressState{
-		Status:    livekit.IngressState_ENDPOINT_BUFFERING,
-		StartedAt: time.Now().UnixNano(),
+		Status:     livekit.IngressState_ENDPOINT_BUFFERING,
+		StartedAt:  time.Now().UnixNano(),
+		ResourceId: resourceId,
 	}
 
 	return resp, nil

@@ -69,11 +69,14 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	infoCopy := proto.Clone(info).(*livekit.IngressInfo)
 
 	// The state should have been created by the service, before launching the hander, but be defensive here.
-	if infoCopy.State == nil {
-		infoCopy.State = &livekit.IngressState{
-			Status:    livekit.IngressState_ENDPOINT_BUFFERING,
-			StartedAt: time.Now().UnixNano(),
-		}
+	if infoCopy.State == nil || infoCopy.State.ResourceId == "" {
+		return nil, errors.ErrMissingResourceId
+
+	}
+
+	infoCopy.State.Status = livekit.IngressState_ENDPOINT_BUFFERING
+	if infoCopy.State.StartedAt == 0 {
+		infoCopy.State.StartedAt = time.Now().UnixNano()
 	}
 
 	if infoCopy.Audio == nil {
