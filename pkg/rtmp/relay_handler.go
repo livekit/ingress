@@ -35,9 +35,9 @@ func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	streamKey := strings.TrimLeft(r.URL.Path, "/rtmp/")
+	resourceId := strings.TrimLeft(r.URL.Path, "/rtmp/")
 
-	log := logger.Logger(logger.GetLogger().WithValues("streamKey", streamKey))
+	log := logger.Logger(logger.GetLogger().WithValues("resourceID", resourceId))
 	log.Infow("relaying ingress")
 
 	pr, pw := io.Pipe()
@@ -49,13 +49,13 @@ func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		close(done)
 	}()
 
-	err = h.rtmpServer.AssociateRelay(streamKey, pw)
+	err = h.rtmpServer.AssociateRelay(resourceId, pw)
 	if err != nil {
 		return
 	}
 	defer func() {
 		pw.Close()
-		h.rtmpServer.DissociateRelay(streamKey)
+		h.rtmpServer.DissociateRelay(resourceId)
 	}()
 
 	err = <-done

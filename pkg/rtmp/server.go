@@ -21,10 +21,6 @@ import (
 	protoutils "github.com/livekit/protocol/utils"
 )
 
-const (
-	rtmpResourcePrefix = "RT_" // Move to protocol if this ever gets serialized into a message
-)
-
 type RTMPServer struct {
 	server   *rtmp.Server
 	handlers sync.Map
@@ -174,7 +170,7 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 	}
 
 	_, streamKey := path.Split(cmd.PublishingName)
-	h.resourceId = protoutils.NewGuid(rtmpResourcePrefix)
+	h.resourceId = protoutils.NewGuid(protoutils.RTMPResourcePrefix)
 	h.log = logger.GetLogger().WithValues("streamKey", streamKey, "resourceID", h.resourceId)
 	if h.onPublish != nil {
 		err := h.onPublish(streamKey, h.resourceId)

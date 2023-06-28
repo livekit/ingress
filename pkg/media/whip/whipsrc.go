@@ -30,7 +30,7 @@ func NewWHIPRelaySource(ctx context.Context, p *params.Params) (*WHIPSource, err
 	s := &WHIPSource{
 		params:     p,
 		trackSrc:   make(map[types.StreamKind]*whipAppSource),
-		resourceId: p.ExtraParams.(*params.WhipExtraParams).ResourceId,
+		resourceId: p.State.ResourceId,
 	}
 
 	mimeTypes := s.params.ExtraParams.(*params.WhipExtraParams).MimeTypes
