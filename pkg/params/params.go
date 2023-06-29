@@ -39,21 +39,26 @@ type Params struct {
 }
 
 type WhipExtraParams struct {
-	ResourceId string                      `json:"resource_id"`
-	MimeTypes  map[types.StreamKind]string `json:"mime_types"`
+	MimeTypes map[types.StreamKind]string `json:"mime_types"`
 }
 
 func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token string, ep any) (*Params, error) {
 	var err error
 
+	// The state should have been created by the service, before launching the hander, but be defensive here.
+	if info.State == nil || info.State.ResourceId == "" {
+		return nil, errors.ErrMissingResourceId
+	}
+
 	relayUrl := ""
 	fields := []interface{}{"ingressID", info.IngressId}
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		relayUrl = getRTMPRelayUrl(conf, info.StreamKey)
+		fields = append(fields, "resourceID", info.State.ResourceId)
+		relayUrl = getRTMPRelayUrl(conf, info.State.ResourceId)
 	case livekit.IngressInput_WHIP_INPUT:
-		fields = append(fields, "resourceID", ep.(*WhipExtraParams).ResourceId)
-		relayUrl = getWHIPRelayUrlPrefix(conf, ep.(*WhipExtraParams).ResourceId)
+		fields = append(fields, "resourceID", info.State.ResourceId)
+		relayUrl = getWHIPRelayUrlPrefix(conf, info.State.ResourceId)
 	}
 
 	err = conf.InitLogger(fields...)
@@ -68,12 +73,9 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 
 	infoCopy := proto.Clone(info).(*livekit.IngressInfo)
 
-	// The state should have been created by the service, before launching the hander, but be defensive here.
-	if infoCopy.State == nil {
-		infoCopy.State = &livekit.IngressState{
-			Status:    livekit.IngressState_ENDPOINT_BUFFERING,
-			StartedAt: time.Now().UnixNano(),
-		}
+	infoCopy.State.Status = livekit.IngressState_ENDPOINT_BUFFERING
+	if infoCopy.State.StartedAt == 0 {
+		infoCopy.State.StartedAt = time.Now().UnixNano()
 	}
 
 	if infoCopy.Audio == nil {
@@ -116,8 +118,8 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	return p, nil
 }
 
-func getRTMPRelayUrl(conf *config.Config, streamKey string) string {
-	return fmt.Sprintf("http://localhost:%d/rtmp/%s", conf.HTTPRelayPort, streamKey)
+func getRTMPRelayUrl(conf *config.Config, resourceId string) string {
+	return fmt.Sprintf("http://localhost:%d/rtmp/%s", conf.HTTPRelayPort, resourceId)
 }
 
 func getWHIPRelayUrlPrefix(conf *config.Config, resourceId string) string {

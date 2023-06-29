@@ -18,6 +18,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/logger"
+	protoutils "github.com/livekit/protocol/utils"
 )
 
 type RTMPServer struct {
@@ -29,7 +30,7 @@ func NewRTMPServer() *RTMPServer {
 	return &RTMPServer{}
 }
 
-func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey string) error) error {
+func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resourceId string) error) error {
 	port := conf.RTMPPort
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", port))
@@ -53,20 +54,20 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey string)
 			lf := l.WithFields(conf.GetLoggerFields())
 
 			h := NewRTMPHandler()
-			h.OnPublishCallback(func(streamKey string) error {
+			h.OnPublishCallback(func(streamKey, resourceId string) error {
 				if onPublish != nil {
-					err := onPublish(streamKey)
+					err := onPublish(streamKey, resourceId)
 					if err != nil {
 						return err
 					}
 				}
 
-				s.handlers.Store(streamKey, h)
+				s.handlers.Store(resourceId, h)
 
 				return nil
 			})
-			h.OnCloseCallback(func(streamKey string) {
-				s.handlers.Delete(streamKey)
+			h.OnCloseCallback(func(resourceId string) {
+				s.handlers.Delete(resourceId)
 			})
 
 			return conn, &rtmp.ConnConfig{
@@ -91,8 +92,8 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey string)
 	return nil
 }
 
-func (s *RTMPServer) AssociateRelay(streamKey string, w io.WriteCloser) error {
-	h, ok := s.handlers.Load(streamKey)
+func (s *RTMPServer) AssociateRelay(resourceId string, w io.WriteCloser) error {
+	h, ok := s.handlers.Load(resourceId)
 	if ok && h != nil {
 		err := h.(*RTMPHandler).SetWriter(w)
 		if err != nil {
@@ -105,8 +106,8 @@ func (s *RTMPServer) AssociateRelay(streamKey string, w io.WriteCloser) error {
 	return nil
 }
 
-func (s *RTMPServer) DissociateRelay(streamKey string) error {
-	h, ok := s.handlers.Load(streamKey)
+func (s *RTMPServer) DissociateRelay(resourceId string) error {
+	h, ok := s.handlers.Load(resourceId)
 	if ok && h != nil {
 		err := h.(*RTMPHandler).SetWriter(nil)
 		if err != nil {
@@ -127,7 +128,7 @@ type RTMPHandler struct {
 	rtmp.DefaultHandler
 
 	flvEnc        *flv.Encoder
-	streamKey     string
+	resourceId    string
 	videoInit     *flvtag.VideoData
 	audioInit     *flvtag.AudioData
 	keyFrameFound bool
@@ -135,8 +136,8 @@ type RTMPHandler struct {
 
 	log logger.Logger
 
-	onPublish func(streamKey string) error
-	onClose   func(streamKey string)
+	onPublish func(streamKey, resourceId string) error
+	onClose   func(resourceId string)
 }
 
 func NewRTMPHandler() *RTMPHandler {
@@ -154,11 +155,11 @@ func NewRTMPHandler() *RTMPHandler {
 	return h
 }
 
-func (h *RTMPHandler) OnPublishCallback(cb func(streamKey string) error) {
+func (h *RTMPHandler) OnPublishCallback(cb func(streamKey, resourceId string) error) {
 	h.onPublish = cb
 }
 
-func (h *RTMPHandler) OnCloseCallback(cb func(streamKey string)) {
+func (h *RTMPHandler) OnCloseCallback(cb func(resourceId string)) {
 	h.onClose = cb
 }
 
@@ -168,12 +169,11 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 		return errors.ErrMissingStreamKey
 	}
 
-	// TODO check in store that PublishingName == stream key belongs to a valid ingress
-
-	_, h.streamKey = path.Split(cmd.PublishingName)
-	h.log = logger.GetLogger().WithValues("streamKey", h.streamKey)
+	_, streamKey := path.Split(cmd.PublishingName)
+	h.resourceId = protoutils.NewGuid(protoutils.RTMPResourcePrefix)
+	h.log = logger.GetLogger().WithValues("streamKey", streamKey, "resourceID", h.resourceId)
 	if h.onPublish != nil {
-		err := h.onPublish(h.streamKey)
+		err := h.onPublish(streamKey, h.resourceId)
 		if err != nil {
 			return err
 		}
@@ -204,7 +204,8 @@ func (h *RTMPHandler) OnSetDataFrame(timestamp uint32, data *rtmpmsg.NetStreamSe
 		Timestamp: timestamp,
 		Data:      &script,
 	}); err != nil {
-		h.log.Errorw("failed to forward script data", err)
+		h.log.Warnw("failed to forward script data", err)
+		return err
 	}
 
 	return nil
@@ -239,8 +240,8 @@ func (h *RTMPHandler) OnAudio(timestamp uint32, payload io.Reader) error {
 		Timestamp: timestamp,
 		Data:      &audio,
 	}); err != nil {
-		// log and continue, or fail and let sender reconnect?
-		h.log.Errorw("failed to write audio", err)
+		h.log.Warnw("failed to write audio", err)
+		return err
 	}
 
 	return nil
@@ -283,7 +284,8 @@ func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
 		Timestamp: timestamp,
 		Data:      &video,
 	}); err != nil {
-		h.log.Errorw("Failed to write video", err)
+		h.log.Warnw("Failed to write video", err)
+		return err
 	}
 
 	return nil
@@ -295,7 +297,7 @@ func (h *RTMPHandler) OnClose() {
 	h.mediaBuffer.Close()
 
 	if h.onClose != nil {
-		h.onClose(h.streamKey)
+		h.onClose(h.resourceId)
 	}
 }
 

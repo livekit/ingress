@@ -20,6 +20,7 @@ var (
 	ErrUnsupportedEncodeFormat = psrpc.NewErrorf(psrpc.InvalidArgument, "unsupported mime type for encoder")
 	ErrDuplicateTrack          = psrpc.NewErrorf(psrpc.NotAcceptable, "more than 1 track with given media kind")
 	ErrUnableToAddPad          = psrpc.NewErrorf(psrpc.Internal, "could not add pads to bin")
+	ErrMissingResourceId       = psrpc.NewErrorf(psrpc.InvalidArgument, "missing resource ID")
 	ErrIngressNotFound         = psrpc.NewErrorf(psrpc.NotFound, "ingress not found")
 	ErrServerCapacityExceeded  = psrpc.NewErrorf(psrpc.ResourceExhausted, "server capacity exceeded")
 	ErrServerShuttingDown      = psrpc.NewErrorf(psrpc.Unavailable, "server shutting down")
@@ -54,10 +55,10 @@ func ErrHttpRelayFailure(statusCode int) psrpc.Error {
 }
 
 func ErrorToGstFlowReturn(err error) gst.FlowReturn {
-	switch errors.Unwrap(err) {
-	case nil:
+	switch {
+	case err == nil:
 		return gst.FlowOK
-	case io.EOF:
+	case errors.Is(err, io.EOF):
 		return gst.FlowEOS
 	default:
 		return gst.FlowError

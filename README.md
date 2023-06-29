@@ -129,7 +129,7 @@ The Ingress service can be run natively on any platform supported by GStreamer.
 
 ##### Prerequisites
 
-The Ingress service is built in Go. Go >= v1.17 is needed. The following [GStreamer](https://gstreamer.freedesktop.org/) libraries and headers must be installed:
+The Ingress service is built in Go. Go >= 1.18 is needed. The following [GStreamer](https://gstreamer.freedesktop.org/) libraries and headers must be installed:
 - gstreamer
 - gst-plugins-base
 - gst-plugins-good

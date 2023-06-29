@@ -99,7 +99,7 @@ func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngress
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	s.sm.IngressStarted(resp.Info, SessionType_HandlerProcess)
+	s.sm.IngressStarted(resp.Info)
 	h := &process{
 		info:   resp.Info,
 		cmd:    cmd,
@@ -107,7 +107,7 @@ func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngress
 	}
 
 	s.mu.Lock()
-	s.activeHandlers[resp.Info.IngressId] = h
+	s.activeHandlers[resp.Info.State.ResourceId] = h
 	s.mu.Unlock()
 
 	go s.awaitCleanup(h)
@@ -127,7 +127,7 @@ func (s *ProcessManager) awaitCleanup(h *process) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	delete(s.activeHandlers, h.info.IngressId)
+	delete(s.activeHandlers, h.info.State.ResourceId)
 }
 
 func (s *ProcessManager) killAll() {

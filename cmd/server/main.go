@@ -272,7 +272,7 @@ func setupHandlerRPCHandlers(conf *config.Config, handler *service.Handler, bus 
 		return err
 	}
 
-	return service.RegisterIngressRpcHandlers(rpcServer, info, ep)
+	return service.RegisterIngressRpcHandlers(rpcServer, info)
 }
 
 func getConfig(c *cli.Context) (*config.Config, error) {

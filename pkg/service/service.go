@@ -28,9 +28,10 @@ import (
 const shutdownTimer = time.Second * 5
 
 type publishRequest struct {
-	streamKey string
-	inputType livekit.IngressInput
-	result    chan<- publishResponse
+	streamKey  string
+	resourceId string
+	inputType  livekit.IngressInput
+	result     chan<- publishResponse
 }
 
 type publishResponse struct {
@@ -86,15 +87,16 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 	return s
 }
 
-func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
+func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) error {
 	ctx, span := tracer.Start(context.Background(), "Service.HandleRTMPPublishRequest")
 	defer span.End()
 
 	res := make(chan publishResponse)
 	r := publishRequest{
-		streamKey: streamKey,
-		inputType: livekit.IngressInput_RTMP_INPUT,
-		result:    res,
+		streamKey:  streamKey,
+		resourceId: resourceId,
+		inputType:  livekit.IngressInput_RTMP_INPUT,
+		result:     res,
 	}
 
 	var pRes publishResponse
@@ -116,9 +118,10 @@ func (s *Service) HandleRTMPPublishRequest(streamKey string) error {
 func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error), ended func(err error), err error) {
 	res := make(chan publishResponse)
 	r := publishRequest{
-		streamKey: streamKey,
-		inputType: livekit.IngressInput_WHIP_INPUT,
-		result:    res,
+		streamKey:  streamKey,
+		resourceId: resourceId,
+		inputType:  livekit.IngressInput_WHIP_INPUT,
+		result:     res,
 	}
 
 	var pRes publishResponse
@@ -132,16 +135,12 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		}
 	}
 
-	extraParams := &params.WhipExtraParams{
-		ResourceId: resourceId,
-	}
-
 	wsUrl := s.conf.WsUrl
 	if pRes.resp.WsUrl != "" {
 		wsUrl = pRes.resp.WsUrl
 	}
 
-	p, err = params.GetParams(context.Background(), s.psrpcClient, s.conf, pRes.resp.Info, wsUrl, pRes.resp.Token, extraParams)
+	p, err = params.GetParams(context.Background(), s.psrpcClient, s.conf, pRes.resp.Info, wsUrl, pRes.resp.Token, nil)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -155,7 +154,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			return nil, nil, nil, err
 		}
 
-		err = RegisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
+		err = RegisterIngressRpcHandlers(rpcServer, p.IngressInfo)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -171,7 +170,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			p.SendStateUpdate(ctx)
 
 			if p.BypassTranscoding {
-				DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
+				DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo)
 			}
 			span.RecordError(err)
 			return
@@ -181,9 +180,11 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
 			p.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(p.IngressInfo, SessionType_Service)
+			s.sm.IngressStarted(p.IngressInfo)
 		} else {
-			extraParams.MimeTypes = mimeTypes
+			extraParams := &params.WhipExtraParams{
+				MimeTypes: mimeTypes,
+			}
 
 			go s.manager.launchHandler(ctx, pRes.resp, extraParams)
 		}
@@ -203,14 +204,14 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 
 			p.SendStateUpdate(ctx)
 			s.sm.IngressEnded(p.IngressInfo)
-			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo, p.ExtraParams)
+			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo)
 		}
 	}
 
 	return p, ready, ended, nil
 }
 
-func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inputType livekit.IngressInput) (*rpc.GetIngressInfoResponse, error) {
+func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, resourceId string, inputType livekit.IngressInput) (*rpc.GetIngressInfoResponse, error) {
 	resp, err := s.psrpcClient.GetIngressInfo(ctx, &rpc.GetIngressInfoRequest{
 		StreamKey: streamKey,
 	})
@@ -234,8 +235,9 @@ func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, inpu
 	}
 
 	resp.Info.State = &livekit.IngressState{
-		Status:    livekit.IngressState_ENDPOINT_BUFFERING,
-		StartedAt: time.Now().UnixNano(),
+		Status:     livekit.IngressState_ENDPOINT_BUFFERING,
+		StartedAt:  time.Now().UnixNano(),
+		ResourceId: resourceId,
 	}
 
 	return resp, nil
@@ -279,7 +281,7 @@ func (s *Service) Run() error {
 				ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
 				defer span.End()
 
-				resp, err := s.handleNewPublisher(ctx, req.streamKey, req.inputType)
+				resp, err := s.handleNewPublisher(ctx, req.streamKey, req.resourceId, req.inputType)
 				if resp != nil && resp.Info != nil {
 					s.sendUpdate(ctx, resp.Info, err)
 				}
@@ -355,7 +357,7 @@ func (s *Service) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Healthy"))
 }
 
-func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo, ep any) error {
+func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) error {
 	if err := server.RegisterUpdateIngressTopic(info.IngressId); err != nil {
 		return err
 	}
@@ -364,9 +366,7 @@ func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.I
 	}
 
 	if info.InputType == livekit.IngressInput_WHIP_INPUT {
-		resourceId := ep.(*params.WhipExtraParams).ResourceId
-
-		if err := server.RegisterDeleteWHIPResourceTopic(resourceId); err != nil {
+		if err := server.RegisterDeleteWHIPResourceTopic(info.State.ResourceId); err != nil {
 			return err
 		}
 	}
@@ -374,13 +374,11 @@ func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.I
 	return nil
 }
 
-func DeregisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo, ep any) {
+func DeregisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) {
 	server.DeregisterUpdateIngressTopic(info.IngressId)
 	server.RegisterDeleteIngressTopic(info.IngressId)
 
 	if info.InputType == livekit.IngressInput_WHIP_INPUT {
-		resourceId := ep.(*params.WhipExtraParams).ResourceId
-
-		server.RegisterDeleteWHIPResourceTopic(resourceId)
+		server.RegisterDeleteWHIPResourceTopic(info.State.ResourceId)
 	}
 }
