@@ -9,7 +9,7 @@ require (
 	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/mediatransportutil v0.0.0-20230612070454-d5299b956135
-	github.com/livekit/protocol v1.5.8-0.20230620161627-ce9e603cfda8
+	github.com/livekit/protocol v1.5.8-0.20230629015034-5cff0336ab5e
 	github.com/livekit/psrpc v0.3.1
 	github.com/livekit/server-sdk-go v1.0.12-0.20230614223322-5fdaa0386d4a
 	github.com/pion/interceptor v0.1.17
