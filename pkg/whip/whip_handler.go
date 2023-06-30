@@ -437,6 +437,11 @@ func (h *whipHandler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHI
 	_, span := tracer.Start(ctx, "whipHandler.DeleteWHIPResource")
 	defer span.End()
 
+	// only test for stream key correctness if it is part of the request for backward compatibility
+	if req.StreamKey != "" && h.params.StreamKey != req.StreamKey {
+		h.logger.Infow("received delete request with wrong stream key", "streamKey", req.StreamKey)
+	}
+
 	h.Close()
 
 	return &google_protobuf2.Empty{}, nil

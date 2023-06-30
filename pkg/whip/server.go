@@ -119,12 +119,14 @@ func (s *WHIPServer) Start(
 		}()
 
 		vars := mux.Vars(r)
+		streamKey := vars["stream_key"]
 		resourceID := vars["resource_id"]
 
 		logger.Infow("handling WHIP delete request", "resourceID", resourceID)
 
 		req := &rpc.DeleteWHIPResourceRequest{
 			ResourceId: resourceID,
+			StreamKey:  streamKey,
 		}
 
 		w.Header().Set("Access-Control-Allow-Origin", "*")
