@@ -1,7 +1,5 @@
 module github.com/livekit/ingress
 
-replace github.com/livekit/protocol => ../protocol
-
 go 1.18
 
 require (
@@ -11,7 +9,7 @@ require (
 	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/mediatransportutil v0.0.0-20230612070454-d5299b956135
-	github.com/livekit/protocol v1.5.10-0.20230711003953-193f7bd19180
+	github.com/livekit/protocol v1.5.10-0.20230711074119-b0d723aaa9a8
 	github.com/livekit/psrpc v0.3.1
 	github.com/livekit/server-sdk-go v1.0.13
 	github.com/pion/interceptor v0.1.17
