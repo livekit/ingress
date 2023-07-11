@@ -81,7 +81,7 @@ func main() {
 }
 
 func runService(c *cli.Context) error {
-	conf, err := getConfig(c)
+	conf, err := getConfig(c, true)
 	if err != nil {
 		return err
 	}
@@ -190,7 +190,7 @@ func setupHealthHandlers(conf *config.Config, svc *service.Service) error {
 }
 
 func runHandler(c *cli.Context) error {
-	conf, err := getConfig(c)
+	conf, err := getConfig(c, false)
 	if err != nil {
 		return err
 	}
@@ -275,7 +275,7 @@ func setupHandlerRPCHandlers(conf *config.Config, handler *service.Handler, bus 
 	return service.RegisterIngressRpcHandlers(rpcServer, info)
 }
 
-func getConfig(c *cli.Context) (*config.Config, error) {
+func getConfig(c *cli.Context, initialize bool) (*config.Config, error) {
 	configFile := c.String("config")
 	configBody := c.String("config-body")
 	if configBody == "" {
@@ -289,5 +289,17 @@ func getConfig(c *cli.Context) (*config.Config, error) {
 		configBody = string(content)
 	}
 
-	return config.NewConfig(configBody)
+	conf, err := config.NewConfig(configBody)
+	if err != nil {
+		return nil, err
+	}
+
+	if initialize {
+		err = conf.Init()
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return conf, nil
 }

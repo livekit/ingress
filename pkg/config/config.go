@@ -47,7 +47,7 @@ type Config struct {
 
 	// internal
 	ServiceName string `yaml:"-"`
-	NodeID      string `yaml:"-"`
+	NodeID      string // Do not provide, will be overwritten
 }
 
 type CPUCostConfig struct {
@@ -62,17 +62,11 @@ func NewConfig(confString string) (*Config, error) {
 		ApiSecret:   os.Getenv("LIVEKIT_API_SECRET"),
 		WsUrl:       os.Getenv("LIVEKIT_WS_URL"),
 		ServiceName: "ingress",
-		NodeID:      utils.NewGuid("NE_"),
 	}
 	if confString != "" {
 		if err := yaml.Unmarshal([]byte(confString), conf); err != nil {
 			return nil, errors.ErrCouldNotParseConfig(err)
 		}
-	}
-
-	err := conf.Init()
-	if err != nil {
-		return nil, err
 	}
 
 	if conf.Redis == nil {
@@ -83,6 +77,8 @@ func NewConfig(confString string) (*Config, error) {
 }
 
 func (conf *Config) Init() error {
+	conf.NodeID = utils.NewGuid("NE_")
+
 	if conf.RTMPPort == 0 {
 		conf.RTMPPort = DefaultRTMPPort
 	}
