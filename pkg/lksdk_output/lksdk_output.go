@@ -50,8 +50,10 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 
 func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string, disableDTX bool, stereo bool) error {
 	opts := &lksdk.TrackPublicationOptions{
-		Name:   s.params.Audio.Name,
-		Source: s.params.Video.Source,
+		Name:       s.params.Audio.Name,
+		Source:     s.params.Video.Source,
+		DisableDTX: disableDTX,
+		Stereo:     stereo,
 	}
 
 	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: mimeType})
