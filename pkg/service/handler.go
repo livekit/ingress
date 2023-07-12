@@ -2,34 +2,42 @@ package service
 
 import (
 	"context"
+	"net"
 
+	"google.golang.org/grpc"
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/media"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/pprof"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
 )
 
 type Handler struct {
-	conf      *config.Config
-	pipeline  *media.Pipeline
-	rpcClient rpc.IOInfoClient
-	kill      core.Fuse
-	done      core.Fuse
+	ipc.UnimplementedIngressHandlerServer
+
+	conf       *config.Config
+	pipeline   *media.Pipeline
+	rpcClient  rpc.IOInfoClient
+	grpcServer *grpc.Server
+	kill       core.Fuse
+	done       core.Fuse
 }
 
 func NewHandler(conf *config.Config, rpcClient rpc.IOInfoClient) *Handler {
 	return &Handler{
-		conf:      conf,
-		rpcClient: rpcClient,
-		kill:      core.NewFuse(),
-		done:      core.NewFuse(),
+		conf:       conf,
+		rpcClient:  rpcClient,
+		grpcServer: grpc.NewServer(),
+		kill:       core.NewFuse(),
+		done:       core.NewFuse(),
 	}
 }
 
@@ -43,6 +51,23 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 		return
 	}
 	h.pipeline = p
+
+	listener, err := net.Listen(network, getSocketAddress(p.TmpDir))
+	if err != nil {
+		span.RecordError(err)
+		logger.Errorw("failed starting grpc listener", err)
+		return
+	}
+
+	ipc.RegisterIngressHandlerServer(h.grpcServer, h)
+
+	go func() {
+		err := h.grpcServer.Serve(listener)
+		if err != nil {
+			span.RecordError(err)
+			logger.Errorw("failed statrting grpc handler", err)
+		}
+	}()
 
 	// start ingress
 	result := make(chan struct{}, 1)
@@ -97,6 +122,24 @@ func (h *Handler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPRes
 	h.killAndReturnState(ctx)
 
 	return &google_protobuf2.Empty{}, nil
+}
+
+func (h *Handler) GetPProf(ctx context.Context, req *ipc.PProfRequest) (*ipc.PProfResponse, error) {
+	ctx, span := tracer.Start(ctx, "Handler.GetPProf")
+	defer span.End()
+
+	if h.pipeline == nil {
+		return nil, errors.ErrIngressNotFound
+	}
+
+	b, err := pprof.GetProfileData(ctx, req.ProfileName, int(req.Timeout), int(req.Debug))
+	if err != nil {
+		return nil, err
+	}
+
+	return &ipc.PProfResponse{
+		PprofFile: b,
+	}, nil
 }
 
 func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string, extraParams any) (*media.Pipeline, error) {

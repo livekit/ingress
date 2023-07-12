@@ -131,10 +131,18 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) {
 	s.activeHandlers[p.State.ResourceId] = h
 	s.mu.Unlock()
 
-	go s.awaitCleanup(h)
+	if p.TmpDir != "" {
+		err = os.MkdirAll(p.TmpDir, 0755)
+		if err != nil {
+			logger.Errorw("failed creating halder temp directory", err, "path", p.TmpDir)
+			return
+		}
+	}
+
+	go s.awaitCleanup(h, p)
 }
 
-func (s *ProcessManager) awaitCleanup(h *process) {
+func (s *ProcessManager) awaitCleanup(h *process, p *params.Params) {
 	if err := h.cmd.Run(); err != nil {
 		logger.Errorw("could not launch handler", err)
 		if s.onFatal != nil {
@@ -144,6 +152,10 @@ func (s *ProcessManager) awaitCleanup(h *process) {
 
 	h.closed.Break()
 	s.sm.IngressEnded(h.info)
+
+	if p.TmpDir != "" {
+		os.RemoveAll(p.TmpDir)
+	}
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
