@@ -3,26 +3,32 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"os"
 	"os/exec"
+	"path"
 	"sync"
 	"syscall"
 
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/yaml.v3"
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/ipc"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
 )
 
 type process struct {
-	info   *livekit.IngressInfo
-	cmd    *exec.Cmd
-	closed core.Fuse
+	info       *livekit.IngressInfo
+	cmd        *exec.Cmd
+	grpcClient ipc.IngressHandlerClient
+	closed     core.Fuse
 }
 
 type ProcessManager struct {
@@ -46,7 +52,7 @@ func (s *ProcessManager) onFatalError(f func(info *livekit.IngressInfo, err erro
 	s.onFatal = f
 }
 
-func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngressInfoResponse, extraParams any) {
+func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) {
 	// TODO send update on failure
 	_, span := tracer.Start(ctx, "Service.launchHandler")
 	defer span.End()
@@ -99,12 +105,26 @@ func (s *ProcessManager) launchHandler(ctx context.Context, resp *rpc.GetIngress
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	s.sm.IngressStarted(resp.Info)
+	socketAddr := getSocketAddress(p.TmpDir)
+	conn, err := grpc.Dial(socketAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
+			return net.Dial(network, addr)
+		}),
+	)
+	if err != nil {
+		span.RecordError(err)
+		logger.Errorw("could not dial grpc handler", err)
+		return err
+	}
+	h.grpcClient = ipc.NewIngressHandlerClient(conn)
+
 	h := &process{
 		info:   resp.Info,
 		cmd:    cmd,
 		closed: core.NewFuse(),
 	}
+	s.sm.IngressStarted(resp.Info)
 
 	s.mu.Lock()
 	s.activeHandlers[resp.Info.State.ResourceId] = h
@@ -141,4 +161,23 @@ func (s *ProcessManager) killAll() {
 			}
 		}
 	}
+}
+
+func (p *process) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {
+	req := &ipc.PProfRequest{
+		ProfileName: profileName,
+		Timeout:     timeout,
+		Debug:       debuf,
+	}
+
+	resp, err := p.grpcClient.GetPProf(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.PprofFile, nil
+}
+
+func getSocketAddress(handlerTmpDir string) string {
+	return path.Join(handlerTmpDir, "service_rpc.sock")
 }

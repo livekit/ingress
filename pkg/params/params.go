@@ -3,6 +3,8 @@ package params
 import (
 	"context"
 	"fmt"
+	"os"
+	"path"
 	"sync"
 	"time"
 
@@ -33,6 +35,7 @@ type Params struct {
 
 	// relay info
 	RelayUrl string
+	TmpDir   string
 
 	// Input type specific private parameters
 	ExtraParams any
@@ -60,6 +63,8 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		fields = append(fields, "resourceID", info.State.ResourceId)
 		relayUrl = getWHIPRelayUrlPrefix(conf, info.State.ResourceId)
 	}
+
+	tmpDir = path.Join(os.TempDir(), info.State.ResourceId)
 
 	err = conf.InitLogger(fields...)
 	if err != nil {
@@ -112,6 +117,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		Token:                token,
 		WsUrl:                wsUrl,
 		RelayUrl:             relayUrl,
+		TmpDir:               tmpDir,
 		ExtraParams:          ep,
 	}
 
@@ -218,6 +224,11 @@ func (p *Params) CopyInfo() *livekit.IngressInfo {
 	defer p.stateLock.Unlock()
 
 	return proto.Clone(p.IngressInfo).(*livekit.IngressInfo)
+}
+
+// Useful in some paths where the extanded params are not known at creation time
+func (p *Params) SetExtendedParams(ep any) {
+	p.ExtraParams = ep
 }
 
 func (p *Params) SetStatus(status livekit.IngressState_Status, errString string) {

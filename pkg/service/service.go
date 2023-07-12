@@ -110,7 +110,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) error {
 		}
 	}
 
-	go s.manager.launchHandler(ctx, pRes.resp, nil)
+	go s.manager.launchHandler(ctx, pRes.params)
 
 	return nil
 }
@@ -135,18 +135,8 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		}
 	}
 
-	wsUrl := s.conf.WsUrl
-	if pRes.resp.WsUrl != "" {
-		wsUrl = pRes.resp.WsUrl
-	}
-
-	p, err = params.GetParams(context.Background(), s.psrpcClient, s.conf, pRes.resp.Info, wsUrl, pRes.resp.Token, nil)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
 	var rpcServer rpc.IngressHandlerServer
-	if p.BypassTranscoding {
+	if pRes.params.BypassTranscoding {
 		// RPC is handled in the handler process when transcoding
 
 		rpcServer, err = rpc.NewIngressHandlerServer(s.conf.NodeID, ihs, s.bus)
@@ -154,7 +144,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			return nil, nil, nil, err
 		}
 
-		err = RegisterIngressRpcHandlers(rpcServer, p.IngressInfo)
+		err = RegisterIngressRpcHandlers(rpcServer, pRes.params.IngressInfo)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -166,52 +156,52 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		if err != nil {
 			// Client failed to finalize session start
 			logger.Warnw("ingress failed", err)
-			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
-			p.SendStateUpdate(ctx)
+			pRes.params.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+			pRes.params.SendStateUpdate(ctx)
 
-			if p.BypassTranscoding {
-				DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo)
+			if pRes.params.BypassTranscoding {
+				DeregisterIngressRpcHandlers(rpcServer, pRes.params.IngressInfo)
 			}
 			span.RecordError(err)
 			return
 		}
 
-		if p.BypassTranscoding {
-			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
-			p.SendStateUpdate(ctx)
+		if pRes.params.BypassTranscoding {
+			pRes.params.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
+			pRes.params.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(p.IngressInfo)
+			s.sm.IngressStarted(pRes.params.IngressInfo)
 		} else {
-			extraParams := &params.WhipExtraParams{
+			pRes.params.SetExtraParams(&params.WhipExtraParams{
 				MimeTypes: mimeTypes,
-			}
+			})
 
-			go s.manager.launchHandler(ctx, pRes.resp, extraParams)
+			go s.manager.launchHandler(ctx, pRes.params)
 		}
 	}
 
-	if p.BypassTranscoding {
+	if pRes.params.BypassTranscoding {
 		ended = func(err error) {
 			ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ended")
 			defer span.End()
 
 			if err == nil {
-				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+				pRes.params.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
 			} else {
 				logger.Warnw("ingress failed", err)
-				p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+				pRes.params.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
 			}
 
-			p.SendStateUpdate(ctx)
-			s.sm.IngressEnded(p.IngressInfo)
-			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo)
+			pRes.params.SendStateUpdate(ctx)
+			s.sm.IngressEnded(pRes.params.IngressInfo)
+			DeregisterIngressRpcHandlers(rpcServer, pRes.params.IngressInfo)
 		}
 	}
 
 	return p, ready, ended, nil
 }
 
-func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, resourceId string, inputType livekit.IngressInput) (*rpc.GetIngressInfoResponse, error) {
+func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, resourceId string, inputType livekit.IngressInput) (*params.Params, error) {
 	resp, err := s.psrpcClient.GetIngressInfo(ctx, &rpc.GetIngressInfoRequest{
 		StreamKey: streamKey,
 	})
@@ -219,28 +209,33 @@ func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, reso
 		return nil, err
 	}
 
-	err = ingress.Validate(resp.Info)
+	wsUrl := s.conf.WsUrl
+	if resp.WsUrl != "" {
+		wsUrl = resp.WsUrl
+	}
+	// This validates the ingress info
+	p, err = params.GetParams(ctx, s.psrpcClient, s.conf, resp.Info, wsUrl, resp.Token, nil)
 	if err != nil {
-		return resp, err
+		return nil, err
 	}
 
-	if inputType != resp.Info.InputType {
+	if inputType != p.InputType {
 		return nil, ingress.ErrInvalidIngressType
 	}
 
 	// check cpu load
-	if !s.monitor.AcceptIngress(resp.Info) {
+	if !s.monitor.AcceptIngress(p.IngressInfo) {
 		logger.Debugw("rejecting ingress")
 		return nil, errors.ErrServerCapacityExceeded
 	}
 
-	resp.Info.State = &livekit.IngressState{
+	p.SetState(&livekit.IngressState{
 		Status:     livekit.IngressState_ENDPOINT_BUFFERING,
 		StartedAt:  time.Now().UnixNano(),
 		ResourceId: resourceId,
-	}
+	})
 
-	return resp, nil
+	return p, nil
 }
 
 func (s *Service) Run() error {
@@ -281,17 +276,20 @@ func (s *Service) Run() error {
 				ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
 				defer span.End()
 
-				resp, err := s.handleNewPublisher(ctx, req.streamKey, req.resourceId, req.inputType)
-				if resp != nil && resp.Info != nil {
-					s.sendUpdate(ctx, resp.Info, err)
+				p, err := s.handleNewPublisher(ctx, req.streamKey, req.resourceId, req.inputType)
+				var info *livekit.IngressInfo
+				if p != nil {
+					info = p.IngressInfo
 				}
+				s.sendUpdate(ctx, info, err)
+
 				if err != nil {
 					span.RecordError(err)
 				}
 				// Result channel should be buffered
 				req.result <- publishResponse{
-					resp: resp,
-					err:  err,
+					params: p,
+					err:    err,
 				}
 			}()
 		}
@@ -299,7 +297,10 @@ func (s *Service) Run() error {
 }
 
 func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {
-	state := info.State
+	var state *livekit.IngressState
+	if info != nil {
+		state = info.State
+	}
 	if state == nil {
 		state = &livekit.IngressState{}
 	}
