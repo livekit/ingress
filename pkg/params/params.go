@@ -15,6 +15,7 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
+	"github.com/livekit/protocol/utils"
 )
 
 type Params struct {
@@ -275,4 +276,12 @@ func (p *Params) SendStateUpdate(ctx context.Context) {
 	if err != nil {
 		logger.Errorw("failed to send update", err)
 	}
+}
+
+func CopyRedactedIngressInfo(info *livekit.IngressInfo) *livekit.IngressInfo {
+	infoCopy := proto.Clone(info).(*livekit.IngressInfo)
+
+	infoCopy.StreamKey = utils.RedactIdentifier(infoCopy.StreamKey)
+
+	return infoCopy
 }
