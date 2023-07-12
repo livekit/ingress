@@ -14,6 +14,12 @@ type SessionAPI interface {
 	GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error)
 }
 
+type GetProfileDataFunc func(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error)
+
+func (f GetProfileDataFunc) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {
+	return f(ctx, profileName, timeout, debug)
+}
+
 type sessionRecord struct {
 	info       *livekit.IngressInfo
 	sessionAPI SessionAPI
@@ -62,7 +68,7 @@ func (sm *SessionManager) GetIngressSessionAPI(resourceId string) (SessionAPI, e
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 
-	record, ok := sm.sessions[info.State.ResourceId]
+	record, ok := sm.sessions[resourceId]
 	if !ok {
 		return nil, errors.ErrIngressNotFound
 	}

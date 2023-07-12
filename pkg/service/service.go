@@ -20,6 +20,7 @@ import (
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/pprof"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/psrpc"
@@ -35,8 +36,8 @@ type publishRequest struct {
 }
 
 type publishResponse struct {
-	resp *rpc.GetIngressInfoResponse
-	err  error
+	params *params.Params
+	err    error
 }
 
 type Service struct {
@@ -170,7 +171,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			pRes.params.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
 			pRes.params.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(pRes.params.IngressInfo)
+			s.sm.IngressStarted(pRes.params.IngressInfo, GetProfileDataFunc(pprof.GetProfileData))
 		} else {
 			pRes.params.SetExtraParams(&params.WhipExtraParams{
 				MimeTypes: mimeTypes,
@@ -209,12 +210,18 @@ func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, reso
 		return nil, err
 	}
 
+	resp.Info.State = &livekit.IngressState{
+		Status:     livekit.IngressState_ENDPOINT_BUFFERING,
+		StartedAt:  time.Now().UnixNano(),
+		ResourceId: resourceId,
+	}
+
 	wsUrl := s.conf.WsUrl
 	if resp.WsUrl != "" {
 		wsUrl = resp.WsUrl
 	}
 	// This validates the ingress info
-	p, err = params.GetParams(ctx, s.psrpcClient, s.conf, resp.Info, wsUrl, resp.Token, nil)
+	p, err := params.GetParams(ctx, s.psrpcClient, s.conf, resp.Info, wsUrl, resp.Token, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -228,12 +235,6 @@ func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, reso
 		logger.Debugw("rejecting ingress")
 		return nil, errors.ErrServerCapacityExceeded
 	}
-
-	p.SetState(&livekit.IngressState{
-		Status:     livekit.IngressState_ENDPOINT_BUFFERING,
-		StartedAt:  time.Now().UnixNano(),
-		ResourceId: resourceId,
-	})
 
 	return p, nil
 }

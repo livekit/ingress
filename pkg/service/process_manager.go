@@ -24,6 +24,8 @@ import (
 	"github.com/livekit/protocol/tracer"
 )
 
+const network = "unix"
+
 type process struct {
 	info       *livekit.IngressInfo
 	cmd        *exec.Cmd
@@ -64,7 +66,7 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) {
 		return
 	}
 
-	infoString, err := protojson.Marshal(resp.Info)
+	infoString, err := protojson.Marshal(p.IngressInfo)
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("could not marshal request", err)
@@ -72,8 +74,8 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) {
 	}
 
 	extraParamsString := ""
-	if extraParams != nil {
-		p, err := json.Marshal(extraParams)
+	if p.ExtraParams != nil {
+		p, err := json.Marshal(p.ExtraParams)
 		if err != nil {
 			span.RecordError(err)
 			logger.Errorw("could not marshall extra parameters", err)
@@ -87,11 +89,11 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) {
 		"--info", string(infoString),
 	}
 
-	if resp.WsUrl != "" {
-		args = append(args, "--ws-url", resp.WsUrl)
+	if p.WsUrl != "" {
+		args = append(args, "--ws-url", p.WsUrl)
 	}
-	if resp.Token != "" {
-		args = append(args, "--token", resp.Token)
+	if p.Token != "" {
+		args = append(args, "--token", p.Token)
 	}
 	if extraParamsString != "" {
 		args = append(args, "--extra-params", extraParamsString)
@@ -105,6 +107,11 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	h := &process{
+		info:   p.IngressInfo,
+		cmd:    cmd,
+		closed: core.NewFuse(),
+	}
 	socketAddr := getSocketAddress(p.TmpDir)
 	conn, err := grpc.Dial(socketAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -115,19 +122,13 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) {
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("could not dial grpc handler", err)
-		return err
 	}
 	h.grpcClient = ipc.NewIngressHandlerClient(conn)
 
-	h := &process{
-		info:   resp.Info,
-		cmd:    cmd,
-		closed: core.NewFuse(),
-	}
-	s.sm.IngressStarted(resp.Info)
+	s.sm.IngressStarted(p.IngressInfo, h)
 
 	s.mu.Lock()
-	s.activeHandlers[resp.Info.State.ResourceId] = h
+	s.activeHandlers[p.State.ResourceId] = h
 	s.mu.Unlock()
 
 	go s.awaitCleanup(h)
@@ -166,8 +167,8 @@ func (s *ProcessManager) killAll() {
 func (p *process) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {
 	req := &ipc.PProfRequest{
 		ProfileName: profileName,
-		Timeout:     timeout,
-		Debug:       debuf,
+		Timeout:     int32(timeout),
+		Debug:       int32(debug),
 	}
 
 	resp, err := p.grpcClient.GetPProf(ctx, req)

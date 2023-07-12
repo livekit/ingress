@@ -64,7 +64,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		relayUrl = getWHIPRelayUrlPrefix(conf, info.State.ResourceId)
 	}
 
-	tmpDir = path.Join(os.TempDir(), info.State.ResourceId)
+	tmpDir := path.Join(os.TempDir(), info.State.ResourceId)
 
 	err = conf.InitLogger(fields...)
 	if err != nil {
@@ -227,7 +227,7 @@ func (p *Params) CopyInfo() *livekit.IngressInfo {
 }
 
 // Useful in some paths where the extanded params are not known at creation time
-func (p *Params) SetExtendedParams(ep any) {
+func (p *Params) SetExtraParams(ep any) {
 	p.ExtraParams = ep
 }
 
