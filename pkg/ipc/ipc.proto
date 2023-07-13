@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package ipc;
+option go_package = "github.com/livekit/ingress/pkg/ipc";
+
+service IngressHandler {
+  rpc GetPProf(PProfRequest) returns (PProfResponse) {};
+}
+
+message PProfRequest {
+  string profile_name = 1;
+  int32 timeout = 2;
+  int32 debug = 3;
+}
+
+message PProfResponse {
+  bytes pprof_file = 1;
+}
