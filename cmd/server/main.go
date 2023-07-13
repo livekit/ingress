@@ -125,6 +125,8 @@ func runService(c *cli.Context) error {
 		return err
 	}
 
+	svc.StartDebugHandlers()
+
 	err = setupHealthHandlers(conf, svc)
 	if err != nil {
 		return err

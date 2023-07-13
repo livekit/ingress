@@ -199,7 +199,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		}
 	}
 
-	return p, ready, ended, nil
+	return pRes.params, ready, ended, nil
 }
 
 func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, resourceId string, inputType livekit.IngressInput) (*params.Params, error) {
