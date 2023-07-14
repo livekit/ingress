@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"sync"
 
 	"github.com/livekit/ingress/pkg/errors"
@@ -9,16 +8,6 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 )
-
-type SessionAPI interface {
-	GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error)
-}
-
-type GetProfileDataFunc func(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error)
-
-func (f GetProfileDataFunc) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {
-	return f(ctx, profileName, timeout, debug)
-}
 
 type sessionRecord struct {
 	info       *livekit.IngressInfo

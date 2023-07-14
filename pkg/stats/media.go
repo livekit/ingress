@@ -105,8 +105,8 @@ func (s *trackStats) mediaReceived(size int64) {
 func (s *trackStats) getStats() (int, int) {
 	now := time.Now()
 
-	averageBps := int(totalBytes / int64(now.Sub(s.startTime)))
-	currentBps := int(s.currentBytes / int64(now.Sub(s.lastQueryTime)))
+	averageBps := int((totalBytes * 8) / int64(now.Sub(s.startTime)))
+	currentBps := int((s.currentBytes * 8) / int64(now.Sub(s.lastQueryTime)))
 
 	s.lastQueryTime = now
 	s.currentBytes = 0

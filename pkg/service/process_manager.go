@@ -19,6 +19,7 @@ import (
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
@@ -189,6 +190,19 @@ func (p *process) GetProfileData(ctx context.Context, profileName string, timeou
 	}
 
 	return resp.PprofFile, nil
+}
+
+func (p *process) UpdateMediaStats(s *types.MediaStats) error {
+	req := &ipc.UpdateMediaStatsRequest{
+		AudioAverateBitrate: s.AudioAverageBitrate,
+		AudioCurrentBitrate: s.AudioCurrentBitrate,
+		VideoAverateBitrate: s.VideoAverageBitrate,
+		VideoCurrentBitrate: s.VideoCurrentBitrate,
+	}
+
+	_, err := p.grpcClient.UpdateMediaStats(req)
+
+	return err
 }
 
 func getSocketAddress(handlerTmpDir string) string {
