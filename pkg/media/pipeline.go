@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -205,6 +206,7 @@ func (p *Pipeline) handleStreamCollectionMessage(msg *gst.Message) {
 		}
 
 		gstStruct := stream.Caps().GetStructureAt(0)
+		fmt.Println("CAPS", gstStruct)
 
 		kind := getKindFromGstMimeType(gstStruct)
 		switch kind {

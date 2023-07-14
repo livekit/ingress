@@ -251,6 +251,12 @@ func (p *Params) SetInputAudioState(ctx context.Context, audioState *livekit.Inp
 	p.stateLock.Lock()
 	modified := false
 
+	// Do not overwrite the bitrate
+	if audioState != nil && p.State.Audio != nil {
+		audioState.AverageBitrate = p.State.Audio.AverageBitrate
+		audioState.CurrentBitrate = p.State.Audio.CurrentBitrate
+	}
+
 	if !proto.Equal(audioState, p.State.Audio) {
 		modified = true
 		p.State.Audio = audioState
@@ -266,6 +272,12 @@ func (p *Params) SetInputVideoState(ctx context.Context, videoState *livekit.Inp
 	p.stateLock.Lock()
 	modified := false
 
+	// Do not overwrite the bitrate
+	if videoState != nil && p.State.Video != nil {
+		videoState.AverageBitrate = p.State.Video.AverageBitrate
+		videoState.CurrentBitrate = p.State.Video.CurrentBitrate
+	}
+
 	if !proto.Equal(videoState, p.State.Video) {
 		modified = true
 		p.State.Video = videoState
@@ -275,6 +287,32 @@ func (p *Params) SetInputVideoState(ctx context.Context, videoState *livekit.Inp
 	if modified && sendUpdateIfModified {
 		p.SendStateUpdate(ctx)
 	}
+}
+
+func (p *Params) SetInputAudioBitrate(averageBps int, currentBps int) {
+	p.stateLock.Lock()
+
+	if p.State.Audio == nil {
+		p.State.Audio = &livekit.InputAudioState{}
+	}
+
+	p.State.Audio.AverageBitrate = uint32(averageBps)
+	p.State.Audio.CurrentBitrate = uint32(currentBps)
+
+	p.stateLock.Unlock()
+}
+
+func (p *Params) SetInputVideoBitrate(averageBps int, currentBps int) {
+	p.stateLock.Lock()
+
+	if p.State.Video == nil {
+		p.State.Video = &livekit.InputVideoState{}
+	}
+
+	p.State.Video.AverageBitrate = uint32(averageBps)
+	p.State.Video.CurrentBitrate = uint32(currentBps)
+
+	p.stateLock.Unlock()
 }
 
 func (p *Params) SendStateUpdate(ctx context.Context) {
