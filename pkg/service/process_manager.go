@@ -192,7 +192,7 @@ func (p *process) GetProfileData(ctx context.Context, profileName string, timeou
 	return resp.PprofFile, nil
 }
 
-func (p *process) UpdateMediaStats(s *types.MediaStats) error {
+func (p *process) UpdateMediaStats(ctx context.Context, s *types.MediaStats) error {
 	req := &ipc.UpdateMediaStatsRequest{
 		AudioAverateBitrate: s.AudioAverageBitrate,
 		AudioCurrentBitrate: s.AudioCurrentBitrate,
@@ -200,7 +200,7 @@ func (p *process) UpdateMediaStats(s *types.MediaStats) error {
 		VideoCurrentBitrate: s.VideoCurrentBitrate,
 	}
 
-	_, err := p.grpcClient.UpdateMediaStats(req)
+	_, err := p.grpcClient.UpdateMediaStats(ctx, req)
 
 	return err
 }

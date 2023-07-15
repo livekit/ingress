@@ -1,6 +1,7 @@
 package stats
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -58,16 +59,17 @@ func (m *MediaStatsReporter) runMediaStatsCollector() {
 	for {
 		select {
 		case <-ticker.C:
-			m.updateIngressState()
+			// TODO extend core.Fuse to provide a context?
+			m.updateIngressState(context.Background())
 		case <-m.done.Watch():
 			return
 		}
 	}
 }
 
-func (m *MediaStatsReporter) updateIngressState() {
+func (m *MediaStatsReporter) updateIngressState(ctx context.Context) {
 	var audioOk, videoOk bool
-	var audioAverageBps, audioCurrentBps, videoAverageBps, videoCurrentBps int
+	var audioAverageBps, audioCurrentBps, videoAverageBps, videoCurrentBps uint32
 	var s *trackStats
 
 	m.lock.Lock()
@@ -90,7 +92,7 @@ func (m *MediaStatsReporter) updateIngressState() {
 		ms.VideoCurrentBitrate = &videoCurrentBps
 	}
 
-	m.sessionAPI.UpdateMediaStats(ms)
+	m.sessionAPI.UpdateMediaStats(ctx, ms)
 
 	// TODO send analytics update
 }
@@ -107,11 +109,11 @@ func (s *trackStats) mediaReceived(size int64) {
 	s.currentBytes += size
 }
 
-func (s *trackStats) getStats() (int, int) {
+func (s *trackStats) getStats() (uint32, uint32) {
 	now := time.Now()
 
-	averageBps := int((s.totalBytes * 8) / int64(now.Sub(s.startTime)))
-	currentBps := int((s.currentBytes * 8) / int64(now.Sub(s.lastQueryTime)))
+	averageBps := uint32((s.totalBytes * 8) / int64(now.Sub(s.startTime)))
+	currentBps := uint32((s.currentBytes * 8) / int64(now.Sub(s.lastQueryTime)))
 
 	s.lastQueryTime = now
 	s.currentBytes = 0

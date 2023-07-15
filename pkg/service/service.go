@@ -171,7 +171,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			pRes.params.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
 			pRes.params.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(pRes.params.IngressInfo, &localSessionAPI{params: params})
+			s.sm.IngressStarted(pRes.params.IngressInfo, &localSessionAPI{params: pRes.params})
 		} else {
 			pRes.params.SetExtraParams(&params.WhipExtraParams{
 				MimeTypes: mimeTypes,
@@ -286,8 +286,8 @@ func (s *Service) Run() error {
 
 				if err != nil {
 					span.RecordError(err)
-				} else {
-					logger.Infow("received ingress info", "ingressID", resp.Info.IngressId, "streamKey", resp.Info.StreamKey, "resourceID", resp.Info.State.ResourceId, "ingressInfo", params.CopyRedactedIngressInfo(resp.Info))
+				} else if info != nil {
+					logger.Infow("received ingress info", "ingressID", info.IngressId, "streamKey", info.StreamKey, "resourceID", info.State.ResourceId, "ingressInfo", params.CopyRedactedIngressInfo(info))
 				}
 				// Result channel should be buffered
 				req.result <- publishResponse{
@@ -369,7 +369,7 @@ func (a *localSessionAPI) GetProfileData(ctx context.Context, profileName string
 	return pprof.GetProfileData(ctx, profileName, timeout, debug)
 }
 
-func (a *localSessionAPI) UpdateMediaStats(s *types.MediaStats) error {
+func (a *localSessionAPI) UpdateMediaStats(ctx context.Context, s *types.MediaStats) error {
 	if s.AudioAverageBitrate != nil && s.AudioCurrentBitrate != nil {
 		a.params.SetInputAudioBitrate(*s.AudioAverageBitrate, *s.AudioCurrentBitrate)
 	}
@@ -377,6 +377,8 @@ func (a *localSessionAPI) UpdateMediaStats(s *types.MediaStats) error {
 	if s.VideoAverageBitrate != nil && s.VideoCurrentBitrate != nil {
 		a.params.SetInputVideoBitrate(*s.VideoAverageBitrate, *s.VideoCurrentBitrate)
 	}
+
+	return nil
 }
 
 func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) error {

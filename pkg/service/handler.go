@@ -143,7 +143,7 @@ func (h *Handler) GetPProf(ctx context.Context, req *ipc.PProfRequest) (*ipc.PPr
 	}, nil
 }
 
-func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStatsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStatsRequest) (*emptypb.Empty, error) {
 	ctx, span := tracer.Start(ctx, "Handler.UpdateMediaStats")
 	defer span.End()
 
@@ -157,6 +157,8 @@ func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStats
 	if in.VideoAverateBitrate != nil && in.VideoCurrentBitrate != nil {
 		h.pipeline.SetInputVideoBitrate(*in.VideoAverateBitrate, *in.VideoCurrentBitrate)
 	}
+
+	return &emptypb.Empty{}, nil
 }
 
 func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string, extraParams any) (*media.Pipeline, error) {

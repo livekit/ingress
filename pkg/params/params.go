@@ -289,28 +289,28 @@ func (p *Params) SetInputVideoState(ctx context.Context, videoState *livekit.Inp
 	}
 }
 
-func (p *Params) SetInputAudioBitrate(averageBps int, currentBps int) {
+func (p *Params) SetInputAudioBitrate(averageBps uint32, currentBps uint32) {
 	p.stateLock.Lock()
 
 	if p.State.Audio == nil {
 		p.State.Audio = &livekit.InputAudioState{}
 	}
 
-	p.State.Audio.AverageBitrate = uint32(averageBps)
-	p.State.Audio.CurrentBitrate = uint32(currentBps)
+	p.State.Audio.AverageBitrate = averageBps
+	p.State.Audio.CurrentBitrate = currentBps
 
 	p.stateLock.Unlock()
 }
 
-func (p *Params) SetInputVideoBitrate(averageBps int, currentBps int) {
+func (p *Params) SetInputVideoBitrate(averageBps uint32, currentBps uint32) {
 	p.stateLock.Lock()
 
 	if p.State.Video == nil {
 		p.State.Video = &livekit.InputVideoState{}
 	}
 
-	p.State.Video.AverageBitrate = uint32(averageBps)
-	p.State.Video.CurrentBitrate = uint32(currentBps)
+	p.State.Video.AverageBitrate = averageBps
+	p.State.Video.CurrentBitrate = currentBps
 
 	p.stateLock.Unlock()
 }

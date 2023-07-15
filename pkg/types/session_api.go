@@ -4,12 +4,12 @@ import "context"
 
 type SessionAPI interface {
 	GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error)
-	UpdateMediaStats(stats *MediaStats) error
+	UpdateMediaStats(ctx context.Context, stats *MediaStats) error
 }
 
 type MediaStats struct {
-	AudioAverageBitrate *int
-	AudioCurrentBitrate *int
-	VideoAverageBitrate *int
-	VideoCurrentBitrate *int
+	AudioAverageBitrate *uint32
+	AudioCurrentBitrate *uint32
+	VideoAverageBitrate *uint32
+	VideoCurrentBitrate *uint32
 }

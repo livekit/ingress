@@ -21,8 +21,8 @@ message PProfResponse {
 }
 
 message UpdateMediaStatsRequest {
-  optional int32 audio_averate_bitrate = 1;
-  optional int32 audio_current_bitrate = 2;
-  optional int32 video_averate_bitrate = 3;
-  optional int32 video_current_bitrate = 4;
+  optional uint32 audio_averate_bitrate = 1;
+  optional uint32 audio_current_bitrate = 2;
+  optional uint32 video_averate_bitrate = 3;
+  optional uint32 video_current_bitrate = 4;
 }
