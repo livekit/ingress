@@ -286,6 +286,8 @@ func (s *Service) Run() error {
 
 				if err != nil {
 					span.RecordError(err)
+				} else {
+					logger.Infow("received ingress info", "ingressID", resp.Info.IngressId, "streamKey", resp.Info.StreamKey, "resourceID", resp.Info.State.ResourceId, "ingressInfo", params.CopyRedactedIngressInfo(resp.Info))
 				}
 				// Result channel should be buffered
 				req.result <- publishResponse{
