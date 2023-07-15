@@ -21,7 +21,8 @@ type VideoSampleProvider interface {
 }
 
 type LKSDKOutput struct {
-	room *lksdk.Room
+	logger logger.Logger
+	room   *lksdk.Room
 
 	params *params.Params
 }
@@ -40,12 +41,17 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 		return nil, err
 	}
 
-	p.SetRoomId(room.SID())
-
-	return &LKSDKOutput{
+	s := &LKSDKOutput{
 		room:   room,
 		params: p,
-	}, nil
+		logger: logger.GetLogger().WithValues("ingressID", p.IngressId, "resourceID", p.State.ResourceId, "roomID", room.SID()),
+	}
+
+	s.logger.Infow("connected to room")
+
+	p.SetRoomId(room.SID())
+
+	return s, nil
 }
 
 func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string, disableDTX bool, stereo bool) error {
@@ -58,29 +64,29 @@ func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string
 
 	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: mimeType})
 	if err != nil {
-		logger.Errorw("could not create audio track", err)
+		s.logger.Errorw("could not create audio track", err)
 		return err
 	}
 
 	var pub *lksdk.LocalTrackPublication
 	onComplete := func() {
-		logger.Debugw("audio track write complete, unpublishing audio track")
+		s.logger.Debugw("audio track write complete, unpublishing audio track")
 		if pub != nil {
 			if err := s.room.LocalParticipant.UnpublishTrack(pub.SID()); err != nil {
-				logger.Errorw("could not unpublish audio track", err)
+				s.logger.Errorw("could not unpublish audio track", err)
 			}
 		}
 		output.Close()
 	}
 	track.OnBind(func() {
 		if err := track.StartWrite(output, onComplete); err != nil {
-			logger.Errorw("could not start writing audio track", err)
+			s.logger.Errorw("could not start writing audio track", err)
 		}
 	})
 
 	pub, err = s.room.LocalParticipant.PublishTrack(track, opts)
 	if err != nil {
-		logger.Errorw("could not publish audio track", err)
+		s.logger.Errorw("could not publish audio track", err)
 		return err
 	}
 
@@ -103,12 +109,12 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 	for i, layer := range layers {
 		output := outputs[i]
 		onComplete := func() {
-			logger.Debugw("video track layer write complete", "layer", layer.Quality.String())
+			s.logger.Debugw("video track layer write complete", "layer", layer.Quality.String())
 			if pub != nil {
 				if atomic.AddInt32(&activeLayerCount, -1) == 0 {
-					logger.Debugw("unpublishing video track")
+					s.logger.Debugw("unpublishing video track")
 					if err := s.room.LocalParticipant.UnpublishTrack(pub.SID()); err != nil {
-						logger.Errorw("could not unpublish video track", err)
+						s.logger.Errorw("could not unpublish video track", err)
 					}
 				}
 			}
@@ -118,9 +124,9 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 		onRTCP := func(pkt rtcp.Packet) {
 			switch pkt.(type) {
 			case *rtcp.PictureLossIndication:
-				logger.Debugw("PLI received")
+				s.logger.Debugw("PLI received")
 				if err := output.ForceKeyFrame(); err != nil {
-					logger.Errorw("could not force key frame", err)
+					s.logger.Errorw("could not force key frame", err)
 				}
 			}
 		}
@@ -129,13 +135,13 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 		},
 			lksdk.WithRTCPHandler(onRTCP), lksdk.WithSimulcast(s.params.IngressId, layer))
 		if err != nil {
-			logger.Errorw("could not create video track", err)
+			s.logger.Errorw("could not create video track", err)
 			return err
 		}
 
 		track.OnBind(func() {
 			if err := track.StartWrite(output, onComplete); err != nil {
-				logger.Errorw("could not start writing video track", err)
+				s.logger.Errorw("could not start writing video track", err)
 			}
 		})
 		tracks = append(tracks, track)
@@ -143,17 +149,17 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 
 	pub, err = s.room.LocalParticipant.PublishSimulcastTrack(tracks, opts)
 	if err != nil {
-		logger.Errorw("could not publish video track", err)
+		s.logger.Errorw("could not publish video track", err)
 		return err
 	}
 	activeLayerCount = int32(len(tracks))
 
-	logger.Debugw("published video track")
+	s.logger.Debugw("published video track")
 
 	return nil
 }
 
 func (s *LKSDKOutput) Close() {
-	logger.Debugw("disconnecting from room")
+	s.logger.Debugw("disconnecting from room")
 	s.room.Disconnect()
 }

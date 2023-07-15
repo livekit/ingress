@@ -5,6 +5,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"go/build"
 	"os"
@@ -22,6 +23,51 @@ const (
 )
 
 var plugins = []string{"gstreamer", "gst-plugins-base", "gst-plugins-good", "gst-plugins-bad", "gst-plugins-ugly", "gst-libav"}
+
+type packageInfo struct {
+	Dir string
+}
+
+func Proto() error {
+	ctx := context.Background()
+	fmt.Println("generating protobuf")
+
+	// parse go mod output
+	pkgOut, err := mageutil.Out(ctx, "go list -json -m github.com/livekit/protocol")
+	if err != nil {
+		return err
+	}
+	pi := packageInfo{}
+	if err = json.Unmarshal(pkgOut, &pi); err != nil {
+		return err
+	}
+
+	_, err = mageutil.GetToolPath("protoc")
+	if err != nil {
+		return err
+	}
+	protocGoPath, err := mageutil.GetToolPath("protoc-gen-go")
+	if err != nil {
+		return err
+	}
+	protocGrpcGoPath, err := mageutil.GetToolPath("protoc-gen-go-grpc")
+	if err != nil {
+		return err
+	}
+
+	// generate grpc-related protos
+	return mageutil.RunDir(ctx, "pkg/ipc", fmt.Sprintf(
+		"protoc"+
+			" --go_out ."+
+			" --go-grpc_out ."+
+			" --go_opt=paths=source_relative"+
+			" --go-grpc_opt=paths=source_relative"+
+			" --plugin=go=%s"+
+			" --plugin=go-grpc=%s"+
+			" -I%s -I=. ipc.proto",
+		protocGoPath, protocGrpcGoPath, pi.Dir,
+	))
+}
 
 func Bootstrap() error {
 	brewPrefix, err := getBrewPrefix()
