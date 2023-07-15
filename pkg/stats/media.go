@@ -6,12 +6,11 @@ import (
 
 	"github.com/frostbyte73/core"
 
-	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
 )
 
 type MediaStatsReporter struct {
-	params *params.Params
+	sessionAPI types.SessionAPI
 
 	lock  sync.Mutex
 	done  core.Fuse
@@ -72,20 +71,26 @@ func (m *MediaStatsReporter) updateIngressState() {
 	var s *trackStats
 
 	m.lock.Lock()
-	if audioOk, s = m.stats[types.Audio]; audioOk {
-		audioAvergaeBps, audioCurrentBps := s.getStats()
+	if s, audioOk = m.stats[types.Audio]; audioOk {
+		audioAverageBps, audioCurrentBps = s.getStats()
 	}
-	if videoOk, s := m.stats[types.Video]; videoOk {
-		videoAvergaeBps, videoCurrentBps := s.getStats()
+	if s, videoOk = m.stats[types.Video]; videoOk {
+		videoAverageBps, videoCurrentBps = s.getStats()
 	}
 	m.lock.Unlock()
 
+	ms := &types.MediaStats{}
+
 	if audioOk {
-		m.params.SetInputAudioBitrate(audioAverageBps, audioCurrentBps)
+		ms.AudioAverageBitrate = &audioAverageBps
+		ms.AudioCurrentBitrate = &audioCurrentBps
 	}
 	if videoOk {
-		m.params.SetInputVideoBitrate(videoAverageBps, videoCurrentBps)
+		ms.VideoAverageBitrate = &videoAverageBps
+		ms.VideoCurrentBitrate = &videoCurrentBps
 	}
+
+	m.sessionAPI.UpdateMediaStats(ms)
 
 	// TODO send analytics update
 }
@@ -105,7 +110,7 @@ func (s *trackStats) mediaReceived(size int64) {
 func (s *trackStats) getStats() (int, int) {
 	now := time.Now()
 
-	averageBps := int((totalBytes * 8) / int64(now.Sub(s.startTime)))
+	averageBps := int((s.totalBytes * 8) / int64(now.Sub(s.startTime)))
 	currentBps := int((s.currentBytes * 8) / int64(now.Sub(s.lastQueryTime)))
 
 	s.lastQueryTime = now

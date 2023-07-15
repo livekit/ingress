@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/emptypb"
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/frostbyte73/core"
@@ -140,6 +141,22 @@ func (h *Handler) GetPProf(ctx context.Context, req *ipc.PProfRequest) (*ipc.PPr
 	return &ipc.PProfResponse{
 		PprofFile: b,
 	}, nil
+}
+
+func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStatsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	ctx, span := tracer.Start(ctx, "Handler.UpdateMediaStats")
+	defer span.End()
+
+	if h.pipeline == nil {
+		return &emptypb.Empty{}, nil
+	}
+
+	if in.AudioAverateBitrate != nil && in.AudioCurrentBitrate != nil {
+		h.pipeline.SetInputAudioBitrate(*in.AudioAverateBitrate, *in.AudioCurrentBitrate)
+	}
+	if in.VideoAverateBitrate != nil && in.VideoCurrentBitrate != nil {
+		h.pipeline.SetInputVideoBitrate(*in.VideoAverateBitrate, *in.VideoCurrentBitrate)
+	}
 }
 
 func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string, extraParams any) (*media.Pipeline, error) {
