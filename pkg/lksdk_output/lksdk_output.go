@@ -57,7 +57,7 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string, disableDTX bool, stereo bool) error {
 	opts := &lksdk.TrackPublicationOptions{
 		Name:       s.params.Audio.Name,
-		Source:     s.params.Video.Source,
+		Source:     s.params.Audio.Source,
 		DisableDTX: disableDTX,
 		Stereo:     stereo,
 	}
