@@ -137,7 +137,6 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 	}
 
 	var rpcServer rpc.IngressHandlerServer
-	var sessionAPI types.SessionAPI
 	if pRes.params.BypassTranscoding {
 		// RPC is handled in the handler process when transcoding
 
