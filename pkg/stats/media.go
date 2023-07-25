@@ -26,10 +26,11 @@ type trackStats struct {
 	lastQueryTime time.Time
 }
 
-func NewMediaStats() *MediaStatsReporter {
+func NewMediaStats(sessionAPI types.SessionAPI) *MediaStatsReporter {
 	m := &MediaStatsReporter{
-		stats: make(map[types.StreamKind]*trackStats),
-		done:  core.NewFuse(),
+		sessionAPI: sessionAPI,
+		stats:      make(map[types.StreamKind]*trackStats),
+		done:       core.NewFuse(),
 	}
 
 	go func() {
@@ -39,13 +40,17 @@ func NewMediaStats() *MediaStatsReporter {
 	return m
 }
 
-func (m *MediaStatsReporter) AddTrack(kind types.StreamKind) {
+func (m *MediaStatsReporter) MediaReceived(kind types.StreamKind, size int64) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	if _, ok := m.stats[kind]; !ok {
-		m.stats[kind] = &trackStats{}
+	ts, ok := m.stats[kind]
+	if !ok {
+		ts = &trackStats{}
+		m.stats[kind] = ts
 	}
+
+	ts.mediaReceived(size)
 }
 
 func (m *MediaStatsReporter) Close() {

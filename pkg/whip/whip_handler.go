@@ -13,6 +13,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/livekit"
@@ -33,6 +34,7 @@ const (
 type whipHandler struct {
 	logger logger.Logger
 	params *params.Params
+	stats  *stats.MediaStatsReporter
 
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
@@ -60,11 +62,12 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 	}
 }
 
-func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer string) (string, error) {
+func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer string, stats *stats.MediaStatsReporter) (string, error) {
 	var err error
 
 	h.logger = logger.GetLogger().WithValues("ingressID", p.IngressId, "resourceID", p.State.ResourceId)
 	h.params = p
+	h.stats = stats
 
 	if p.BypassTranscoding {
 		h.sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, p)
@@ -306,7 +309,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 		return
 	}
 
-	th, err := newWHIPTrackHandler(logger, track, receiver, sync, mediaSink, h.writePLI, h.sync.OnRTCP)
+	th, err := newWHIPTrackHandler(logger, track, receiver, sync, mediaSink, h.writePLI, h.sync.OnRTCP, h.stats)
 	if err != nil {
 		logger.Warnw("failed creating whip track handler", err)
 		return

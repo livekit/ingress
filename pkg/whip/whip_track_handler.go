@@ -10,6 +10,7 @@ import (
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/server-sdk-go/pkg/jitter"
 	"github.com/livekit/server-sdk-go/pkg/synchronizer"
@@ -40,6 +41,7 @@ type whipTrackHandler struct {
 	sync         *synchronizer.TrackSynchronizer
 	writePLI     func(ssrc webrtc.SSRC)
 	onRTCP       func(packet rtcp.Packet)
+	stats        *stats.MediaStatsReporter
 
 	firstPacket sync.Once
 	fuse        core.Fuse
@@ -53,6 +55,7 @@ func newWHIPTrackHandler(
 	mediaSink MediaSink,
 	writePLI func(ssrc webrtc.SSRC),
 	onRTCP func(packet rtcp.Packet),
+	stats *stats.MediaStatsReporter,
 ) (*whipTrackHandler, error) {
 	t := &whipTrackHandler{
 		logger:      logger,
@@ -62,6 +65,7 @@ func newWHIPTrackHandler(
 		mediaSink:   mediaSink,
 		writePLI:    writePLI,
 		onRTCP:      onRTCP,
+		stats:       stats,
 		fuse:        core.NewFuse(),
 	}
 
@@ -180,6 +184,10 @@ func (t *whipTrackHandler) processRTPPacket() error {
 			buf, err := t.depacketizer.Unmarshal(pkt.Payload)
 			if err != nil {
 				return err
+			}
+
+			if t.stats != nil {
+				t.stats.MediaReceived(streamKindFromCodecType(t.remoteTrack.Kind()), int64(len(buf)))
 			}
 
 			_, err = buffer.Write(buf)
