@@ -111,18 +111,21 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*stats
 		}
 	}
 
+	err := s.manager.launchHandler(ctx, pRes.params)
+	if err != nil {
+		return nil, err
+	}
+
 	api, err := s.sm.GetIngressSessionAPI(resourceId)
 	if err != nil {
 		return nil, err
 	}
 	stats := stats.NewMediaStats(api)
 
-	go s.manager.launchHandler(ctx, pRes.params)
-
 	return stats, nil
 }
 
-func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error), ended func(err error), st *stats.MediaStatsReporter, err error) {
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error) *stats.MediaStatsReporter, ended func(err error), err error) {
 	res := make(chan publishResponse)
 	r := publishRequest{
 		streamKey:  streamKey,
@@ -134,11 +137,11 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 	var pRes publishResponse
 	select {
 	case <-s.shutdown.Watch():
-		return nil, nil, nil, nil, errors.ErrServerShuttingDown
+		return nil, nil, nil, errors.ErrServerShuttingDown
 	case s.publishRequests <- r:
 		pRes = <-res
 		if pRes.err != nil {
-			return nil, nil, nil, nil, pRes.err
+			return nil, nil, nil, pRes.err
 		}
 	}
 
@@ -148,16 +151,16 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 
 		rpcServer, err = rpc.NewIngressHandlerServer(s.conf.NodeID, ihs, s.bus)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		err = RegisterIngressRpcHandlers(rpcServer, pRes.params.IngressInfo)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, err
 		}
 	}
 
-	ready = func(mimeTypes map[types.StreamKind]string, err error) {
+	ready = func(mimeTypes map[types.StreamKind]string, err error) *stats.MediaStatsReporter {
 		ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ready")
 		defer span.End()
 		if err != nil {
@@ -170,7 +173,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 				DeregisterIngressRpcHandlers(rpcServer, pRes.params.IngressInfo)
 			}
 			span.RecordError(err)
-			return
+			return nil
 		}
 
 		if pRes.params.BypassTranscoding {
@@ -183,8 +186,17 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 				MimeTypes: mimeTypes,
 			})
 
-			go s.manager.launchHandler(ctx, pRes.params)
+			err := s.manager.launchHandler(ctx, pRes.params)
+			if err != nil {
+				return nil
+			}
 		}
+
+		api, err := s.sm.GetIngressSessionAPI(resourceId)
+		if err != nil {
+			return nil
+		}
+		return stats.NewMediaStats(api)
 	}
 
 	if pRes.params.BypassTranscoding {
@@ -205,13 +217,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		}
 	}
 
-	api, err := s.sm.GetIngressSessionAPI(resourceId)
-	if err != nil {
-		return nil, nil, nil, nil, err
-	}
-	st = stats.NewMediaStats(api)
-
-	return pRes.params, ready, ended, st, nil
+	return pRes.params, ready, ended, nil
 }
 
 func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, resourceId string, inputType livekit.IngressInput) (*params.Params, error) {

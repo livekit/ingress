@@ -297,9 +297,10 @@ func (p *Params) SetInputAudioBitrate(averageBps uint32, currentBps uint32) {
 	}
 
 	p.State.Audio.AverageBitrate = averageBps
-	p.State.Audio.CurrentBitrate = currentBps
 
 	p.stateLock.Unlock()
+
+	logger.Infow("audio bitate update", "average", averageBps, "current", currentBps)
 }
 
 func (p *Params) SetInputVideoBitrate(averageBps uint32, currentBps uint32) {
@@ -310,9 +311,10 @@ func (p *Params) SetInputVideoBitrate(averageBps uint32, currentBps uint32) {
 	}
 
 	p.State.Video.AverageBitrate = averageBps
-	p.State.Video.CurrentBitrate = currentBps
 
 	p.stateLock.Unlock()
+
+	logger.Infow("video bitate update", "average", averageBps, "current", currentBps)
 }
 
 func (p *Params) SendStateUpdate(ctx context.Context) {

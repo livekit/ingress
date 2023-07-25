@@ -34,11 +34,11 @@ const (
 type whipHandler struct {
 	logger logger.Logger
 	params *params.Params
-	stats  *stats.MediaStatsReporter
 
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
+	stats              *stats.MediaStatsReporter
 	sdkOutput          *lksdk_output.LKSDKOutput // only for passthrough
 	expectedTrackCount int
 	result             chan error
@@ -62,12 +62,11 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 	}
 }
 
-func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer string, stats *stats.MediaStatsReporter) (string, error) {
+func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer string) (string, error) {
 	var err error
 
 	h.logger = logger.GetLogger().WithValues("ingressID", p.IngressId, "resourceID", p.State.ResourceId)
 	h.params = p
-	h.stats = stats
 
 	if p.BypassTranscoding {
 		h.sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, p)
@@ -155,6 +154,16 @@ loop:
 	return mimeTypes, nil
 }
 
+func (h *whipHandler) SetMediaStatsHandler(stats *stats.MediaStatsReporter) {
+	h.trackLock.Lock()
+	defer h.trackLock.Unlock()
+	h.stats = stats
+
+	for _, th := range h.trackHandlers {
+		th.SetMediaStatsReporter(stats)
+	}
+}
+
 func (h *whipHandler) Close() {
 	if h.pc != nil {
 		h.pc.Close()
@@ -167,6 +176,9 @@ func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
 		h.pc.Close()
 		if h.sdkOutput != nil {
 			h.sdkOutput.Close()
+		}
+		if h.stats != nil {
+			h.stats.Close()
 		}
 	}()
 
@@ -309,7 +321,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 		return
 	}
 
-	th, err := newWHIPTrackHandler(logger, track, receiver, sync, mediaSink, h.writePLI, h.sync.OnRTCP, h.stats)
+	th, err := newWHIPTrackHandler(logger, track, receiver, sync, mediaSink, h.writePLI, h.sync.OnRTCP)
 	if err != nil {
 		logger.Warnw("failed creating whip track handler", err)
 		return

@@ -41,7 +41,9 @@ type whipTrackHandler struct {
 	sync         *synchronizer.TrackSynchronizer
 	writePLI     func(ssrc webrtc.SSRC)
 	onRTCP       func(packet rtcp.Packet)
-	stats        *stats.MediaStatsReporter
+
+	statsLock sync.Mutex
+	stats     *stats.MediaStatsReporter
 
 	firstPacket sync.Once
 	fuse        core.Fuse
@@ -55,7 +57,6 @@ func newWHIPTrackHandler(
 	mediaSink MediaSink,
 	writePLI func(ssrc webrtc.SSRC),
 	onRTCP func(packet rtcp.Packet),
-	stats *stats.MediaStatsReporter,
 ) (*whipTrackHandler, error) {
 	t := &whipTrackHandler{
 		logger:      logger,
@@ -65,7 +66,6 @@ func newWHIPTrackHandler(
 		mediaSink:   mediaSink,
 		writePLI:    writePLI,
 		onRTCP:      onRTCP,
-		stats:       stats,
 		fuse:        core.NewFuse(),
 	}
 
@@ -91,6 +91,13 @@ func (t *whipTrackHandler) Start(onDone func(err error)) (err error) {
 	}
 
 	return nil
+}
+
+func (t *whipTrackHandler) SetMediaStatsReporter(stats *stats.MediaStatsReporter) {
+	t.statsLock.Lock()
+	defer t.statsLock.Unlock()
+
+	t.stats = stats
 }
 
 func (t *whipTrackHandler) Close() {
@@ -186,9 +193,11 @@ func (t *whipTrackHandler) processRTPPacket() error {
 				return err
 			}
 
+			t.statsLock.Lock()
 			if t.stats != nil {
 				t.stats.MediaReceived(streamKindFromCodecType(t.remoteTrack.Kind()), int64(len(buf)))
 			}
+			t.statsLock.Unlock()
 
 			_, err = buffer.Write(buf)
 			if err != nil {

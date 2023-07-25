@@ -55,7 +55,7 @@ func (s *ProcessManager) onFatalError(f func(info *livekit.IngressInfo, err erro
 	s.onFatal = f
 }
 
-func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) {
+func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) error {
 	// TODO send update on failure
 	_, span := tracer.Start(ctx, "Service.launchHandler")
 	defer span.End()
@@ -64,14 +64,14 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) {
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("could not marshal config", err)
-		return
+		return err
 	}
 
 	infoString, err := protojson.Marshal(p.IngressInfo)
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("could not marshal request", err)
-		return
+		return err
 	}
 
 	extraParamsString := ""
@@ -136,11 +136,13 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) {
 		err = os.MkdirAll(p.TmpDir, 0755)
 		if err != nil {
 			logger.Errorw("failed creating halder temp directory", err, "path", p.TmpDir)
-			return
+			return err
 		}
 	}
 
 	go s.awaitCleanup(h, p)
+
+	return nil
 }
 
 func (s *ProcessManager) awaitCleanup(h *process, p *params.Params) {

@@ -58,7 +58,7 @@ func (m *MediaStatsReporter) Close() {
 }
 
 func (m *MediaStatsReporter) runMediaStatsCollector() {
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(60 * time.Second)
 	defer ticker.Stop()
 
 	for {
@@ -98,8 +98,6 @@ func (m *MediaStatsReporter) updateIngressState(ctx context.Context) {
 	}
 
 	m.sessionAPI.UpdateMediaStats(ctx, ms)
-
-	// TODO send analytics update
 }
 
 func (s *trackStats) mediaReceived(size int64) {
@@ -117,8 +115,8 @@ func (s *trackStats) mediaReceived(size int64) {
 func (s *trackStats) getStats() (uint32, uint32) {
 	now := time.Now()
 
-	averageBps := uint32((s.totalBytes * 8) / int64(now.Sub(s.startTime)))
-	currentBps := uint32((s.currentBytes * 8) / int64(now.Sub(s.lastQueryTime)))
+	averageBps := uint32(float64(s.totalBytes) * 8 * float64(time.Second) / float64(now.Sub(s.startTime)))
+	currentBps := uint32(float64(s.currentBytes) * 8 * float64(time.Second) / float64(now.Sub(s.lastQueryTime)))
 
 	s.lastQueryTime = now
 	s.currentBytes = 0

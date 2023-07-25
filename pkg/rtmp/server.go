@@ -71,6 +71,10 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 				return stats, nil
 			})
 			h.OnCloseCallback(func(resourceId string) {
+				if h.stats != nil {
+					h.stats.Close()
+				}
+
 				s.handlers.Delete(resourceId)
 			})
 
