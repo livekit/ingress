@@ -133,16 +133,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 }
 
 func getLoggerFields(info *livekit.IngressInfo) []interface{} {
-	fields := []interface{}{"ingressID", info.IngressId}
-
-	switch info.InputType {
-	case livekit.IngressInput_RTMP_INPUT:
-		fields = append(fields, "resourceID", info.State.ResourceId)
-	case livekit.IngressInput_WHIP_INPUT:
-		fields = append(fields, "resourceID", info.State.ResourceId)
-	}
-
-	return fields
+	return []interface{}{"ingressID", info.IngressId, "resourceID", info.State.ResourceId}
 }
 
 func getRTMPRelayUrl(conf *config.Config, resourceId string) string {
@@ -274,7 +265,6 @@ func (p *Params) SetInputAudioState(ctx context.Context, audioState *livekit.Inp
 	// Do not overwrite the bitrate
 	if audioState != nil && p.State.Audio != nil {
 		audioState.AverageBitrate = p.State.Audio.AverageBitrate
-		audioState.CurrentBitrate = p.State.Audio.CurrentBitrate
 	}
 
 	if !proto.Equal(audioState, p.State.Audio) {
@@ -295,7 +285,6 @@ func (p *Params) SetInputVideoState(ctx context.Context, videoState *livekit.Inp
 	// Do not overwrite the bitrate
 	if videoState != nil && p.State.Video != nil {
 		videoState.AverageBitrate = p.State.Video.AverageBitrate
-		videoState.CurrentBitrate = p.State.Video.CurrentBitrate
 	}
 
 	if !proto.Equal(videoState, p.State.Video) {
