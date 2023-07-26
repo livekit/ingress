@@ -27,6 +27,8 @@ type Params struct {
 	*livekit.IngressInfo
 	*config.Config
 
+	logger logger.Logger
+
 	AudioEncodingOptions *livekit.IngressAudioEncodingOptions
 	VideoEncodingOptions *livekit.IngressVideoEncodingOptions
 
@@ -46,6 +48,16 @@ type WhipExtraParams struct {
 	MimeTypes map[types.StreamKind]string `json:"mime_types"`
 }
 
+func InitLogger(conf *config.Config, info *livekit.IngressInfo) error {
+	fields := getLoggerFields(info)
+
+	err := conf.InitLogger(fields...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token string, ep any) (*Params, error) {
 	var err error
 
@@ -55,22 +67,16 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	}
 
 	relayUrl := ""
-	fields := []interface{}{"ingressID", info.IngressId}
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		fields = append(fields, "resourceID", info.State.ResourceId)
 		relayUrl = getRTMPRelayUrl(conf, info.State.ResourceId)
 	case livekit.IngressInput_WHIP_INPUT:
-		fields = append(fields, "resourceID", info.State.ResourceId)
 		relayUrl = getWHIPRelayUrlPrefix(conf, info.State.ResourceId)
 	}
 
-	tmpDir := path.Join(os.TempDir(), info.State.ResourceId)
+	l := logger.GetLogger().WithValues(getLoggerFields(info)...)
 
-	err = conf.InitLogger(fields...)
-	if err != nil {
-		return nil, err
-	}
+	tmpDir := path.Join(os.TempDir(), info.State.ResourceId)
 
 	err = ingress.Validate(info)
 	if err != nil {
@@ -112,6 +118,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	p := &Params{
 		psrpcClient:          psrpcClient,
 		IngressInfo:          infoCopy,
+		logger:               l,
 		Config:               conf,
 		AudioEncodingOptions: audioEncodingOptions,
 		VideoEncodingOptions: videoEncodingOptions,
@@ -123,6 +130,19 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	}
 
 	return p, nil
+}
+
+func getLoggerFields(info *livekit.IngressInfo) []interface{} {
+	fields := []interface{}{"ingressID", info.IngressId}
+
+	switch info.InputType {
+	case livekit.IngressInput_RTMP_INPUT:
+		fields = append(fields, "resourceID", info.State.ResourceId)
+	case livekit.IngressInput_WHIP_INPUT:
+		fields = append(fields, "resourceID", info.State.ResourceId)
+	}
+
+	return fields
 }
 
 func getRTMPRelayUrl(conf *config.Config, resourceId string) string {
@@ -300,7 +320,7 @@ func (p *Params) SetInputAudioBitrate(averageBps uint32, currentBps uint32) {
 
 	p.stateLock.Unlock()
 
-	logger.Infow("audio bitate update", "average", averageBps, "current", currentBps)
+	p.logger.Infow("audio bitate update", "average", averageBps, "current", currentBps)
 }
 
 func (p *Params) SetInputVideoBitrate(averageBps uint32, currentBps uint32) {
@@ -314,7 +334,7 @@ func (p *Params) SetInputVideoBitrate(averageBps uint32, currentBps uint32) {
 
 	p.stateLock.Unlock()
 
-	logger.Infow("video bitate update", "average", averageBps, "current", currentBps)
+	p.logger.Infow("video bitate update", "average", averageBps, "current", currentBps)
 }
 
 func (p *Params) SendStateUpdate(ctx context.Context) {
@@ -325,7 +345,7 @@ func (p *Params) SendStateUpdate(ctx context.Context) {
 		State:     info.State,
 	})
 	if err != nil {
-		logger.Errorw("failed to send update", err)
+		p.logger.Errorw("failed to send update", err)
 	}
 }
 

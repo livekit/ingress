@@ -45,6 +45,8 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	ctx, span := tracer.Start(ctx, "Handler.HandleRequest")
 	defer span.End()
 
+	params.InitLogger(h.conf, info)
+
 	p, err := h.buildPipeline(ctx, info, wsUrl, token, extraParams)
 	if err != nil {
 		span.RecordError(err)
