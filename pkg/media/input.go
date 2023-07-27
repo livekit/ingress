@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/tinyzimmer/go-gst/gst"
-	"github.com/tinyzimmer/go-gst/gst/app"
+	"github.com/tinyzimmer/go-gst/gst/base"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media/rtmp"
@@ -19,7 +19,7 @@ import (
 )
 
 type Source interface {
-	GetSources(ctx context.Context) []*app.Source
+	GetSources(ctx context.Context) []*base.GstBaseSrc
 	Start(ctx context.Context) error
 	Close() error
 }
@@ -50,18 +50,18 @@ func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 		source: src,
 	}
 
-	appSrcs := src.GetSources(ctx)
-	if len(appSrcs) == 0 {
+	srcs := src.GetSources(ctx)
+	if len(srcs) == 0 {
 		return nil, errors.ErrSourceNotReady
 	}
 
-	for _, appSrc := range appSrcs {
+	for _, src := range srcs {
 		decodeBin, err := gst.NewElement("decodebin3")
 		if err != nil {
 			return nil, err
 		}
 
-		if err := bin.AddMany(decodeBin, appSrc.Element); err != nil {
+		if err := bin.AddMany(decodeBin, src.Element); err != nil {
 			return nil, err
 		}
 
@@ -69,7 +69,7 @@ func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 			return nil, err
 		}
 
-		if err = appSrc.Link(decodeBin); err != nil {
+		if err = src.Link(decodeBin); err != nil {
 			return nil, err
 		}
 	}

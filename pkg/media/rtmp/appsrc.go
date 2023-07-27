@@ -7,6 +7,7 @@ import (
 
 	"github.com/tinyzimmer/go-gst/gst"
 	"github.com/tinyzimmer/go-gst/gst/app"
+	"github.com/tinyzimmer/go-gst/gst/base"
 	"go.uber.org/atomic"
 
 	"github.com/livekit/ingress/pkg/errors"
@@ -93,8 +94,8 @@ func (s *RTMPRelaySource) Close() error {
 	return <-s.result
 }
 
-func (s *RTMPRelaySource) GetSources(ctx context.Context) []*app.Source {
-	return []*app.Source{s.flvSrc}
+func (s *RTMPRelaySource) GetSources(ctx context.Context) []*base.GstBaseSrc {
+	return []*base.GstBaseSrc{s.flvSrc.GstBaseSrc}
 }
 
 type appSrcWriter struct {
