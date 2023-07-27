@@ -15,28 +15,18 @@
 package service
 
 import (
-	"context"
 	"sync"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 )
 
-type SessionAPI interface {
-	GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error)
-}
-
-type GetProfileDataFunc func(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error)
-
-func (f GetProfileDataFunc) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {
-	return f(ctx, profileName, timeout, debug)
-}
-
 type sessionRecord struct {
 	info       *livekit.IngressInfo
-	sessionAPI SessionAPI
+	sessionAPI types.SessionAPI
 }
 
 type SessionManager struct {
@@ -53,7 +43,7 @@ func NewSessionManager(monitor *stats.Monitor) *SessionManager {
 	}
 }
 
-func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI SessionAPI) {
+func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI types.SessionAPI) {
 	logger.Infow("ingress started", "ingressID", info.IngressId, "resourceID", info.State.ResourceId)
 
 	sm.lock.Lock()
@@ -78,7 +68,7 @@ func (sm *SessionManager) IngressEnded(info *livekit.IngressInfo) {
 	sm.monitor.IngressEnded(info)
 }
 
-func (sm *SessionManager) GetIngressSessionAPI(resourceId string) (SessionAPI, error) {
+func (sm *SessionManager) GetIngressSessionAPI(resourceId string) (types.SessionAPI, error) {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 

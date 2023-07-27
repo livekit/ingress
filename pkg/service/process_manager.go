@@ -33,6 +33,7 @@ import (
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
@@ -68,7 +69,7 @@ func (s *ProcessManager) onFatalError(f func(info *livekit.IngressInfo, err erro
 	s.onFatal = f
 }
 
-func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) {
+func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) error {
 	// TODO send update on failure
 	_, span := tracer.Start(ctx, "Service.launchHandler")
 	defer span.End()
@@ -77,14 +78,14 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) {
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("could not marshal config", err)
-		return
+		return err
 	}
 
 	infoString, err := protojson.Marshal(p.IngressInfo)
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("could not marshal request", err)
-		return
+		return err
 	}
 
 	extraParamsString := ""
@@ -149,11 +150,13 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) {
 		err = os.MkdirAll(p.TmpDir, 0755)
 		if err != nil {
 			logger.Errorw("failed creating halder temp directory", err, "path", p.TmpDir)
-			return
+			return err
 		}
 	}
 
 	go s.awaitCleanup(h, p)
+
+	return nil
 }
 
 func (s *ProcessManager) awaitCleanup(h *process, p *params.Params) {
@@ -203,6 +206,19 @@ func (p *process) GetProfileData(ctx context.Context, profileName string, timeou
 	}
 
 	return resp.PprofFile, nil
+}
+
+func (p *process) UpdateMediaStats(ctx context.Context, s *types.MediaStats) error {
+	req := &ipc.UpdateMediaStatsRequest{
+		AudioAverateBitrate: s.AudioAverageBitrate,
+		AudioCurrentBitrate: s.AudioCurrentBitrate,
+		VideoAverateBitrate: s.VideoAverageBitrate,
+		VideoCurrentBitrate: s.VideoCurrentBitrate,
+	}
+
+	_, err := p.grpcClient.UpdateMediaStats(ctx, req)
+
+	return err
 }
 
 func getSocketAddress(handlerTmpDir string) string {

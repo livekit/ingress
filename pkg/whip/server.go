@@ -28,6 +28,7 @@ import (
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/logger"
@@ -53,7 +54,7 @@ type WHIPServer struct {
 
 	conf         *config.Config
 	webRTCConfig *rtcconfig.WebRTCConfig
-	onPublish    func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error), func(error), error)
+	onPublish    func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.MediaStatsReporter, func(error), error)
 	rpcClient    rpc.IngressHandlerClient
 
 	handlersLock sync.Mutex
@@ -69,7 +70,7 @@ func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
 
 func (s *WHIPServer) Start(
 	conf *config.Config,
-	onPublish func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error), func(error), error),
+	onPublish func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.MediaStatsReporter, func(error), error),
 	healthHandler HealthHandler,
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -278,7 +279,11 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 		var mimeTypes map[types.StreamKind]string
 		if ready != nil {
 			defer func() {
-				ready(mimeTypes, err)
+				stats := ready(mimeTypes, err)
+				if stats != nil {
+					h.SetMediaStatsHandler(stats)
+				}
+
 				if err != nil {
 					s.handlersLock.Lock()
 					delete(s.handlers, resourceId)

@@ -102,7 +102,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 	return s
 }
 
-func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) error {
+func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*stats.MediaStatsReporter, error) {
 	ctx, span := tracer.Start(context.Background(), "Service.HandleRTMPPublishRequest")
 	defer span.End()
 
@@ -117,20 +117,29 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) error {
 	var pRes publishResponse
 	select {
 	case <-s.shutdown.Watch():
-		return errors.ErrServerShuttingDown
+		return nil, errors.ErrServerShuttingDown
 	case s.publishRequests <- r:
 		pRes = <-res
 		if pRes.err != nil {
-			return pRes.err
+			return nil, pRes.err
 		}
 	}
 
-	go s.manager.launchHandler(ctx, pRes.params)
+	err := s.manager.launchHandler(ctx, pRes.params)
+	if err != nil {
+		return nil, err
+	}
 
-	return nil
+	api, err := s.sm.GetIngressSessionAPI(resourceId)
+	if err != nil {
+		return nil, err
+	}
+	stats := stats.NewMediaStats(api)
+
+	return stats, nil
 }
 
-func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error), ended func(err error), err error) {
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error) *stats.MediaStatsReporter, ended func(err error), err error) {
 	res := make(chan publishResponse)
 	r := publishRequest{
 		streamKey:  streamKey,
@@ -165,7 +174,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		}
 	}
 
-	ready = func(mimeTypes map[types.StreamKind]string, err error) {
+	ready = func(mimeTypes map[types.StreamKind]string, err error) *stats.MediaStatsReporter {
 		ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ready")
 		defer span.End()
 		if err != nil {
@@ -178,21 +187,30 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 				DeregisterIngressRpcHandlers(rpcServer, pRes.params.IngressInfo)
 			}
 			span.RecordError(err)
-			return
+			return nil
 		}
 
 		if pRes.params.BypassTranscoding {
 			pRes.params.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
 			pRes.params.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(pRes.params.IngressInfo, GetProfileDataFunc(pprof.GetProfileData))
+			s.sm.IngressStarted(pRes.params.IngressInfo, &localSessionAPI{params: pRes.params})
 		} else {
 			pRes.params.SetExtraParams(&params.WhipExtraParams{
 				MimeTypes: mimeTypes,
 			})
 
-			go s.manager.launchHandler(ctx, pRes.params)
+			err := s.manager.launchHandler(ctx, pRes.params)
+			if err != nil {
+				return nil
+			}
 		}
+
+		api, err := s.sm.GetIngressSessionAPI(resourceId)
+		if err != nil {
+			return nil
+		}
+		return stats.NewMediaStats(api)
 	}
 
 	if pRes.params.BypassTranscoding {
@@ -373,6 +391,26 @@ func (s *Service) AvailabilityHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Healthy"))
+}
+
+type localSessionAPI struct {
+	params *params.Params
+}
+
+func (a *localSessionAPI) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {
+	return pprof.GetProfileData(ctx, profileName, timeout, debug)
+}
+
+func (a *localSessionAPI) UpdateMediaStats(ctx context.Context, s *types.MediaStats) error {
+	if s.AudioAverageBitrate != nil && s.AudioCurrentBitrate != nil {
+		a.params.SetInputAudioBitrate(*s.AudioAverageBitrate, *s.AudioCurrentBitrate)
+	}
+
+	if s.VideoAverageBitrate != nil && s.VideoCurrentBitrate != nil {
+		a.params.SetInputVideoBitrate(*s.VideoAverageBitrate, *s.VideoCurrentBitrate)
+	}
+
+	return nil
 }
 
 func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) error {

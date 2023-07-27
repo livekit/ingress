@@ -11,6 +11,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -19,7 +20,8 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	IngressHandler_GetPProf_FullMethodName = "/ipc.IngressHandler/GetPProf"
+	IngressHandler_GetPProf_FullMethodName         = "/ipc.IngressHandler/GetPProf"
+	IngressHandler_UpdateMediaStats_FullMethodName = "/ipc.IngressHandler/UpdateMediaStats"
 )
 
 // IngressHandlerClient is the client API for IngressHandler service.
@@ -27,6 +29,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type IngressHandlerClient interface {
 	GetPProf(ctx context.Context, in *PProfRequest, opts ...grpc.CallOption) (*PProfResponse, error)
+	UpdateMediaStats(ctx context.Context, in *UpdateMediaStatsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
 type ingressHandlerClient struct {
@@ -46,11 +49,21 @@ func (c *ingressHandlerClient) GetPProf(ctx context.Context, in *PProfRequest, o
 	return out, nil
 }
 
+func (c *ingressHandlerClient) UpdateMediaStats(ctx context.Context, in *UpdateMediaStatsRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, IngressHandler_UpdateMediaStats_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // IngressHandlerServer is the server API for IngressHandler service.
 // All implementations must embed UnimplementedIngressHandlerServer
 // for forward compatibility
 type IngressHandlerServer interface {
 	GetPProf(context.Context, *PProfRequest) (*PProfResponse, error)
+	UpdateMediaStats(context.Context, *UpdateMediaStatsRequest) (*emptypb.Empty, error)
 	mustEmbedUnimplementedIngressHandlerServer()
 }
 
@@ -60,6 +73,9 @@ type UnimplementedIngressHandlerServer struct {
 
 func (UnimplementedIngressHandlerServer) GetPProf(context.Context, *PProfRequest) (*PProfResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetPProf not implemented")
+}
+func (UnimplementedIngressHandlerServer) UpdateMediaStats(context.Context, *UpdateMediaStatsRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateMediaStats not implemented")
 }
 func (UnimplementedIngressHandlerServer) mustEmbedUnimplementedIngressHandlerServer() {}
 
@@ -92,6 +108,24 @@ func _IngressHandler_GetPProf_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IngressHandler_UpdateMediaStats_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateMediaStatsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(IngressHandlerServer).UpdateMediaStats(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: IngressHandler_UpdateMediaStats_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(IngressHandlerServer).UpdateMediaStats(ctx, req.(*UpdateMediaStatsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // IngressHandler_ServiceDesc is the grpc.ServiceDesc for IngressHandler service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -102,6 +136,10 @@ var IngressHandler_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetPProf",
 			Handler:    _IngressHandler_GetPProf_Handler,
+		},
+		{
+			MethodName: "UpdateMediaStats",
+			Handler:    _IngressHandler_UpdateMediaStats_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

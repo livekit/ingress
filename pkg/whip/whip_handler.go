@@ -27,6 +27,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/livekit"
@@ -51,6 +52,7 @@ type whipHandler struct {
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
+	stats              *stats.MediaStatsReporter
 	sdkOutput          *lksdk_output.LKSDKOutput // only for passthrough
 	expectedTrackCount int
 	result             chan error
@@ -166,6 +168,16 @@ loop:
 	return mimeTypes, nil
 }
 
+func (h *whipHandler) SetMediaStatsHandler(stats *stats.MediaStatsReporter) {
+	h.trackLock.Lock()
+	defer h.trackLock.Unlock()
+	h.stats = stats
+
+	for _, th := range h.trackHandlers {
+		th.SetMediaStatsReporter(stats)
+	}
+}
+
 func (h *whipHandler) Close() {
 	if h.pc != nil {
 		h.pc.Close()
@@ -178,6 +190,9 @@ func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
 		h.pc.Close()
 		if h.sdkOutput != nil {
 			h.sdkOutput.Close()
+		}
+		if h.stats != nil {
+			h.stats.Close()
 		}
 	}()
 

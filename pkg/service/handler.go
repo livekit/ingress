@@ -59,6 +59,8 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	ctx, span := tracer.Start(ctx, "Handler.HandleRequest")
 	defer span.End()
 
+	params.InitLogger(h.conf, info)
+
 	p, err := h.buildPipeline(ctx, info, wsUrl, token, extraParams)
 	if err != nil {
 		span.RecordError(err)
@@ -154,6 +156,24 @@ func (h *Handler) GetPProf(ctx context.Context, req *ipc.PProfRequest) (*ipc.PPr
 	return &ipc.PProfResponse{
 		PprofFile: b,
 	}, nil
+}
+
+func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStatsRequest) (*google_protobuf2.Empty, error) {
+	ctx, span := tracer.Start(ctx, "Handler.UpdateMediaStats")
+	defer span.End()
+
+	if h.pipeline == nil {
+		return &google_protobuf2.Empty{}, nil
+	}
+
+	if in.AudioAverateBitrate != nil && in.AudioCurrentBitrate != nil {
+		h.pipeline.SetInputAudioBitrate(*in.AudioAverateBitrate, *in.AudioCurrentBitrate)
+	}
+	if in.VideoAverateBitrate != nil && in.VideoCurrentBitrate != nil {
+		h.pipeline.SetInputVideoBitrate(*in.VideoAverateBitrate, *in.VideoCurrentBitrate)
+	}
+
+	return &google_protobuf2.Empty{}, nil
 }
 
 func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string, extraParams any) (*media.Pipeline, error) {

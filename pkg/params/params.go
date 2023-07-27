@@ -41,6 +41,8 @@ type Params struct {
 	*livekit.IngressInfo
 	*config.Config
 
+	logger logger.Logger
+
 	AudioEncodingOptions *livekit.IngressAudioEncodingOptions
 	VideoEncodingOptions *livekit.IngressVideoEncodingOptions
 
@@ -60,6 +62,16 @@ type WhipExtraParams struct {
 	MimeTypes map[types.StreamKind]string `json:"mime_types"`
 }
 
+func InitLogger(conf *config.Config, info *livekit.IngressInfo) error {
+	fields := getLoggerFields(info)
+
+	err := conf.InitLogger(fields...)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
 func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token string, ep any) (*Params, error) {
 	var err error
 
@@ -69,22 +81,16 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	}
 
 	relayUrl := ""
-	fields := []interface{}{"ingressID", info.IngressId}
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		fields = append(fields, "resourceID", info.State.ResourceId)
 		relayUrl = getRTMPRelayUrl(conf, info.State.ResourceId)
 	case livekit.IngressInput_WHIP_INPUT:
-		fields = append(fields, "resourceID", info.State.ResourceId)
 		relayUrl = getWHIPRelayUrlPrefix(conf, info.State.ResourceId)
 	}
 
-	tmpDir := path.Join(os.TempDir(), info.State.ResourceId)
+	l := logger.GetLogger().WithValues(getLoggerFields(info)...)
 
-	err = conf.InitLogger(fields...)
-	if err != nil {
-		return nil, err
-	}
+	tmpDir := path.Join(os.TempDir(), info.State.ResourceId)
 
 	err = ingress.Validate(info)
 	if err != nil {
@@ -126,6 +132,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	p := &Params{
 		psrpcClient:          psrpcClient,
 		IngressInfo:          infoCopy,
+		logger:               l,
 		Config:               conf,
 		AudioEncodingOptions: audioEncodingOptions,
 		VideoEncodingOptions: videoEncodingOptions,
@@ -137,6 +144,10 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	}
 
 	return p, nil
+}
+
+func getLoggerFields(info *livekit.IngressInfo) []interface{} {
+	return []interface{}{"ingressID", info.IngressId, "resourceID", info.State.ResourceId}
 }
 
 func getRTMPRelayUrl(conf *config.Config, resourceId string) string {
@@ -265,6 +276,11 @@ func (p *Params) SetInputAudioState(ctx context.Context, audioState *livekit.Inp
 	p.stateLock.Lock()
 	modified := false
 
+	// Do not overwrite the bitrate
+	if audioState != nil && p.State.Audio != nil {
+		audioState.AverageBitrate = p.State.Audio.AverageBitrate
+	}
+
 	if !proto.Equal(audioState, p.State.Audio) {
 		modified = true
 		p.State.Audio = audioState
@@ -280,6 +296,11 @@ func (p *Params) SetInputVideoState(ctx context.Context, videoState *livekit.Inp
 	p.stateLock.Lock()
 	modified := false
 
+	// Do not overwrite the bitrate
+	if videoState != nil && p.State.Video != nil {
+		videoState.AverageBitrate = p.State.Video.AverageBitrate
+	}
+
 	if !proto.Equal(videoState, p.State.Video) {
 		modified = true
 		p.State.Video = videoState
@@ -291,6 +312,34 @@ func (p *Params) SetInputVideoState(ctx context.Context, videoState *livekit.Inp
 	}
 }
 
+func (p *Params) SetInputAudioBitrate(averageBps uint32, currentBps uint32) {
+	p.stateLock.Lock()
+
+	if p.State.Audio == nil {
+		p.State.Audio = &livekit.InputAudioState{}
+	}
+
+	p.State.Audio.AverageBitrate = averageBps
+
+	p.stateLock.Unlock()
+
+	p.logger.Infow("audio bitate update", "average", averageBps, "current", currentBps)
+}
+
+func (p *Params) SetInputVideoBitrate(averageBps uint32, currentBps uint32) {
+	p.stateLock.Lock()
+
+	if p.State.Video == nil {
+		p.State.Video = &livekit.InputVideoState{}
+	}
+
+	p.State.Video.AverageBitrate = averageBps
+
+	p.stateLock.Unlock()
+
+	p.logger.Infow("video bitate update", "average", averageBps, "current", currentBps)
+}
+
 func (p *Params) SendStateUpdate(ctx context.Context) {
 	info := p.CopyInfo()
 
@@ -299,7 +348,7 @@ func (p *Params) SendStateUpdate(ctx context.Context) {
 		State:     info.State,
 	})
 	if err != nil {
-		logger.Errorw("failed to send update", err)
+		p.logger.Errorw("failed to send update", err)
 	}
 }
 
