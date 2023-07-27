@@ -23,6 +23,7 @@ import (
 	"github.com/livekit/protocol/pprof"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
+	"github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 )
 
@@ -223,7 +224,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 	return pRes.params, ready, ended, nil
 }
 
-func HandleURLPublishRequest(resourceId string, req *rpc.StartIngressRequest) (*stats.MediaStatsReporter, error) {
+func (s *Service) HandleURLPublishRequest(resourceId string, req *rpc.StartIngressRequest) (*livekit.IngressInfo, error) {
 	ctx, span := tracer.Start(context.Background(), "Service.HandleURLPublishRequest")
 	defer span.End()
 
@@ -253,13 +254,7 @@ func HandleURLPublishRequest(resourceId string, req *rpc.StartIngressRequest) (*
 		return nil, err
 	}
 
-	api, err := s.sm.GetIngressSessionAPI(resourceId)
-	if err != nil {
-		return nil, err
-	}
-	stats := stats.NewMediaStats(api)
-
-	return stats, nil
+	return pRes.params.IngressInfo, nil
 }
 
 func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string) (*params.Params, error) {
@@ -330,17 +325,32 @@ func (s *Service) Run() error {
 				ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
 				defer span.End()
 
+				var p *params.Params
+				var err error
+				defer func() {
+					if err != nil {
+						span.RecordError(err)
+					}
+
+					// Result channel should be buffered
+					req.result <- publishResponse{
+						params: p,
+						err:    err,
+					}
+				}()
+
 				info := req.info
 				wsUrl := req.wsUrl
 				token := req.token
 
 				if info == nil {
-
-					resp, err := s.psrpcClient.GetIngressInfo(ctx, &rpc.GetIngressInfoRequest{
-						StreamKey: streamKey,
+					var resp *rpc.GetIngressInfoResponse
+					resp, err = s.psrpcClient.GetIngressInfo(ctx, &rpc.GetIngressInfoRequest{
+						StreamKey: req.streamKey,
 					})
 					if err != nil {
-						return nil, err
+						logger.Infow("failed retrieving ingress info", "streamKey", req.streamKey, "error", err)
+						return
 					}
 
 					info = resp.Info
@@ -348,22 +358,14 @@ func (s *Service) Run() error {
 					token = resp.Token
 				}
 
-				p, err := s.handleNewPublisher(ctx, req.resourceId, req.inputType, info, wsUrl, token)
-				var info *livekit.IngressInfo
+				p, err = s.handleNewPublisher(ctx, req.resourceId, req.inputType, info, wsUrl, token)
 				if p != nil {
 					info = p.IngressInfo
 				}
 				s.sendUpdate(ctx, info, err)
 
-				if err != nil {
-					span.RecordError(err)
-				} else if info != nil {
+				if info != nil {
 					logger.Infow("received ingress info", "ingressID", info.IngressId, "streamKey", info.StreamKey, "resourceID", info.State.ResourceId, "ingressInfo", params.CopyRedactedIngressInfo(info))
-				}
-				// Result channel should be buffered
-				req.result <- publishResponse{
-					params: p,
-					err:    err,
 				}
 			}()
 		}
@@ -420,6 +422,7 @@ func (s *Service) ListActiveIngress(ctx context.Context, _ *rpc.ListActiveIngres
 }
 
 func (s *Service) StartIngress(ctx context.Context, req *rpc.StartIngressRequest) (*livekit.IngressInfo, error) {
+	return s.HandleURLPublishRequest(utils.NewGuid(utils.URLResourcePrefix), req)
 }
 
 // TODO affinity
