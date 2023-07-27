@@ -32,6 +32,9 @@ type publishRequest struct {
 	streamKey  string
 	resourceId string
 	inputType  livekit.IngressInput
+	info       *livekit.IngressInfo
+	wsUrl      string
+	token      string
 	result     chan<- publishResponse
 }
 
@@ -220,26 +223,58 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 	return pRes.params, ready, ended, nil
 }
 
-func (s *Service) handleNewPublisher(ctx context.Context, streamKey string, resourceId string, inputType livekit.IngressInput) (*params.Params, error) {
-	resp, err := s.psrpcClient.GetIngressInfo(ctx, &rpc.GetIngressInfoRequest{
-		StreamKey: streamKey,
-	})
+func HandleURLPublishRequest(resourceId string, req *rpc.StartIngressRequest) (*stats.MediaStatsReporter, error) {
+	ctx, span := tracer.Start(context.Background(), "Service.HandleURLPublishRequest")
+	defer span.End()
+
+	res := make(chan publishResponse)
+	r := publishRequest{
+		resourceId: resourceId,
+		inputType:  livekit.IngressInput_URL_INPUT,
+		info:       req.Info,
+		wsUrl:      req.WsUrl,
+		token:      req.Token,
+		result:     res,
+	}
+
+	var pRes publishResponse
+	select {
+	case <-s.shutdown.Watch():
+		return nil, errors.ErrServerShuttingDown
+	case s.publishRequests <- r:
+		pRes = <-res
+		if pRes.err != nil {
+			return nil, pRes.err
+		}
+	}
+
+	err := s.manager.launchHandler(ctx, pRes.params)
 	if err != nil {
 		return nil, err
 	}
 
-	resp.Info.State = &livekit.IngressState{
+	api, err := s.sm.GetIngressSessionAPI(resourceId)
+	if err != nil {
+		return nil, err
+	}
+	stats := stats.NewMediaStats(api)
+
+	return stats, nil
+}
+
+func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string) (*params.Params, error) {
+	info.State = &livekit.IngressState{
 		Status:     livekit.IngressState_ENDPOINT_BUFFERING,
 		StartedAt:  time.Now().UnixNano(),
 		ResourceId: resourceId,
 	}
 
-	wsUrl := s.conf.WsUrl
-	if resp.WsUrl != "" {
-		wsUrl = resp.WsUrl
+	if wsUrl == "" {
+		wsUrl = s.conf.WsUrl
 	}
+
 	// This validates the ingress info
-	p, err := params.GetParams(ctx, s.psrpcClient, s.conf, resp.Info, wsUrl, resp.Token, nil)
+	p, err := params.GetParams(ctx, s.psrpcClient, s.conf, info, wsUrl, token, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -295,7 +330,25 @@ func (s *Service) Run() error {
 				ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
 				defer span.End()
 
-				p, err := s.handleNewPublisher(ctx, req.streamKey, req.resourceId, req.inputType)
+				info := req.info
+				wsUrl := req.wsUrl
+				token := req.token
+
+				if info == nil {
+
+					resp, err := s.psrpcClient.GetIngressInfo(ctx, &rpc.GetIngressInfoRequest{
+						StreamKey: streamKey,
+					})
+					if err != nil {
+						return nil, err
+					}
+
+					info = resp.Info
+					wsUrl = resp.WsUrl
+					token = resp.Token
+				}
+
+				p, err := s.handleNewPublisher(ctx, req.resourceId, req.inputType, info, wsUrl, token)
 				var info *livekit.IngressInfo
 				if p != nil {
 					info = p.IngressInfo
@@ -365,6 +418,11 @@ func (s *Service) ListActiveIngress(ctx context.Context, _ *rpc.ListActiveIngres
 		IngressIds: s.ListIngress(),
 	}, nil
 }
+
+func (s *Service) StartIngress(ctx context.Context, req *rpc.StartIngressRequest) (*livekit.IngressInfo, error) {
+}
+
+// TODO affinity
 
 func (s *Service) AvailabilityHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.CanAccept() {
