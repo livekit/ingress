@@ -396,7 +396,7 @@ func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err
 }
 
 func (s *Service) CanAccept() bool {
-	return s.monitor.CanAcceptIngress()
+	return s.monitor.CanAccept()
 }
 
 func (s *Service) Stop(kill bool) {
@@ -425,7 +425,13 @@ func (s *Service) StartIngress(ctx context.Context, req *rpc.StartIngressRequest
 	return s.HandleURLPublishRequest(utils.NewGuid(utils.URLResourcePrefix), req)
 }
 
-// TODO affinity
+func (s *Service) StartIngressAffinity(req *rpc.StartIngressRequest) float32 {
+	if !s.monitor.CanAcceptIngress(req.Info) {
+		return -1
+	}
+
+	return 1
+}
 
 func (s *Service) AvailabilityHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.CanAccept() {

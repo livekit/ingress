@@ -55,6 +55,7 @@ type CPUCostConfig struct {
 	RTMPCpuCost                  float64 `yaml:"rtmp_cpu_cost"`
 	WHIPCpuCost                  float64 `yaml:"whip_cpu_cost"`
 	WHIPBypassTranscodingCpuCost float64 `yaml:"whip_bypass_transcoding_cpu_cost"`
+	URLCpuCost                   float64 `yaml:"url_cpu_cost"`
 }
 
 func NewConfig(confString string) (*Config, error) {

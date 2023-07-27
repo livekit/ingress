@@ -62,7 +62,7 @@ func (m *Monitor) Start(conf *config.Config) error {
 		Name:        "available",
 		ConstLabels: prometheus.Labels{"node_id": conf.NodeID},
 	}, func() float64 {
-		c := m.CanAcceptIngress()
+		c := m.CanAccept()
 		if c {
 			return 1
 		}
@@ -121,10 +121,19 @@ func (m *Monitor) checkCPUConfig(costConfig config.CPUCostConfig) error {
 		)
 	}
 
+	if costConfig.URLCpuCost < 1 {
+		logger.Warnw("url input requirement too low", nil,
+			"config value", costConfig.URLCpuCost,
+			"minimum value", 1,
+			"recommended value", 2,
+		)
+	}
+
 	requirements := []float64{
 		costConfig.RTMPCpuCost,
 		costConfig.WHIPCpuCost,
 		costConfig.WHIPBypassTranscodingCpuCost,
+		costConfig.URLCpuCost,
 	}
 	sort.Float64s(requirements)
 	m.maxCost = requirements[len(requirements)-1]
@@ -160,7 +169,7 @@ func (m *Monitor) GetCPULoad() float64 {
 	return (float64(m.cpuStats.NumCPU()) - m.cpuStats.GetCPUIdle()) / float64(m.cpuStats.NumCPU()) * 100
 }
 
-func (m *Monitor) CanAcceptIngress() bool {
+func (m *Monitor) CanAccept() bool {
 	if m.shutdown.IsBroken() {
 		return false
 	}
@@ -170,7 +179,11 @@ func (m *Monitor) CanAcceptIngress() bool {
 	return available > m.maxCost
 }
 
-func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
+func (m *Monitor) canAcceptIngress(info *livekit.IngressInfo) (bool, float64, float64) {
+	if m.shutdown.IsBroken() {
+		return false, 0, 0
+	}
+
 	var cpuHold float64
 	var accept bool
 	available := m.cpuStats.GetCPUIdle() - m.pendingCPUs.Load()
@@ -187,10 +200,25 @@ func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 			accept = available > m.cpuCostConfig.WHIPCpuCost
 			cpuHold = m.cpuCostConfig.WHIPCpuCost
 		}
+	case livekit.IngressInput_URL_INPUT:
+		accept = available > m.cpuCostConfig.URLCpuCost
+		cpuHold = m.cpuCostConfig.URLCpuCost
 
 	default:
 		logger.Errorw("unsupported request type", errors.New("invalid parameter"))
 	}
+
+	return accept, cpuHold, available
+}
+
+func (m *Monitor) CanAcceptIngress(info *livekit.IngressInfo) bool {
+	accept, _, _ := m.canAcceptIngress(info)
+
+	return accept
+}
+
+func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
+	accept, cpuHold, available := m.canAcceptIngress(info)
 
 	if accept {
 		m.pendingCPUs.Add(cpuHold)
