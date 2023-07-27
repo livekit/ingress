@@ -194,10 +194,11 @@ func (t *whipTrackHandler) processRTPPacket() error {
 			}
 
 			t.statsLock.Lock()
-			if t.stats != nil {
+			stats := t.stats
+			t.statsLock.Unlock()
+			if stats != nil {
 				t.stats.MediaReceived(streamKindFromCodecType(t.remoteTrack.Kind()), int64(len(buf)))
 			}
-			t.statsLock.Unlock()
 
 			_, err = buffer.Write(buf)
 			if err != nil {
