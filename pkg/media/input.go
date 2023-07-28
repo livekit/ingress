@@ -24,6 +24,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media/rtmp"
+	"github.com/livekit/ingress/pkg/media/urlpull"
 	"github.com/livekit/ingress/pkg/media/whip"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
@@ -97,6 +98,8 @@ func CreateSource(ctx context.Context, p *params.Params) (Source, error) {
 		return rtmp.NewRTMPRelaySource(ctx, p)
 	case livekit.IngressInput_WHIP_INPUT:
 		return whip.NewWHIPRelaySource(ctx, p)
+	case livekit.IngressInput_URL_INPUT:
+		return urlpull.NewURLSource(ctx, p)
 	default:
 		return nil, ingress.ErrInvalidIngressType
 	}

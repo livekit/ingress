@@ -19,11 +19,10 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/tinyzimmer/go-gst/gst/app"
-
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/utils"
+	"github.com/tinyzimmer/go-gst/gst/base"
 )
 
 // TODO STUN & TURN
@@ -93,11 +92,11 @@ func (s *WHIPSource) Close() error {
 	return errs.ToError()
 }
 
-func (s *WHIPSource) GetSources(ctx context.Context) []*app.Source {
-	ret := make([]*app.Source, 0, len(s.trackSrc))
+func (s *WHIPSource) GetSources(ctx context.Context) []*base.GstBaseSrc {
+	ret := make([]*base.GstBaseSrc, 0, len(s.trackSrc))
 
 	for _, t := range s.trackSrc {
-		ret = append(ret, t.GetAppSource())
+		ret = append(ret, t.GetAppSource().GstBaseSrc)
 	}
 
 	return ret
