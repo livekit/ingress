@@ -28,7 +28,8 @@ import (
 )
 
 const (
-	pprofApp = "pprof"
+	gstPipelineDotFileApp = "gst_pipeline"
+	pprofApp              = "pprof"
 )
 
 func (s *Service) StartDebugHandlers() {
@@ -38,6 +39,7 @@ func (s *Service) StartDebugHandlers() {
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc(fmt.Sprintf("/%s/", gstPipelineDotFileApp), s.handleGstPipelineDotFile)
 	mux.HandleFunc(fmt.Sprintf("/%s/", pprofApp), s.handlePProf)
 
 	go func() {
@@ -45,6 +47,32 @@ func (s *Service) StartDebugHandlers() {
 		logger.Debugw(fmt.Sprintf("starting debug handler on address %s", addr))
 		_ = http.ListenAndServe(addr, mux)
 	}()
+}
+
+func (s *Service) GetGstPipelineDotFile(resourceID string) (string, error) {
+	api, err := s.sm.GetIngressSessionAPI(resourceID)
+	if err != nil {
+		return "", err
+	}
+
+	return api.GetPipelineDot(context.Background())
+}
+
+// URL path format is "/<application>/<ingress_id>/<optional_other_params>"
+func (s *Service) handleGstPipelineDotFile(w http.ResponseWriter, r *http.Request) {
+	pathElements := strings.Split(r.URL.Path, "/")
+	if len(pathElements) < 3 {
+		http.Error(w, "malformed url", http.StatusNotFound)
+		return
+	}
+
+	resourceID := pathElements[2]
+	dotFile, err := s.GetGstPipelineDotFile(resourceID)
+	if err != nil {
+		http.Error(w, err.Error(), getErrorCode(err))
+		return
+	}
+	_, _ = w.Write([]byte(dotFile))
 }
 
 // URL path format is "/<application>/<resource_id>/<profile_name>" or "/<application>/<profile_name>" to profile the service
