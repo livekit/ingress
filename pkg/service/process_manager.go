@@ -121,6 +121,7 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) er
 	cmd.Dir = "/"
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
+	cmd.Env = append(os.Environ(), "GST_DEBUG=2,curlhttpsrc:4")
 
 	h := &process{
 		info:   p.IngressInfo,

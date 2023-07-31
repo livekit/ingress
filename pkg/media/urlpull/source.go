@@ -16,10 +16,12 @@ package urlpull
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/tinyzimmer/go-gst/gst"
 	"github.com/tinyzimmer/go-gst/gst/base"
 
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
 )
 
@@ -53,5 +55,24 @@ func (u *URLSource) Start(ctx context.Context) error {
 }
 
 func (u *URLSource) Close() error {
+	pad := u.curlHttpSrc.GetStaticPad("src")
+	fmt.Println("PAD", pad)
+	if pad == nil {
+		return errors.ErrSourceNotReady
+	}
+
+	peer := pad.GetPeer()
+	fmt.Println("PEER", peer)
+	if peer == nil {
+		return errors.ErrSourceNotReady
+	}
+
+	elem := peer.GetParentElement()
+	if elem == nil {
+		return errors.ErrSourceNotReady
+	}
+	fmt.Println("ELEM", elem)
+	//	elem.SendEvent(gst.NewEOSEvent())
+
 	return nil
 }
