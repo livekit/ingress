@@ -20,8 +20,15 @@ package ipc;
 option go_package = "github.com/livekit/ingress/pkg/ipc";
 
 service IngressHandler {
+  rpc GetPipelineDot(GstPipelineDebugDotRequest) returns (GstPipelineDebugDotResponse) {};
   rpc GetPProf(PProfRequest) returns (PProfResponse) {};
   rpc UpdateMediaStats(UpdateMediaStatsRequest) returns (google.protobuf.Empty) {};
+}
+
+message GstPipelineDebugDotRequest {}
+
+message GstPipelineDebugDotResponse {
+  string dot_file = 1;
 }
 
 message PProfRequest {

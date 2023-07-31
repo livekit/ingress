@@ -401,6 +401,11 @@ func (a *localSessionAPI) GetProfileData(ctx context.Context, profileName string
 	return pprof.GetProfileData(ctx, profileName, timeout, debug)
 }
 
+func (a *localSessionAPI) GetPipelineDot(ctx context.Context) (string, error) {
+	// No dot file if transcoding is disabled
+	return "", errors.ErrIngressNotFound
+}
+
 func (a *localSessionAPI) UpdateMediaStats(ctx context.Context, s *types.MediaStats) error {
 	if s.AudioAverageBitrate != nil && s.AudioCurrentBitrate != nil {
 		a.params.SetInputAudioBitrate(*s.AudioAverageBitrate, *s.AudioCurrentBitrate)
