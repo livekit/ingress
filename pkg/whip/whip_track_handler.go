@@ -82,7 +82,7 @@ func newWHIPTrackHandler(
 		writePLI:        writePLI,
 		onRTCP:          onRTCP,
 		fuse:            core.NewFuse(),
-		mediaPushedChan: make(chan struct{}),
+		mediaPushedChan: make(chan struct{}, 1),
 	}
 
 	jb, err := t.createJitterBuffer()
@@ -139,6 +139,7 @@ func (t *whipTrackHandler) startRTPReceiver(onDone func(err error)) {
 			default:
 				err = t.processRTPPacket()
 				switch err {
+				case nil:
 				case io.EOF:
 					err = nil
 					return
