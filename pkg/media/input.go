@@ -20,7 +20,6 @@ import (
 	"sync"
 
 	"github.com/tinyzimmer/go-gst/gst"
-	"github.com/tinyzimmer/go-gst/gst/base"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media/rtmp"
@@ -34,7 +33,7 @@ import (
 )
 
 type Source interface {
-	GetSources(ctx context.Context) []*base.GstBaseSrc
+	GetSources(ctx context.Context) []*gst.Element
 	Start(ctx context.Context) error
 	Close() error
 }
@@ -76,7 +75,7 @@ func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 			return nil, err
 		}
 
-		if err := bin.AddMany(decodeBin, src.Element); err != nil {
+		if err := bin.AddMany(decodeBin, src); err != nil {
 			return nil, err
 		}
 

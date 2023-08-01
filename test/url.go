@@ -32,6 +32,8 @@ import (
 
 func RunURLTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient) {
 	svc := service.NewService(conf.Config, psrpcClient, bus, nil)
+	svc.StartDebugHandlers()
+
 	go func() {
 		err := svc.Run()
 		require.NoError(t, err)
@@ -63,8 +65,9 @@ func RunURLTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsr
 		ParticipantName:     "ingress-test",
 		Reusable:            true,
 		StreamKey:           "ingress-test",
-		Url:                 "http://localhost:8080/bbb_sunflower_2160p_60fps_normal.mp4",
-		//		Url:                 "http://devimages.apple.com/iphone/samples/bipbop/gear4/prog_index.m3u8",
+		//Url:                 "https://cloud-recordings.sfo3.digitaloceanspaces.com/bbb_sunflower_2160p_60fps_normal.mp4",
+		Url: "http://devimages.apple.com/iphone/samples/bipbop/gear4/prog_index.m3u8",
+		//Url: "https://cloud-recordings.sfo3.digitaloceanspaces.com/music.m4a",
 		Audio: &livekit.IngressAudioOptions{
 			Name:   "audio",
 			Source: 0,

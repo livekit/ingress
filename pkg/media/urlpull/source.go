@@ -16,37 +16,70 @@ package urlpull
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/tinyzimmer/go-gst/gst"
-	"github.com/tinyzimmer/go-gst/gst/base"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
 )
 
 type URLSource struct {
-	params      *params.Params
-	curlHttpSrc *base.GstBaseSrc
+	params *params.Params
+	src    *gst.Element
 }
 
 func NewURLSource(ctx context.Context, p *params.Params) (*URLSource, error) {
+	bin := gst.NewBin("input")
+
 	elem, err := gst.NewElement("curlhttpsrc")
 	if err != nil {
 		return nil, err
 	}
 
-	elem.SetProperty("location", p.Url)
+	err = elem.SetProperty("location", p.Url)
+	if err != nil {
+		return nil, err
+	}
+
+	queue, err := gst.NewElement("queue2")
+	if err != nil {
+		return nil, err
+	}
+
+	err = queue.SetProperty("use-buffering", true)
+	if err != nil {
+		return nil, err
+	}
+
+	err = bin.AddMany(elem, queue)
+	if err != nil {
+		return nil, err
+	}
+
+	err = elem.Link(queue)
+	if err != nil {
+		return nil, err
+	}
+
+	pad := queue.GetStaticPad("src")
+	if pad == nil {
+		return nil, errors.ErrUnableToAddPad
+	}
+
+	ghostPad := gst.NewGhostPad("src", pad)
+	if !bin.AddPad(ghostPad.Pad) {
+		return nil, errors.ErrUnableToAddPad
+	}
 
 	return &URLSource{
-		params:      p,
-		curlHttpSrc: &base.GstBaseSrc{Element: elem},
+		params: p,
+		src:    bin.Element,
 	}, nil
 }
 
-func (u *URLSource) GetSources(ctx context.Context) []*base.GstBaseSrc {
-	return []*base.GstBaseSrc{
-		u.curlHttpSrc,
+func (u *URLSource) GetSources(ctx context.Context) []*gst.Element {
+	return []*gst.Element{
+		u.src,
 	}
 }
 
@@ -55,14 +88,12 @@ func (u *URLSource) Start(ctx context.Context) error {
 }
 
 func (u *URLSource) Close() error {
-	pad := u.curlHttpSrc.GetStaticPad("src")
-	fmt.Println("PAD", pad)
+	pad := u.src.GetStaticPad("src")
 	if pad == nil {
 		return errors.ErrSourceNotReady
 	}
 
 	peer := pad.GetPeer()
-	fmt.Println("PEER", peer)
 	if peer == nil {
 		return errors.ErrSourceNotReady
 	}
@@ -71,7 +102,6 @@ func (u *URLSource) Close() error {
 	if elem == nil {
 		return errors.ErrSourceNotReady
 	}
-	fmt.Println("ELEM", elem)
 	//	elem.SendEvent(gst.NewEOSEvent())
 
 	return nil
