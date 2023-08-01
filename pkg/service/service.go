@@ -333,9 +333,10 @@ func (s *Service) Run() error {
 
 func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {
 	var state *livekit.IngressState
-	if info != nil {
-		state = info.State
+	if info == nil {
+		return
 	}
+	state = info.State
 	if state == nil {
 		state = &livekit.IngressState{}
 	}
