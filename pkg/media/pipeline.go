@@ -250,6 +250,10 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 	})
 }
 
+func (p *Pipeline) GetGstPipelineDebugDot() string {
+	return p.pipeline.DebugBinToDotData(gst.DebugGraphShowAll)
+}
+
 func getKindFromGstMimeType(gstStruct *gst.Structure) types.StreamKind {
 	gstMimeType := gstStruct.Name()
 

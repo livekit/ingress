@@ -59,8 +59,9 @@ type whipTrackHandler struct {
 	statsLock sync.Mutex
 	stats     *stats.MediaStatsReporter
 
-	firstPacket sync.Once
-	fuse        core.Fuse
+	firstPacket     sync.Once
+	fuse            core.Fuse
+	mediaPushedChan chan struct{}
 }
 
 func newWHIPTrackHandler(
@@ -73,14 +74,15 @@ func newWHIPTrackHandler(
 	onRTCP func(packet rtcp.Packet),
 ) (*whipTrackHandler, error) {
 	t := &whipTrackHandler{
-		logger:      logger,
-		remoteTrack: track,
-		receiver:    receiver,
-		sync:        sync,
-		mediaSink:   mediaSink,
-		writePLI:    writePLI,
-		onRTCP:      onRTCP,
-		fuse:        core.NewFuse(),
+		logger:          logger,
+		remoteTrack:     track,
+		receiver:        receiver,
+		sync:            sync,
+		mediaSink:       mediaSink,
+		writePLI:        writePLI,
+		onRTCP:          onRTCP,
+		fuse:            core.NewFuse(),
+		mediaPushedChan: make(chan struct{}, 1),
 	}
 
 	jb, err := t.createJitterBuffer()
@@ -122,13 +124,6 @@ func (t *whipTrackHandler) startRTPReceiver(onDone func(err error)) {
 	go func() {
 		var err error
 
-		defer func() {
-			t.mediaSink.Close()
-			if onDone != nil {
-				onDone(err)
-			}
-		}()
-
 		t.logger.Infow("starting rtp receiver")
 
 		if t.remoteTrack.Kind() == webrtc.RTPCodecTypeVideo && t.writePLI != nil {
@@ -144,8 +139,7 @@ func (t *whipTrackHandler) startRTPReceiver(onDone func(err error)) {
 			default:
 				err = t.processRTPPacket()
 				switch err {
-				case nil, errors.ErrPrerollBufferReset:
-					// continue
+				case nil:
 				case io.EOF:
 					err = nil
 					return
@@ -160,6 +154,11 @@ func (t *whipTrackHandler) startRTPReceiver(onDone func(err error)) {
 			}
 		}
 	}()
+
+	go func() {
+		t.mediaWriterWorker(onDone)
+	}()
+
 }
 
 // TODO drain on close?
@@ -180,6 +179,52 @@ func (t *whipTrackHandler) processRTPPacket() error {
 
 	t.jb.Push(pkt)
 
+	// wake up the consumer
+	select {
+	case t.mediaPushedChan <- struct{}{}:
+	default:
+	}
+
+	return nil
+}
+
+func (t *whipTrackHandler) mediaWriterWorker(onDone func(err error)) {
+	var err error
+
+	defer func() {
+		t.mediaSink.Close()
+		if onDone != nil {
+			onDone(err)
+		}
+	}()
+
+	for {
+		select {
+		case <-t.mediaPushedChan:
+			err := t.forwardAvailableMedia()
+			switch err {
+			case nil, errors.ErrPrerollBufferReset:
+				// continue
+			case io.EOF:
+				err = nil
+				return
+			default:
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					continue
+				}
+
+				t.logger.Warnw("error writing media", err)
+				return
+			}
+		case <-t.fuse.Watch():
+			t.logger.Debugw("stopping media forwarder")
+			err = nil
+			return
+		}
+	}
+}
+
+func (t *whipTrackHandler) forwardAvailableMedia() error {
 	for {
 		pkts := t.jb.Pop(false)
 		if len(pkts) == 0 {
@@ -187,6 +232,7 @@ func (t *whipTrackHandler) processRTPPacket() error {
 		}
 
 		var ts time.Duration
+		var err error
 		var buffer bytes.Buffer // TODO reuse the same buffer across calls, after resetting it if buffer allocation is a performane bottleneck
 		for _, pkt := range pkts {
 			ts, err = t.sync.GetPTS(pkt)

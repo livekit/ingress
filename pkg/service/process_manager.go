@@ -209,6 +209,17 @@ func (p *process) GetProfileData(ctx context.Context, profileName string, timeou
 	return resp.PprofFile, nil
 }
 
+func (p *process) GetPipelineDot(ctx context.Context) (string, error) {
+	req := &ipc.GstPipelineDebugDotRequest{}
+
+	resp, err := p.grpcClient.GetPipelineDot(ctx, req)
+	if err != nil {
+		return "", err
+	}
+
+	return resp.DotFile, nil
+}
+
 func (p *process) UpdateMediaStats(ctx context.Context, s *types.MediaStats) error {
 	req := &ipc.UpdateMediaStatsRequest{
 		AudioAverateBitrate: s.AudioAverageBitrate,

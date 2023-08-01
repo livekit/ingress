@@ -18,8 +18,11 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/frostbyte73/core"
@@ -158,6 +161,31 @@ func (h *Handler) GetPProf(ctx context.Context, req *ipc.PProfRequest) (*ipc.PPr
 	return &ipc.PProfResponse{
 		PprofFile: b,
 	}, nil
+}
+
+func (h *Handler) GetPipelineDot(ctx context.Context, in *ipc.GstPipelineDebugDotRequest) (*ipc.GstPipelineDebugDotResponse, error) {
+	ctx, span := tracer.Start(ctx, "Handler.GetPipelineDot")
+	defer span.End()
+
+	if h.pipeline == nil {
+		return nil, errors.ErrIngressNotFound
+	}
+
+	res := make(chan string, 1)
+	go func() {
+		res <- h.pipeline.GetGstPipelineDebugDot()
+	}()
+
+	select {
+	case r := <-res:
+		return &ipc.GstPipelineDebugDotResponse{
+			DotFile: r,
+		}, nil
+
+	case <-time.After(2 * time.Second):
+		return nil, status.New(codes.DeadlineExceeded, "timed out requesting pipeline debug info").Err()
+	}
+
 }
 
 func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStatsRequest) (*google_protobuf2.Empty, error) {
