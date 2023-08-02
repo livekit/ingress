@@ -33,7 +33,7 @@ import (
 )
 
 type Source interface {
-	GetSources(ctx context.Context) []*gst.Element
+	GetSources() []*gst.Element
 	Start(ctx context.Context) error
 	Close() error
 }
@@ -64,7 +64,7 @@ func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 		source: src,
 	}
 
-	srcs := src.GetSources(ctx)
+	srcs := src.GetSources()
 	if len(srcs) == 0 {
 		return nil, errors.ErrSourceNotReady
 	}

@@ -26,6 +26,7 @@ import (
 type URLSource struct {
 	params *params.Params
 	src    *gst.Element
+	pad    *gst.Pad
 }
 
 func NewURLSource(ctx context.Context, p *params.Params) (*URLSource, error) {
@@ -74,10 +75,11 @@ func NewURLSource(ctx context.Context, p *params.Params) (*URLSource, error) {
 	return &URLSource{
 		params: p,
 		src:    bin.Element,
+		pad:    pad,
 	}, nil
 }
 
-func (u *URLSource) GetSources(ctx context.Context) []*gst.Element {
+func (u *URLSource) GetSources() []*gst.Element {
 	return []*gst.Element{
 		u.src,
 	}
@@ -88,21 +90,7 @@ func (u *URLSource) Start(ctx context.Context) error {
 }
 
 func (u *URLSource) Close() error {
-	pad := u.src.GetStaticPad("src")
-	if pad == nil {
-		return errors.ErrSourceNotReady
-	}
-
-	peer := pad.GetPeer()
-	if peer == nil {
-		return errors.ErrSourceNotReady
-	}
-
-	elem := peer.GetParentElement()
-	if elem == nil {
-		return errors.ErrSourceNotReady
-	}
-	//	elem.SendEvent(gst.NewEOSEvent())
+	// TODO find a way to send a EOS event without hanging
 
 	return nil
 }

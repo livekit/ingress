@@ -16,7 +16,6 @@ package media
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -177,8 +176,6 @@ func (p *Pipeline) Run(ctx context.Context) {
 }
 
 func (p *Pipeline) messageWatch(msg *gst.Message) bool {
-	fmt.Println("MESSAGE WATCH", msg.Type(), msg)
-
 	switch msg.Type() {
 	case gst.MessageEOS:
 		// EOS received - close and return
@@ -244,9 +241,7 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 
 		logger.Debugw("sending EOS to pipeline")
 		p.input.Close()
-		fmt.Println("INPUT CLOSED")
 		p.sink.Close()
-		fmt.Println("SDK CLOSED")
 	})
 }
 

@@ -92,7 +92,7 @@ func (s *WHIPSource) Close() error {
 	return errs.ToError()
 }
 
-func (s *WHIPSource) GetSources(ctx context.Context) []*gst.Element {
+func (s *WHIPSource) GetSources() []*gst.Element {
 	ret := make([]*gst.Element, 0, len(s.trackSrc))
 
 	for _, t := range s.trackSrc {

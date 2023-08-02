@@ -107,7 +107,7 @@ func (s *RTMPRelaySource) Close() error {
 	return <-s.result
 }
 
-func (s *RTMPRelaySource) GetSources(ctx context.Context) []*gst.Element {
+func (s *RTMPRelaySource) GetSources() []*gst.Element {
 	return []*gst.Element{s.flvSrc.Element}
 }
 
