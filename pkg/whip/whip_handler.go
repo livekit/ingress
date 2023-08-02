@@ -18,7 +18,9 @@ import (
 	"context"
 	"io"
 	"sync"
+	"time"
 
+	"github.com/pion/dtls/v2/pkg/crypto/elliptic"
 	"github.com/pion/interceptor"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
@@ -41,6 +43,12 @@ import (
 
 const (
 	whipIdentity = "WHIPIngress"
+
+	dtlsRetransmissionInterval = 100 * time.Millisecond
+
+	iceDisconnectedTimeout = 10 * time.Second // compatible for ice-lite with firefox client
+	iceFailedTimeout       = 25 * time.Second // pion's default
+	iceKeepaliveInterval   = 2 * time.Second  // pion's default
 )
 
 // TODO log ingress id / resource ID
@@ -66,8 +74,11 @@ type whipHandler struct {
 }
 
 func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
+	// Copy the rtc conf to allow modifying to to match the request
+	rtcConfCopy := *webRTCConfig
+
 	return &whipHandler{
-		rtcConfig:           webRTCConfig,
+		rtcConfig:           &rtcConfCopy,
 		sync:                synchronizer.NewSynchronizer(nil),
 		result:              make(chan error, 1),
 		tracks:              make(map[string]*webrtc.TrackRemote),
@@ -81,6 +92,8 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 
 	h.logger = logger.GetLogger().WithValues("ingressID", p.IngressId, "resourceID", p.State.ResourceId)
 	h.params = p
+
+	h.updateSettings()
 
 	if p.BypassTranscoding {
 		h.sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, p)
@@ -229,6 +242,36 @@ func (h *whipHandler) AssociateRelay(kind types.StreamKind, w io.WriteCloser) er
 	}
 
 	return nil
+}
+func (h *whipHandler) updateSettings() {
+	se := &h.rtcConfig.SettingEngine
+	se.DisableMediaEngineCopy(true)
+
+	// Change elliptic curve to improve connectivity
+	// https://github.com/pion/dtls/pull/474
+	se.SetDTLSEllipticCurves(elliptic.X25519, elliptic.P384, elliptic.P256)
+
+	//
+	// Disable SRTP replay protection (https://datatracker.ietf.org/doc/html/rfc3711#page-15).
+	// Needed due to lack of RTX stream support in Pion.
+	//
+	// When clients probe for bandwidth, there are several possible approaches
+	//   1. Use padding packet (Chrome uses this)
+	//   2. Use an older packet (Firefox uses this)
+	// Typically, these are sent over the RTX stream and hence SRTP replay protection will not
+	// trigger. As Pion does not support RTX, when firefox uses older packet for probing, they
+	// trigger the replay protection.
+	//
+	// That results in two issues
+	//   - Firefox bandwidth probing is not successful
+	//   - Pion runs out of read buffer capacity - this potentially looks like a Pion issue
+	//
+	// NOTE: It is not required to disable RTCP replay protection, but doing it to be symmetric.
+	//
+	se.DisableSRTPReplayProtection(true)
+	se.DisableSRTCPReplayProtection(true)
+	se.SetDTLSRetransmissionInterval(dtlsRetransmissionInterval)
+	se.SetICETimeouts(iceDisconnectedTimeout, iceFailedTimeout, iceKeepaliveInterval)
 }
 
 func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnection, error) {
