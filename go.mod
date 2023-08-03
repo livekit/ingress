@@ -1,7 +1,5 @@
 module github.com/livekit/ingress
 
-replace github.com/livekit/protocol => ../protocol
-
 go 1.18
 
 require (
@@ -11,7 +9,7 @@ require (
 	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/mediatransportutil v0.0.0-20230612070454-d5299b956135
-	github.com/livekit/protocol v1.5.11-0.20230726202835-357ef3ca2331
+	github.com/livekit/protocol v1.6.0
 	github.com/livekit/psrpc v0.3.2
 	github.com/livekit/server-sdk-go v1.0.13
 	github.com/pion/interceptor v0.1.17
@@ -27,7 +25,7 @@ require (
 	github.com/yutopp/go-flv v0.2.0
 	go.uber.org/atomic v1.11.0
 	golang.org/x/image v0.7.0
-	google.golang.org/grpc v1.56.2
+	google.golang.org/grpc v1.57.0
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -89,10 +87,10 @@ require (
 	go.uber.org/multierr v1.9.0 // indirect
 	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/crypto v0.10.0 // indirect
-	golang.org/x/exp v0.0.0-20230725093048-515e97ebf090 // indirect
+	golang.org/x/exp v0.0.0-20230801115018-d63ba01acd4b // indirect
 	golang.org/x/net v0.11.0 // indirect
 	golang.org/x/sync v0.2.0 // indirect
 	golang.org/x/sys v0.9.0 // indirect
 	golang.org/x/text v0.10.0 // indirect
-	google.golang.org/genproto v0.0.0-20230410155749-daa745c078e1 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20230530153820-e85fd2cbaebc // indirect
 )
