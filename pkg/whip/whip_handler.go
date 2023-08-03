@@ -45,10 +45,6 @@ const (
 	whipIdentity = "WHIPIngress"
 
 	dtlsRetransmissionInterval = 100 * time.Millisecond
-
-	iceDisconnectedTimeout = 10 * time.Second // compatible for ice-lite with firefox client
-	iceFailedTimeout       = 25 * time.Second // pion's default
-	iceKeepaliveInterval   = 2 * time.Second  // pion's default
 )
 
 // TODO log ingress id / resource ID
@@ -245,7 +241,6 @@ func (h *whipHandler) AssociateRelay(kind types.StreamKind, w io.WriteCloser) er
 }
 func (h *whipHandler) updateSettings() {
 	se := &h.rtcConfig.SettingEngine
-	se.DisableMediaEngineCopy(true)
 
 	// Change elliptic curve to improve connectivity
 	// https://github.com/pion/dtls/pull/474
@@ -271,7 +266,6 @@ func (h *whipHandler) updateSettings() {
 	se.DisableSRTPReplayProtection(true)
 	se.DisableSRTCPReplayProtection(true)
 	se.SetDTLSRetransmissionInterval(dtlsRetransmissionInterval)
-	se.SetICETimeouts(iceDisconnectedTimeout, iceFailedTimeout, iceKeepaliveInterval)
 }
 
 func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnection, error) {
