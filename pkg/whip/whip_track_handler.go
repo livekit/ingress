@@ -59,9 +59,14 @@ type whipTrackHandler struct {
 	statsLock sync.Mutex
 	stats     *stats.MediaStatsReporter
 
-	firstPacket     sync.Once
-	fuse            core.Fuse
-	mediaPushedChan chan struct{}
+	firstPacket sync.Once
+	fuse        core.Fuse
+	samplesChan chan sample
+}
+
+type sample struct {
+	sample *media.Sample
+	ts     time.Duration
 }
 
 func newWHIPTrackHandler(
@@ -74,15 +79,15 @@ func newWHIPTrackHandler(
 	onRTCP func(packet rtcp.Packet),
 ) (*whipTrackHandler, error) {
 	t := &whipTrackHandler{
-		logger:          logger,
-		remoteTrack:     track,
-		receiver:        receiver,
-		sync:            sync,
-		mediaSink:       mediaSink,
-		writePLI:        writePLI,
-		onRTCP:          onRTCP,
-		fuse:            core.NewFuse(),
-		mediaPushedChan: make(chan struct{}, 1),
+		logger:      logger,
+		remoteTrack: track,
+		receiver:    receiver,
+		sync:        sync,
+		mediaSink:   mediaSink,
+		writePLI:    writePLI,
+		onRTCP:      onRTCP,
+		fuse:        core.NewFuse(),
+		samplesChan: make(chan sample, 10),
 	}
 
 	jb, err := t.createJitterBuffer()
@@ -179,52 +184,6 @@ func (t *whipTrackHandler) processRTPPacket() error {
 
 	t.jb.Push(pkt)
 
-	// wake up the consumer
-	select {
-	case t.mediaPushedChan <- struct{}{}:
-	default:
-	}
-
-	return nil
-}
-
-func (t *whipTrackHandler) mediaWriterWorker(onDone func(err error)) {
-	var err error
-
-	defer func() {
-		t.mediaSink.Close()
-		if onDone != nil {
-			onDone(err)
-		}
-	}()
-
-	for {
-		select {
-		case <-t.mediaPushedChan:
-			err := t.forwardAvailableMedia()
-			switch err {
-			case nil, errors.ErrPrerollBufferReset:
-				// continue
-			case io.EOF:
-				err = nil
-				return
-			default:
-				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
-					continue
-				}
-
-				t.logger.Warnw("error writing media", err)
-				return
-			}
-		case <-t.fuse.Watch():
-			t.logger.Debugw("stopping media forwarder")
-			err = nil
-			return
-		}
-	}
-}
-
-func (t *whipTrackHandler) forwardAvailableMedia() error {
 	for {
 		pkts := t.jb.Pop(false)
 		if len(pkts) == 0 {
@@ -275,13 +234,45 @@ func (t *whipTrackHandler) forwardAvailableMedia() error {
 			Duration: sampleDuration,
 		}
 
-		err = t.mediaSink.PushSample(s, ts)
-		if err != nil {
-			return err
+		select {
+		case t.samplesChan <- sample{s, ts}:
+		case <-t.fuse.Watch():
 		}
 	}
 
 	return nil
+}
+
+func (t *whipTrackHandler) mediaWriterWorker(onDone func(err error)) {
+	var err error
+
+	defer func() {
+		t.mediaSink.Close()
+		if onDone != nil {
+			onDone(err)
+		}
+	}()
+
+	for {
+		select {
+		case s := <-t.samplesChan:
+			err := t.mediaSink.PushSample(s.sample, s.ts)
+			switch err {
+			case nil, errors.ErrPrerollBufferReset:
+				// continue
+			case io.EOF:
+				err = nil
+				return
+			default:
+				t.logger.Warnw("error writing media", err)
+				return
+			}
+		case <-t.fuse.Watch():
+			t.logger.Debugw("stopping media forwarder")
+			err = nil
+			return
+		}
+	}
 }
 
 func (t *whipTrackHandler) startRTCPReceiver() {
