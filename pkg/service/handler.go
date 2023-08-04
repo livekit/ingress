@@ -16,6 +16,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"time"
 
@@ -129,6 +130,7 @@ func (h *Handler) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressR
 }
 
 func (h *Handler) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
+	fmt.Println("DELETE", req)
 	_, span := tracer.Start(ctx, "Handler.DeleteIngress")
 	defer span.End()
 	return h.killAndReturnState(ctx)

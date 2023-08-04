@@ -46,7 +46,8 @@ type Pipeline struct {
 	sink     *WebRTCSink
 	input    *Input
 
-	closed core.Fuse
+	closed      core.Fuse
+	pipelineErr chan error
 }
 
 func New(ctx context.Context, conf *config.Config, params *params.Params) (*Pipeline, error) {
@@ -79,11 +80,12 @@ func New(ctx context.Context, conf *config.Config, params *params.Params) (*Pipe
 	}
 
 	p := &Pipeline{
-		Params:   params,
-		pipeline: pipeline,
-		sink:     sink,
-		input:    input,
-		closed:   core.NewFuse(),
+		Params:      params,
+		pipeline:    pipeline,
+		sink:        sink,
+		input:       input,
+		closed:      core.NewFuse(),
+		pipelineErr: make(chan error, 1),
 	}
 
 	input.OnOutputReady(p.onOutputReady)
@@ -133,7 +135,17 @@ func (p *Pipeline) Run(ctx context.Context) {
 	ctx, span := tracer.Start(ctx, "Pipeline.Run")
 	defer span.End()
 
+	var err error
+
 	defer func() {
+		switch err {
+		case nil:
+			p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+		default:
+			span.RecordError(err)
+			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, strings.TrimSpace(err.Error()))
+		}
+
 		p.SendStateUpdate(ctx)
 	}()
 
@@ -142,14 +154,14 @@ func (p *Pipeline) Run(ctx context.Context) {
 	p.pipeline.GetPipelineBus().AddWatch(p.messageWatch)
 
 	// set state to playing (this does not start the pipeline)
-	if err := p.pipeline.Start(); err != nil {
+	err = p.pipeline.Start()
+	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("failed to set pipeline state", err)
-		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
 		return
 	}
 
-	err := p.input.Start(ctx)
+	err = p.input.Start(ctx)
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("failed to start input", err)
@@ -165,11 +177,10 @@ func (p *Pipeline) Run(ctx context.Context) {
 	err = p.input.Close()
 	p.sink.Close()
 
-	switch err {
-	case nil:
-		p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+	// Retrieve any pipeline error
+	select {
+	case err = <-p.pipelineErr:
 	default:
-		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
 	}
 
 	return
@@ -187,7 +198,11 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 	case gst.MessageError:
 		// handle error if possible, otherwise close and return
 		err := psrpc.NewError(psrpc.Internal, msg.ParseError())
-		logger.Errorw("pipeline failure", err)
+		logger.Infow("pipeline failure", "error", msg)
+		select {
+		case p.pipelineErr <- err:
+		default:
+		}
 		p.loop.Quit()
 		return false
 
@@ -237,10 +252,9 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 	defer span.End()
 
 	p.closed.Once(func() {
-		p.SendStateUpdate(ctx)
-
 		logger.Debugw("sending EOS to pipeline")
-		p.pipeline.SendEvent(gst.NewEOSEvent())
+		p.input.Close()
+		p.sink.Close()
 	})
 }
 

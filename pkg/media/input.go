@@ -19,11 +19,12 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/frostbyte73/core"
 	"github.com/tinyzimmer/go-gst/gst"
-	"github.com/tinyzimmer/go-gst/gst/app"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media/rtmp"
+	"github.com/livekit/ingress/pkg/media/urlpull"
 	"github.com/livekit/ingress/pkg/media/whip"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
@@ -33,7 +34,7 @@ import (
 )
 
 type Source interface {
-	GetSources(ctx context.Context) []*app.Source
+	GetSources() []*gst.Element
 	Start(ctx context.Context) error
 	Close() error
 }
@@ -48,6 +49,8 @@ type Input struct {
 	videoOutput *gst.Pad
 
 	onOutputReady OutputReadyFunc
+	closeFuse     core.Fuse
+	closeErr      error
 }
 
 type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
@@ -60,22 +63,23 @@ func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 
 	bin := gst.NewBin("input")
 	i := &Input{
-		bin:    bin,
-		source: src,
+		bin:       bin,
+		source:    src,
+		closeFuse: core.NewFuse(),
 	}
 
-	appSrcs := src.GetSources(ctx)
-	if len(appSrcs) == 0 {
+	srcs := src.GetSources()
+	if len(srcs) == 0 {
 		return nil, errors.ErrSourceNotReady
 	}
 
-	for _, appSrc := range appSrcs {
+	for _, src := range srcs {
 		decodeBin, err := gst.NewElement("decodebin3")
 		if err != nil {
 			return nil, err
 		}
 
-		if err := bin.AddMany(decodeBin, appSrc.Element); err != nil {
+		if err := bin.AddMany(decodeBin, src); err != nil {
 			return nil, err
 		}
 
@@ -83,7 +87,7 @@ func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 			return nil, err
 		}
 
-		if err = appSrc.Link(decodeBin); err != nil {
+		if err = src.Link(decodeBin); err != nil {
 			return nil, err
 		}
 	}
@@ -97,6 +101,8 @@ func CreateSource(ctx context.Context, p *params.Params) (Source, error) {
 		return rtmp.NewRTMPRelaySource(ctx, p)
 	case livekit.IngressInput_WHIP_INPUT:
 		return whip.NewWHIPRelaySource(ctx, p)
+	case livekit.IngressInput_URL_INPUT:
+		return urlpull.NewURLSource(ctx, p)
 	default:
 		return nil, ingress.ErrInvalidIngressType
 	}
@@ -111,7 +117,12 @@ func (i *Input) Start(ctx context.Context) error {
 }
 
 func (i *Input) Close() error {
-	return i.source.Close()
+	// Make sure Close is idempotent and always return the input error
+	i.closeFuse.Once(func() {
+		i.closeErr = i.source.Close()
+	})
+
+	return i.closeErr
 }
 
 func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {

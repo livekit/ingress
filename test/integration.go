@@ -39,6 +39,7 @@ type TestConfig struct {
 	RoomName       string `yaml:"room_name"`
 	RtmpOnly       bool   `yaml:"rtmp_only"`
 	WhipOnly       bool   `yaml:"whip_only"`
+	URLOnly        bool   `yaml:"url_only"`
 }
 
 type ioServer struct {
@@ -98,14 +99,20 @@ func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 	commandPsrpcClient, err := rpc.NewIngressHandlerClient("ingress_test_client", bus, psrpc.WithClientTimeout(5*time.Second))
 	require.NoError(t, err)
 
-	if !conf.WhipOnly {
+	if !conf.WhipOnly && !conf.URLOnly {
 		t.Run("RTMP", func(t *testing.T) {
 			RunRTMPTest(t, conf, bus, commandPsrpcClient, psrpcClient)
 		})
 	}
-	if !conf.RtmpOnly {
+	if !conf.RtmpOnly && !conf.URLOnly {
 		t.Run("WHIP", func(t *testing.T) {
 			RunWHIPTest(t, conf, bus, commandPsrpcClient, psrpcClient)
 		})
 	}
+	if !conf.RtmpOnly && !conf.WhipOnly {
+		t.Run("URL pul", func(t *testing.T) {
+			RunURLTest(t, conf, bus, commandPsrpcClient, psrpcClient)
+		})
+	}
+
 }
