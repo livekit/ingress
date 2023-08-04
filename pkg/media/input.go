@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/frostbyte73/core"
 	"github.com/tinyzimmer/go-gst/gst"
 
 	"github.com/livekit/ingress/pkg/errors"
@@ -48,6 +49,8 @@ type Input struct {
 	videoOutput *gst.Pad
 
 	onOutputReady OutputReadyFunc
+	closeFuse     core.Fuse
+	closeErr      error
 }
 
 type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
@@ -60,8 +63,9 @@ func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 
 	bin := gst.NewBin("input")
 	i := &Input{
-		bin:    bin,
-		source: src,
+		bin:       bin,
+		source:    src,
+		closeFuse: core.NewFuse(),
 	}
 
 	srcs := src.GetSources()
@@ -113,7 +117,12 @@ func (i *Input) Start(ctx context.Context) error {
 }
 
 func (i *Input) Close() error {
-	return i.source.Close()
+	// Make sure Close is idempotent and always return the input error
+	i.closeFuse.Once(func() {
+		i.closeErr = i.source.Close()
+	})
+
+	return i.closeErr
 }
 
 func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
