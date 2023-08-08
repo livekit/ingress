@@ -184,10 +184,10 @@ func (t *whipTrackHandler) processRTPPacket() error {
 
 	t.jb.Push(pkt)
 
-	for {
-		pkts := t.jb.Pop(false)
+	samples := t.jb.PopSamples(false)
+	for _, pkts := range samples {
 		if len(pkts) == 0 {
-			break
+			continue
 		}
 
 		var ts time.Duration
