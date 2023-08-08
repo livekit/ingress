@@ -12,6 +12,7 @@ require (
 	github.com/livekit/protocol v1.6.0
 	github.com/livekit/psrpc v0.3.2
 	github.com/livekit/server-sdk-go v1.0.16-0.20230808010703-d4a4451efa06
+	github.com/pion/dtls/v2 v2.2.7
 	github.com/pion/interceptor v0.1.17
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/rtp v1.8.1
@@ -61,7 +62,6 @@ require (
 	github.com/nats-io/nkeys v0.4.4 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pion/datachannel v1.5.5 // indirect
-	github.com/pion/dtls/v2 v2.2.7 // indirect
 	github.com/pion/ice/v2 v2.3.9 // indirect
 	github.com/pion/logging v0.2.2 // indirect
 	github.com/pion/mdns v0.0.7 // indirect
