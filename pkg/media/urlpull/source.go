@@ -26,7 +26,6 @@ import (
 type URLSource struct {
 	params *params.Params
 	src    *gst.Element
-	pad    *gst.Pad
 }
 
 func NewURLSource(ctx context.Context, p *params.Params) (*URLSource, error) {
@@ -42,27 +41,28 @@ func NewURLSource(ctx context.Context, p *params.Params) (*URLSource, error) {
 		return nil, err
 	}
 
-	queue, err := gst.NewElement("queue2")
+	/*	queue, err := gst.NewElement("queue2")
+		if err != nil {
+			return nil, err
+		}
+
+		err = queue.SetProperty("use-buffering", true)
+		if err != nil {
+			return nil, err
+		}
+
+		err = bin.AddMany(elem, queue)*/
+	err = bin.AddMany(elem)
 	if err != nil {
 		return nil, err
 	}
 
-	err = queue.SetProperty("use-buffering", true)
-	if err != nil {
-		return nil, err
-	}
+	//	err = elem.Link(queue)
+	//	if err != nil {
+	//		return nil, err
+	//	}
 
-	err = bin.AddMany(elem, queue)
-	if err != nil {
-		return nil, err
-	}
-
-	err = elem.Link(queue)
-	if err != nil {
-		return nil, err
-	}
-
-	pad := queue.GetStaticPad("src")
+	pad := elem.GetStaticPad("src")
 	if pad == nil {
 		return nil, errors.ErrUnableToAddPad
 	}
@@ -75,7 +75,6 @@ func NewURLSource(ctx context.Context, p *params.Params) (*URLSource, error) {
 	return &URLSource{
 		params: p,
 		src:    bin.Element,
-		pad:    pad,
 	}, nil
 }
 
