@@ -102,6 +102,10 @@ func (s *WHIPSource) GetSources() []*gst.Element {
 	return ret
 }
 
+func (s *WHIPSource) ValidateCaps(*gst.Caps) error {
+	return nil
+}
+
 func (s *WHIPSource) getRelayUrl(kind types.StreamKind) string {
 	return fmt.Sprintf("%s/%s", s.params.RelayUrl, kind)
 }
