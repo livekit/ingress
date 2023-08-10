@@ -35,6 +35,7 @@ import (
 
 type Source interface {
 	GetSources() []*gst.Element
+	ValidateCaps(*gst.Caps) error
 	Start(ctx context.Context) error
 	Close() error
 }
@@ -126,6 +127,28 @@ func (i *Input) Close() error {
 }
 
 func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
+	var err error
+
+	defer func() {
+		if err != nil {
+			msg := gst.NewErrorMessage(i.bin.Element, err, err.Error(), nil)
+			i.bin.Element.GetBus().Post(msg)
+		}
+	}()
+
+	typefind, err := i.bin.GetElementByName("typefind")
+	if err == nil && typefind != nil {
+		var caps interface{}
+		caps, err = typefind.GetProperty("caps")
+		if err == nil && caps != nil {
+			err = i.source.ValidateCaps(caps.(*gst.Caps))
+			if err != nil {
+				logger.Infow("input caps validation failed", "error", err)
+				return
+			}
+		}
+	}
+
 	// surface callback for first audio and video pads, plug in fakesink on the rest
 	i.lock.Lock()
 	newPad := false
@@ -156,11 +179,16 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 		}
 		pad = ghostPad.Pad
 	} else {
-		sink, err := gst.NewElement("fakesink")
+		var sink *gst.Element
+
+		sink, err = gst.NewElement("fakesink")
 		if err != nil {
 			logger.Errorw("failed to create fakesink", err)
+			return
 		}
-		pads, err := sink.GetSinkPads()
+		var pads []*gst.Pad
+
+		pads, err = sink.GetSinkPads()
 		pad.Link(pads[0])
 		return
 	}

@@ -23,6 +23,19 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 )
 
+var (
+	supportedMimeTypes = []string{
+		"audio/x-m4a",
+		"application/x-hls",
+		"video/quicktime",
+		"video/x-matroska",
+		"video/webm",
+		"audio/ogg",
+		"application/x-id3",
+		"audio/mpeg",
+	}
+)
+
 type URLSource struct {
 	params *params.Params
 	src    *gst.Element
@@ -83,6 +96,25 @@ func (u *URLSource) GetSources() []*gst.Element {
 	return []*gst.Element{
 		u.src,
 	}
+}
+
+func (s *URLSource) ValidateCaps(caps *gst.Caps) error {
+	if caps.GetSize() == 0 {
+		return errors.ErrUnsupportedDecodeFormat
+	}
+
+	str := caps.GetStructureAt(0)
+	if str == nil {
+		return errors.ErrUnsupportedDecodeFormat
+	}
+
+	for _, mime := range supportedMimeTypes {
+		if str.Name() == mime {
+			return nil
+		}
+	}
+
+	return errors.ErrUnsupportedDecodeFormat
 }
 
 func (u *URLSource) Start(ctx context.Context) error {

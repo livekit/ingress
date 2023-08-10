@@ -111,6 +111,23 @@ func (s *RTMPRelaySource) GetSources() []*gst.Element {
 	return []*gst.Element{s.flvSrc.Element}
 }
 
+func (s *RTMPRelaySource) ValidateCaps(caps *gst.Caps) error {
+	if caps.GetSize() == 0 {
+		return errors.ErrUnsupportedDecodeFormat
+	}
+
+	str := caps.GetStructureAt(0)
+	if str == nil {
+		return errors.ErrUnsupportedDecodeFormat
+	}
+
+	if str.Name() != "video/x-flv" {
+		return errors.ErrUnsupportedDecodeFormat
+	}
+
+	return nil
+}
+
 type appSrcWriter struct {
 	appSrc *app.Source
 	eos    *atomic.Bool
