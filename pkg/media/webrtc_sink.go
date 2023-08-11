@@ -19,9 +19,11 @@ import (
 
 	"github.com/tinyzimmer/go-gst/gst"
 
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/protocol/utils"
@@ -63,19 +65,29 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 	return output.Output, nil
 }
 
-func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
+func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 	outputs := make([]*Output, 0)
 	sbArray := make([]lksdk_output.VideoSampleProvider, 0)
-	for _, layer := range s.params.VideoEncodingOptions.Layers {
+
+	sortedLayers := sortLayersByQuality(s.params.VideoEncodingOptions.Layers)
+
+	var outLayers []*livekit.VideoLayer
+	for _, layer := range sortedLayers {
 		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer)
 		if err != nil {
 			return nil, err
 		}
 		outputs = append(outputs, output.Output)
 		sbArray = append(sbArray, output)
+		outLayers = append(outLayers, layer)
+
+		if layer.Width >= uint32(w) && layer.Height >= uint32(h) {
+			// Next quality layer would be duplicate of current one
+			break
+		}
 	}
 
-	err := s.sdkOut.AddVideoTrack(sbArray, s.params.VideoEncodingOptions.Layers, utils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
+	err := s.sdkOut.AddVideoTrack(sbArray, outLayers, utils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +95,7 @@ func (s *WebRTCSink) addVideoTrack() ([]*Output, error) {
 	return outputs, nil
 }
 
-func (s *WebRTCSink) AddTrack(kind types.StreamKind) (*gst.Bin, error) {
+func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps) (*gst.Bin, error) {
 	var bin *gst.Bin
 
 	switch kind {
@@ -97,7 +109,14 @@ func (s *WebRTCSink) AddTrack(kind types.StreamKind) (*gst.Bin, error) {
 		bin = output.bin
 
 	case types.Video:
-		outputs, err := s.addVideoTrack()
+		w, h, err := getResolution(caps)
+		if err != nil {
+			return nil, err
+		}
+
+		logger.Infow("source resolution parsed", "width", w, "height", h)
+
+		outputs, err := s.addVideoTrack(w, h)
 		if err != nil {
 			logger.Errorw("could not add video track", err)
 			return nil, err
@@ -117,4 +136,43 @@ func (s *WebRTCSink) AddTrack(kind types.StreamKind) (*gst.Bin, error) {
 
 func (s *WebRTCSink) Close() {
 	s.sdkOut.Close()
+}
+
+func getResolution(caps *gst.Caps) (w int, h int, err error) {
+	if caps.GetSize() == 0 {
+		return 0, 0, errors.ErrUnsupportedDecodeFormat
+	}
+
+	str := caps.GetStructureAt(0)
+
+	wObj, err := str.GetValue("width")
+	if err != nil {
+		return 0, 0, err
+	}
+
+	hObj, err := str.GetValue("height")
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return wObj.(int), hObj.(int), nil
+}
+
+func sortLayersByQuality(layers []*livekit.VideoLayer) []*livekit.VideoLayer {
+	layersByQuality := make(map[livekit.VideoQuality]*livekit.VideoLayer)
+
+	for _, layer := range layers {
+		layersByQuality[layer.Quality] = layer
+	}
+
+	var ret []*livekit.VideoLayer
+	for q := livekit.VideoQuality_LOW; q <= livekit.VideoQuality_HIGH; q++ {
+		layer, ok := layersByQuality[q]
+		if !ok {
+			continue
+		}
+
+		ret = append(ret, layer)
+	}
+	return ret
 }

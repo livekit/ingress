@@ -16,7 +16,6 @@ package media
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -122,10 +121,13 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad, para
 		// We could send this in a separate goroutine, but this would make races more likely.
 		p.SendStateUpdate(context.Background())
 	}()
-	caps, _ := gPad.Pad.GetProperty("caps")
-	fmt.Println("CAPS", caps)
 
-	bin, err := p.sink.AddTrack(kind)
+	caps, err := gPad.Pad.GetProperty("caps")
+	if err != nil {
+		return
+	}
+
+	bin, err := p.sink.AddTrack(kind, caps.(*gst.Caps))
 	if err != nil {
 		return
 	}
