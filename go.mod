@@ -2,6 +2,8 @@ module github.com/livekit/ingress
 
 go 1.18
 
+replace github.com/tinyzimmer/go-glib => ../go-glib
+
 require (
 	github.com/Eyevinn/mp4ff v0.35.0
 	github.com/frostbyte73/core v0.0.9

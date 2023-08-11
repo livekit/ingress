@@ -16,6 +16,7 @@ package media
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -95,6 +96,20 @@ func New(ctx context.Context, conf *config.Config, params *params.Params) (*Pipe
 
 func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 	var err error
+	defer func() {
+		if err != nil {
+			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+			p.SendStateUpdate(context.Background())
+		}
+	}()
+
+	_, err = pad.Connect("notify::caps", func(gPad *gst.GhostPad, param *glib.ParamSpec) {
+		p.onParamsReady(kind, gPad, param)
+	})
+}
+
+func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad, param *glib.ParamSpec) {
+	var err error
 
 	defer func() {
 		if err != nil {
@@ -107,6 +122,8 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 		// We could send this in a separate goroutine, but this would make races more likely.
 		p.SendStateUpdate(context.Background())
 	}()
+	caps, _ := gPad.Pad.GetProperty("caps")
+	fmt.Println("CAPS", caps)
 
 	bin, err := p.sink.AddTrack(kind)
 	if err != nil {
@@ -118,7 +135,7 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 		return
 	}
 
-	pad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+	gPad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
 		// link
 		if linkReturn := pad.Link(bin.GetStaticPad("sink")); linkReturn != gst.PadLinkOK {
 			logger.Errorw("failed to link output bin", err)
