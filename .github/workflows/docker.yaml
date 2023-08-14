@@ -83,4 +83,4 @@ jobs:
           labels: ${{ steps.docker-md.outputs.labels }}
           build-args:
             GOVERSION: ${{ env.GOVERSION }}
-            STVERSION: ${{ env.GSTVERSION }}
+            GSTVERSION: ${{ env.GSTVERSION }}
