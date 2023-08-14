@@ -12,14 +12,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM livekit/gstreamer:1.20.4-dev
+ARG GSTVERSION
+
+FROM livekit/gstreamer:$GSTVERSION-dev
 
 ARG TARGETPLATFORM
+ARG GOVERSION
 
 WORKDIR /workspace
 
 # install go
-RUN apt-get update && apt-get install -y golang
+RUN apt-get update && apt-get install -y curl
+
+RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then GOARCH=arm64; else GOARCH=amd64; fi && \
+    curl -L -o /tmp/go.tar.gz "https://go.dev/dl/go$GOVERSION.linux-$GOARCH.tar.gz"
+RUN tar -C /usr/local -xzf /tmp/go.tar.gz
+ENV PATH="$PATH:/usr/local/go/bin"
 
 # download go modules
 COPY go.mod .
@@ -35,7 +43,7 @@ COPY version/ version/
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then GOARCH=arm64; else GOARCH=amd64; fi && \
     CGO_ENABLED=1 GOOS=linux GOARCH=${GOARCH} GO111MODULE=on go build -a -o ingress ./cmd/server
 
-FROM livekit/gstreamer:1.20.4-prod
+FROM livekit/gstreamer:$GSTVERSION-prod
 
 # install wget for health check
 RUN apt-get update && apt-get install -y wget

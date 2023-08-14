@@ -33,7 +33,8 @@ var Default = Build
 
 const (
 	imageName  = "livekit/ingress"
-	gstVersion = "1.20.4"
+	gstVersion = "1.22.5"
+	goVersion  = "1.20.7"
 )
 
 var plugins = []string{"gstreamer", "gst-plugins-base", "gst-plugins-good", "gst-plugins-bad", "gst-plugins-ugly", "gst-libav"}
@@ -117,7 +118,7 @@ func BuildDocker() error {
 	return mageutil.Run(context.Background(),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-dev", gstVersion),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-prod", gstVersion),
-		fmt.Sprintf("docker build --no-cache -t %s:latest -f build/ingress/Dockerfile .", imageName),
+		fmt.Sprintf("docker build --no-cache -t %s:latest -f build/ingress/Dockerfile --build-arg GSTVERSION=%s --build-arg GOVERSION=%s .", imageName, gstVersion, goVersion),
 	)
 }
 
@@ -125,7 +126,7 @@ func BuildDockerLinux() error {
 	return mageutil.Run(context.Background(),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-dev", gstVersion),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-prod", gstVersion),
-		fmt.Sprintf("docker build --no-cache --platform linux/amd64 -t %s:latest -f build/ingress/Dockerfile .", imageName),
+		fmt.Sprintf("docker build --no-cache --platform linux/amd64 -t %s:latest -f build/ingress/Dockerfile --build-arg GSTVERSION=%s --build-arg GOVERSION=%s .", imageName, gstVersion, goVersion),
 	)
 }
 
