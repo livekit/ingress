@@ -77,7 +77,7 @@ jobs:
         with:
           context: .
           file: ./build/ingress/Dockerfile
-          push: false
+          push: true
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.docker-md.outputs.tags }}
           labels: ${{ steps.docker-md.outputs.labels }}
