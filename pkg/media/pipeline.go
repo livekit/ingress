@@ -110,6 +110,12 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad, param *glib.ParamSpec) {
 	var err error
 
+	// TODO fix go-gst to not create non nil gst.Caps for a NULL native caps pointer?
+	caps, err := gPad.Pad.GetProperty("caps")
+	if err != nil || caps == nil || caps.(*gst.Caps) == nil || caps.(*gst.Caps).Unsafe() == nil {
+		return
+	}
+
 	defer func() {
 		if err != nil {
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
@@ -121,11 +127,6 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad, para
 		// We could send this in a separate goroutine, but this would make races more likely.
 		p.SendStateUpdate(context.Background())
 	}()
-
-	caps, err := gPad.Pad.GetProperty("caps")
-	if err != nil {
-		return
-	}
 
 	bin, err := p.sink.AddTrack(kind, caps.(*gst.Caps))
 	if err != nil {
