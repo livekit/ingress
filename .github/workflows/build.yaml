@@ -40,5 +40,5 @@ jobs:
             ~/.cache
           key: ingress
 
-      - name: Build docker imagARG GOVERSION
+      - name: Build docker image
         run: docker build -t ingress -f ./build/ingress/Dockerfile --build-arg GOVERSION=$GOVERSION --build-arg GSTVERSION=$GSTVERSION .
