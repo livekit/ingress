@@ -78,7 +78,7 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 	}
 	err = inputCaps.SetProperty("caps", gst.NewCapsFromString(
 		fmt.Sprintf(
-			"video/x-raw,width=%d,height=%d",
+			"video/x-raw,width=[1,%d],height=[1,%d],pixel-aspect-ratio=1/1",
 			layer.Width,
 			layer.Height,
 		),
