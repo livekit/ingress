@@ -30,6 +30,7 @@ var (
 		"video/quicktime",
 		"video/x-matroska",
 		"video/webm",
+		"video/mpegts",
 		"audio/ogg",
 		"application/x-id3",
 		"audio/mpeg",
