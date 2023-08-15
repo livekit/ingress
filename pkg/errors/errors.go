@@ -30,7 +30,7 @@ var (
 	ErrInvalidAudioPreset      = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid audio encoding preset")
 	ErrInvalidVideoPreset      = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid video encoding preset")
 	ErrSourceNotReady          = psrpc.NewErrorf(psrpc.FailedPrecondition, "source encoder not ready")
-	ErrUnsupportedDecodeFormat = psrpc.NewErrorf(psrpc.NotAcceptable, "unsupported mime type for the source media")
+	ErrUnsupportedDecodeFormat = psrpc.NewErrorf(psrpc.NotAcceptable, "unsupported format for the source media")
 	ErrUnsupportedEncodeFormat = psrpc.NewErrorf(psrpc.InvalidArgument, "unsupported mime type for encoder")
 	ErrDuplicateTrack          = psrpc.NewErrorf(psrpc.NotAcceptable, "more than 1 track with given media kind")
 	ErrUnableToAddPad          = psrpc.NewErrorf(psrpc.Internal, "could not add pads to bin")
@@ -66,6 +66,10 @@ func ErrHttpRelayFailure(statusCode int) psrpc.Error {
 	// Any failure in the relay between the handler and the service is treated as internal
 
 	return psrpc.NewErrorf(psrpc.Internal, "HTTP request failed with code %d", statusCode)
+}
+
+func ErrUnsupportedDecodeMimeType(mimeType string) psrpc.Error {
+	return psrpc.NewErrorf(psrpc.NotAcceptable, "unsupported mime type (%s) for the source media", mimeType)
 }
 
 func ErrorToGstFlowReturn(err error) gst.FlowReturn {

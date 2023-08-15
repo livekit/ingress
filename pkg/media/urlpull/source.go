@@ -30,6 +30,7 @@ var (
 		"video/quicktime",
 		"video/x-matroska",
 		"video/webm",
+		"video/mpegts",
 		"audio/ogg",
 		"application/x-id3",
 		"audio/mpeg",
@@ -114,7 +115,7 @@ func (s *URLSource) ValidateCaps(caps *gst.Caps) error {
 		}
 	}
 
-	return errors.ErrUnsupportedDecodeFormat
+	return errors.ErrUnsupportedDecodeMimeType(str.Name())
 }
 
 func (u *URLSource) Start(ctx context.Context) error {
