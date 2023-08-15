@@ -114,7 +114,7 @@ func (s *URLSource) ValidateCaps(caps *gst.Caps) error {
 		}
 	}
 
-	return errors.ErrUnsupportedDecodeFormat
+	return errors.ErrUnsupportedDecodeMimeType(str.Name())
 }
 
 func (u *URLSource) Start(ctx context.Context) error {

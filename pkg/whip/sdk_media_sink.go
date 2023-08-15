@@ -187,7 +187,7 @@ func getVideoParams(mimeType string, s *media.Sample) (uint, uint, error) {
 	case strings.ToLower(webrtc.MimeTypeVP8):
 		return getVP8VideoParams(s)
 	default:
-		return 0, 0, errors.ErrUnsupportedDecodeFormat
+		return 0, 0, errors.ErrUnsupportedDecodeMimeType(mimeType)
 	}
 }
 

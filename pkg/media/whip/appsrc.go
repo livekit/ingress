@@ -165,5 +165,5 @@ func getCapsForCodec(mimeType string) (*gst.Caps, error) {
 		return gst.NewCapsFromString("audio/x-opus,channel-mapping-family=0"), nil
 	}
 
-	return nil, errors.ErrUnsupportedDecodeFormat
+	return nil, errors.ErrUnsupportedDecodeMimeType(mimeType)
 }

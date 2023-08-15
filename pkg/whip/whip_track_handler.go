@@ -325,7 +325,7 @@ func (t *whipTrackHandler) createDepacketizer() (rtp.Depacketizer, error) {
 		depacketizer = &codecs.OpusPacket{}
 
 	default:
-		return nil, errors.ErrUnsupportedDecodeFormat
+		return nil, errors.ErrUnsupportedDecodeMimeType(t.remoteTrack.Codec().MimeType)
 	}
 
 	return depacketizer, nil
@@ -354,7 +354,7 @@ func (t *whipTrackHandler) createJitterBuffer() (*jitter.Buffer, error) {
 		// No PLI for audio
 
 	default:
-		return nil, errors.ErrUnsupportedDecodeFormat
+		return nil, errors.ErrUnsupportedDecodeMimeType(t.remoteTrack.Codec().MimeType)
 	}
 
 	clockRate := t.remoteTrack.Codec().ClockRate
