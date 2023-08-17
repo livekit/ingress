@@ -125,7 +125,7 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEnco
 		if err = e.enc.SetProperty("byte-stream", true); err != nil {
 			return nil, err
 		}
-		if err = e.enc.SetProperty("rc-lookahead", 2); err != nil {
+		if err = e.enc.SetProperty("rc-lookahead", 5); err != nil {
 			return nil, err
 		}
 		if err = e.enc.SetProperty("threads", threadCount); err != nil {
