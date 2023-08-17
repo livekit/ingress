@@ -68,6 +68,13 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 
 	e.logger = logger.GetLogger().WithValues("kind", "video", "layer", layer.Quality.String())
 
+	queueIn, err := gst.NewElement("queue")
+	if err != nil {
+		return nil, err
+	}
+	if err = queueIn.SetProperty("max-size-buffers", uint(1)); err != nil {
+		return nil, err
+	}
 	videoScale, err := gst.NewElement("videoscale")
 	if err != nil {
 		return nil, err
@@ -86,8 +93,17 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 	if err != nil {
 		return nil, err
 	}
+
+	queueEnc, err := gst.NewElement("queue")
+	if err != nil {
+		return nil, err
+	}
+	if err = queueEnc.SetProperty("max-size-buffers", uint(1)); err != nil {
+		return nil, err
+	}
+
 	e.elements = []*gst.Element{
-		videoScale, inputCaps,
+		queueIn, videoScale, inputCaps, queueEnc,
 	}
 
 	switch codec {
@@ -137,15 +153,15 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 		return nil, errors.ErrUnsupportedEncodeFormat
 	}
 
-	queue, err := gst.NewElement("queue")
+	queueOut, err := gst.NewElement("queue")
 	if err != nil {
 		return nil, err
 	}
-	if err = queue.SetProperty("max-size-time", uint64(3e9)); err != nil {
+	if err = queueOut.SetProperty("max-size-buffers", uint(2)); err != nil {
 		return nil, err
 	}
 
-	e.elements = append(e.elements, queue, e.sink.Element)
+	e.elements = append(e.elements, queueOut, e.sink.Element)
 
 	e.bin = gst.NewBin(fmt.Sprintf("video_%s", layer.Quality.String()))
 	if err = e.linkElements(); err != nil {
@@ -162,6 +178,15 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions) (*AudioOutput,
 	}
 
 	e.logger = logger.GetLogger().WithValues("kind", "audio")
+
+	queueIn, err := gst.NewElement("queue")
+	if err != nil {
+		return nil, err
+	}
+
+	if err = queueIn.SetProperty("max-size-buffers", uint(1)); err != nil {
+		return nil, err
+	}
 
 	audioConvert, err := gst.NewElement("audioconvert")
 	if err != nil {
@@ -185,6 +210,11 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions) (*AudioOutput,
 	err = capsFilter.SetProperty("caps", gst.NewCapsFromString(
 		fmt.Sprintf("audio/x-raw,format=S16LE,layout=interleaved,rate=48000,channels=%d", channels),
 	))
+	if err != nil {
+		return nil, err
+	}
+
+	queueEnc, err := gst.NewElement("queue")
 	if err != nil {
 		return nil, err
 	}
@@ -214,16 +244,16 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions) (*AudioOutput,
 		return nil, errors.ErrUnsupportedEncodeFormat
 	}
 
-	queue, err := gst.NewElement("queue")
+	queueOut, err := gst.NewElement("queue")
 	if err != nil {
 		return nil, err
 	}
-	if err = queue.SetProperty("max-size-time", uint64(3e9)); err != nil {
+	if err = queueOut.SetProperty("max-size-time", uint64(5e7)); err != nil {
 		return nil, err
 	}
 
 	e.elements = []*gst.Element{
-		audioConvert, audioResample, capsFilter, e.enc, queue, e.sink.Element,
+		queueIn, audioConvert, audioResample, capsFilter, queueEnc, e.enc, queueOut, e.sink.Element,
 	}
 
 	e.bin = gst.NewBin("audio")

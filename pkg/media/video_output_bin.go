@@ -32,6 +32,15 @@ func NewVideoOutputBin(options *livekit.IngressVideoEncodingOptions, outputs []*
 
 	o.bin = gst.NewBin("video output bin")
 
+	queueIn, err := gst.NewElement("queue")
+	if err != nil {
+		return nil, err
+	}
+	if err = queueIn.SetProperty("max-size-buffers", uint(2)); err != nil {
+		return nil, err
+	}
+	o.preProcessorElements = append(o.preProcessorElements, queueIn)
+
 	if options.FrameRate > 0 {
 		videoRate, err := gst.NewElement("videorate")
 		if err != nil {
