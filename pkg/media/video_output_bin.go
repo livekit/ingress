@@ -49,15 +49,6 @@ func NewVideoOutputBin(options *livekit.IngressVideoEncodingOptions, outputs []*
 	}
 	o.preProcessorElements = append(o.preProcessorElements, videoConvert)
 
-	queueTee, err := gst.NewElement("queue")
-	if err != nil {
-		return nil, err
-	}
-	if err = queueTee.SetProperty("max-size-buffers", uint(1)); err != nil {
-		return nil, err
-	}
-	o.preProcessorElements = append(o.preProcessorElements, queueTee)
-
 	err = o.bin.AddMany(o.preProcessorElements...)
 	if err != nil {
 		return nil, err

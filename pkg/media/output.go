@@ -68,6 +68,14 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 
 	e.logger = logger.GetLogger().WithValues("kind", "video", "layer", layer.Quality.String())
 
+	queueIn, err := gst.NewElement("queue")
+	if err != nil {
+		return nil, err
+	}
+	if err = queueIn.SetProperty("max-size-buffers", uint(1)); err != nil {
+		return nil, err
+	}
+
 	videoScale, err := gst.NewElement("videoscale")
 	if err != nil {
 		return nil, err
@@ -96,7 +104,7 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 	}
 
 	e.elements = []*gst.Element{
-		videoScale, inputCaps, queueEnc,
+		queueIn, videoScale, inputCaps, queueEnc,
 	}
 
 	switch codec {
