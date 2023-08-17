@@ -222,6 +222,9 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions) (*AudioOutput,
 	if err != nil {
 		return nil, err
 	}
+	if err = queueEnc.SetProperty("max-size-buffers", uint(1)); err != nil {
+		return nil, err
+	}
 
 	switch options.AudioCodec {
 	case livekit.AudioCodec_OPUS:
