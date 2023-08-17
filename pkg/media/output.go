@@ -31,6 +31,8 @@ import (
 
 const (
 	opusFrameSize = 20
+
+	pixelsPerEncoderThread = 640 * 480
 )
 
 // Output manages GStreamer elements that converts & encodes video to the specification that's
@@ -60,13 +62,16 @@ type AudioOutput struct {
 	codec livekit.AudioCodec
 }
 
-func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*VideoOutput, error) {
+func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEncodedWith, maxEncodedHeight uint32) (*VideoOutput, error) {
 	e, err := newVideoOutput(codec)
 	if err != nil {
 		return nil, err
 	}
 
 	e.logger = logger.GetLogger().WithValues("kind", "video", "layer", layer.Quality.String())
+
+	threadCount, outQueueLen := getVideoEncoderThreadCountAndOutputBufferSize(layer, maxEncodedWith, maxEncodedHeight)
+	e.logger.Infow("video layer", "width", layer.Width, "height", layer.Height, "threads", threadCount, "queueLength", outQueueLen)
 
 	queueIn, err := gst.NewElement("queue")
 	if err != nil {
@@ -120,6 +125,13 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 		if err = e.enc.SetProperty("byte-stream", true); err != nil {
 			return nil, err
 		}
+		if err = e.enc.SetProperty("rc-lookahead", 2); err != nil {
+			return nil, err
+		}
+		if err = e.enc.SetProperty("threads", threadCount); err != nil {
+			return nil, err
+		}
+
 		e.enc.SetArg("speed-preset", "veryfast")
 
 		profileCaps, err := gst.NewElement("capsfilter")
@@ -158,7 +170,7 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 	if err != nil {
 		return nil, err
 	}
-	if err = queueOut.SetProperty("max-size-time", uint64(3e8)); err != nil {
+	if err = queueOut.SetProperty("max-size-buffers", outQueueLen); err != nil {
 		return nil, err
 	}
 
@@ -481,4 +493,13 @@ func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 	}
 
 	return errors.ErrorToGstFlowReturn(err)
+}
+
+func getVideoEncoderThreadCountAndOutputBufferSize(layer *livekit.VideoLayer, maxW, maxH uint32) (uint, uint) {
+	threadCount := (int64(layer.Width)*int64(layer.Height) + int64(pixelsPerEncoderThread-1)) / int64(pixelsPerEncoderThread)
+
+	maxThreadCount := (int64(maxW)*int64(maxH) + int64(pixelsPerEncoderThread-1)) / int64(pixelsPerEncoderThread)
+
+	// Output queue size is maxThreadCount - threadCount + 1 to make sure we have enough room in the lower layers queue to wait for higher layer buffers to get emitted
+	return uint(threadCount), uint(maxThreadCount - threadCount + 1)
 }

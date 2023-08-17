@@ -70,10 +70,11 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 	sbArray := make([]lksdk_output.VideoSampleProvider, 0)
 
 	sortedLayers := sortLayersByQuality(s.params.VideoEncodingOptions.Layers)
+	maxLayer := sortedLayers[len(sortedLayers)-1]
 
 	var outLayers []*livekit.VideoLayer
 	for _, layer := range sortedLayers {
-		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer)
+		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, maxLayer.Width, maxLayer.Height)
 		if err != nil {
 			return nil, err
 		}
