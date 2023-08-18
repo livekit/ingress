@@ -125,7 +125,10 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEnco
 		if err = e.enc.SetProperty("byte-stream", true); err != nil {
 			return nil, err
 		}
-		if err = e.enc.SetProperty("rc-lookahead", 5); err != nil {
+		if err = e.enc.SetProperty("rc-lookahead", 2); err != nil {
+			return nil, err
+		}
+		if err = e.enc.SetProperty("sync-lookahead", 2); err != nil {
 			return nil, err
 		}
 		if err = e.enc.SetProperty("threads", threadCount); err != nil {
@@ -160,6 +163,16 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEnco
 		if err = e.enc.SetProperty("keyframe-max-dist", 100); err != nil {
 			return nil, err
 		}
+		if err = e.enc.SetProperty("threads", int(threadCount)); err != nil {
+			return nil, err
+		}
+		if err = e.enc.SetProperty("cpu-used", -6); err != nil {
+			return nil, err
+		}
+		if err = e.enc.SetProperty("deadline", int64(1)); err != nil {
+			return nil, err
+		}
+
 		e.elements = append(e.elements, e.enc)
 
 	default:
