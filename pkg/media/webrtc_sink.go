@@ -69,22 +69,18 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 	outputs := make([]*Output, 0)
 	sbArray := make([]lksdk_output.VideoSampleProvider, 0)
 
-	sortedLayers := sortLayersByQuality(s.params.VideoEncodingOptions.Layers)
+	sortedLayers := filterAndSortLayersByQuality(s.params.VideoEncodingOptions.Layers, w, h)
+	maxLayer := sortedLayers[len(sortedLayers)-1]
 
 	var outLayers []*livekit.VideoLayer
 	for _, layer := range sortedLayers {
-		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer)
+		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, maxLayer.Width, maxLayer.Height)
 		if err != nil {
 			return nil, err
 		}
 		outputs = append(outputs, output.Output)
 		sbArray = append(sbArray, output)
 		outLayers = append(outLayers, layer)
-
-		if layer.Width >= uint32(w) && layer.Height >= uint32(h) {
-			// Next quality layer would be duplicate of current one
-			break
-		}
 	}
 
 	err := s.sdkOut.AddVideoTrack(sbArray, outLayers, utils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
@@ -158,7 +154,7 @@ func getResolution(caps *gst.Caps) (w int, h int, err error) {
 	return wObj.(int), hObj.(int), nil
 }
 
-func sortLayersByQuality(layers []*livekit.VideoLayer) []*livekit.VideoLayer {
+func filterAndSortLayersByQuality(layers []*livekit.VideoLayer, sourceW, sourceH int) []*livekit.VideoLayer {
 	layersByQuality := make(map[livekit.VideoQuality]*livekit.VideoLayer)
 
 	for _, layer := range layers {
@@ -173,6 +169,12 @@ func sortLayersByQuality(layers []*livekit.VideoLayer) []*livekit.VideoLayer {
 		}
 
 		ret = append(ret, layer)
+
+		if layer.Width >= uint32(sourceW) && layer.Height >= uint32(sourceH) {
+			// Next quality layer would be duplicate of current one
+			break
+		}
+
 	}
 	return ret
 }
