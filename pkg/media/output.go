@@ -70,10 +70,13 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEnco
 
 	e.logger = logger.GetLogger().WithValues("kind", "video", "layer", layer.Quality.String())
 
-	threadCount, outQueueLen := getVideoEncoderThreadCountAndOutputBufferSize(layer, maxEncodedWith, maxEncodedHeight)
+	threadCount, outQueueLen, err := getVideoEncoderThreadCountAndOutputBufferSize(codec, layer, maxEncodedWith, maxEncodedHeight)
+	if err != nil {
+		return nil, err
+	}
 	e.logger.Infow("video layer", "width", layer.Width, "height", layer.Height, "threads", threadCount, "queueLength", outQueueLen)
 
-	queueIn, err := gst.NewElement("queue")
+	queueIn, err := gst.NewElementWithName("queue", fmt.Sprintf("video_%s_in", layer.Quality.String()))
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +103,7 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEnco
 		return nil, err
 	}
 
-	queueEnc, err := gst.NewElement("queue")
+	queueEnc, err := gst.NewElementWithName("queue", fmt.Sprintf("video_%s_enc", layer.Quality.String()))
 	if err != nil {
 		return nil, err
 	}
@@ -179,7 +182,7 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEnco
 		return nil, errors.ErrUnsupportedEncodeFormat
 	}
 
-	queueOut, err := gst.NewElement("queue")
+	queueOut, err := gst.NewElementWithName("queue", fmt.Sprintf("video_%s_out", layer.Quality.String()))
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +234,7 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions) (*AudioOutput,
 		return nil, err
 	}
 
-	queueEnc, err := gst.NewElement("queue")
+	queueEnc, err := gst.NewElementWithName("queue", "audio_enc")
 	if err != nil {
 		return nil, err
 	}
@@ -264,7 +267,7 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions) (*AudioOutput,
 		return nil, errors.ErrUnsupportedEncodeFormat
 	}
 
-	queueOut, err := gst.NewElement("queue")
+	queueOut, err := gst.NewElementWithName("queue", "audio_out")
 	if err != nil {
 		return nil, err
 	}
@@ -511,11 +514,24 @@ func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 	return errors.ErrorToGstFlowReturn(err)
 }
 
-func getVideoEncoderThreadCountAndOutputBufferSize(layer *livekit.VideoLayer, maxW, maxH uint32) (uint, uint) {
+func getVideoEncoderThreadCountAndOutputBufferSize(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxW, maxH uint32) (uint, uint, error) {
 	threadCount := (int64(layer.Width)*int64(layer.Height) + int64(pixelsPerEncoderThread-1)) / int64(pixelsPerEncoderThread)
 
 	maxThreadCount := (int64(maxW)*int64(maxH) + int64(pixelsPerEncoderThread-1)) / int64(pixelsPerEncoderThread)
 
-	// Output queue size is maxThreadCount - threadCount + 1 to make sure we have enough room in the lower layers queue to wait for higher layer buffers to get emitted
-	return uint(threadCount), uint(maxThreadCount - threadCount + 1)
+	var bufferSize uint
+
+	switch codec {
+	case livekit.VideoCodec_H264_BASELINE:
+		// Codecs with frame based multithreading
+		// Output queue size is maxThreadCount - threadCount + 1 to make sure we have enough room in the lower layers queue to wait for higher layer buffers to get emitted
+		bufferSize = uint(maxThreadCount - threadCount + 1)
+	case livekit.VideoCodec_VP8:
+		// slice/line based multithreading: all layers have the same frame delay
+		bufferSize = 2
+	default:
+		return 0, 0, errors.ErrUnsupportedEncodeFormat
+	}
+
+	return uint(threadCount), bufferSize, nil
 }
