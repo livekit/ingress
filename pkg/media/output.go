@@ -62,7 +62,7 @@ type AudioOutput struct {
 	codec livekit.AudioCodec
 }
 
-func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEncodedWith, maxEncodedHeight uint32) (*VideoOutput, error) {
+func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*VideoOutput, error) {
 	e, err := newVideoOutput(codec)
 	if err != nil {
 		return nil, err
@@ -70,11 +70,9 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEnco
 
 	e.logger = logger.GetLogger().WithValues("kind", "video", "layer", layer.Quality.String())
 
-	threadCount, outQueueLen, err := getVideoEncoderThreadCountAndOutputBufferSize(codec, layer, maxEncodedWith, maxEncodedHeight)
-	if err != nil {
-		return nil, err
-	}
-	e.logger.Infow("video layer", "width", layer.Width, "height", layer.Height, "threads", threadCount, "queueLength", outQueueLen)
+	threadCount := getVideoEncoderThreadCount(layer)
+
+	e.logger.Infow("video layer", "width", layer.Width, "height", layer.Height, "threads", threadCount)
 
 	queueIn, err := gst.NewElementWithName("queue", fmt.Sprintf("video_%s_in", layer.Quality.String()))
 	if err != nil {
@@ -125,19 +123,18 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEnco
 		if err = e.enc.SetProperty("bitrate", uint(layer.Bitrate/1000)); err != nil {
 			return nil, err
 		}
+		// 1s VBV buffer size
+		if err = e.enc.SetProperty("vbv-buf-capacity", uint(1000)); err != nil {
+			return nil, err
+		}
 		if err = e.enc.SetProperty("byte-stream", true); err != nil {
-			return nil, err
-		}
-		if err = e.enc.SetProperty("rc-lookahead", 2); err != nil {
-			return nil, err
-		}
-		if err = e.enc.SetProperty("sync-lookahead", 2); err != nil {
 			return nil, err
 		}
 		if err = e.enc.SetProperty("threads", threadCount); err != nil {
 			return nil, err
 		}
 
+		e.enc.SetArg("tune", "zerolatency")
 		e.enc.SetArg("speed-preset", "veryfast")
 
 		profileCaps, err := gst.NewElement("capsfilter")
@@ -175,6 +172,16 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEnco
 		if err = e.enc.SetProperty("deadline", int64(1)); err != nil {
 			return nil, err
 		}
+		if err = e.enc.SetProperty("buffer-initial-size", 500); err != nil {
+			return nil, err
+		}
+		if err = e.enc.SetProperty("buffer-optimal-size", 600); err != nil {
+			return nil, err
+		}
+		if err = e.enc.SetProperty("buffer-size", 1000); err != nil {
+			return nil, err
+		}
+		e.enc.SetArg("end-usage", "cbr")
 
 		e.elements = append(e.elements, e.enc)
 
@@ -186,7 +193,7 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEnco
 	if err != nil {
 		return nil, err
 	}
-	if err = queueOut.SetProperty("max-size-buffers", outQueueLen); err != nil {
+	if err = queueOut.SetProperty("max-size-buffers", uint(2)); err != nil {
 		return nil, err
 	}
 
@@ -514,24 +521,8 @@ func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 	return errors.ErrorToGstFlowReturn(err)
 }
 
-func getVideoEncoderThreadCountAndOutputBufferSize(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxW, maxH uint32) (uint, uint, error) {
+func getVideoEncoderThreadCount(layer *livekit.VideoLayer) uint {
 	threadCount := (int64(layer.Width)*int64(layer.Height) + int64(pixelsPerEncoderThread-1)) / int64(pixelsPerEncoderThread)
 
-	maxThreadCount := (int64(maxW)*int64(maxH) + int64(pixelsPerEncoderThread-1)) / int64(pixelsPerEncoderThread)
-
-	var bufferSize uint
-
-	switch codec {
-	case livekit.VideoCodec_H264_BASELINE:
-		// Codecs with frame based multithreading
-		// Output queue size is maxThreadCount - threadCount + 1 to make sure we have enough room in the lower layers queue to wait for higher layer buffers to get emitted
-		bufferSize = uint(maxThreadCount - threadCount + 1)
-	case livekit.VideoCodec_VP8:
-		// slice/line based multithreading: all layers have the same frame delay
-		bufferSize = 2
-	default:
-		return 0, 0, errors.ErrUnsupportedEncodeFormat
-	}
-
-	return uint(threadCount), bufferSize, nil
+	return uint(threadCount)
 }
