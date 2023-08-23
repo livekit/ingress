@@ -125,19 +125,18 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEnco
 		if err = e.enc.SetProperty("bitrate", uint(layer.Bitrate/1000)); err != nil {
 			return nil, err
 		}
+		// 1s VBV buffer size
+		if err = e.enc.SetProperty("vbv-buf-capacity", uint(1000)); err != nil {
+			return nil, err
+		}
 		if err = e.enc.SetProperty("byte-stream", true); err != nil {
-			return nil, err
-		}
-		if err = e.enc.SetProperty("rc-lookahead", 2); err != nil {
-			return nil, err
-		}
-		if err = e.enc.SetProperty("sync-lookahead", 2); err != nil {
 			return nil, err
 		}
 		if err = e.enc.SetProperty("threads", threadCount); err != nil {
 			return nil, err
 		}
 
+		e.enc.SetArg("tune", "zerolatency")
 		e.enc.SetArg("speed-preset", "veryfast")
 
 		profileCaps, err := gst.NewElement("capsfilter")
@@ -175,6 +174,16 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, maxEnco
 		if err = e.enc.SetProperty("deadline", int64(1)); err != nil {
 			return nil, err
 		}
+		if err = e.enc.SetProperty("buffer-initial-size", 500); err != nil {
+			return nil, err
+		}
+		if err = e.enc.SetProperty("buffer-optimal-size", 600); err != nil {
+			return nil, err
+		}
+		if err = e.enc.SetProperty("buffer-size", 1000); err != nil {
+			return nil, err
+		}
+		e.enc.SetArg("end-usage", "cbr")
 
 		e.elements = append(e.elements, e.enc)
 
