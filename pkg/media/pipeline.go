@@ -160,11 +160,10 @@ func (p *Pipeline) Run(ctx context.Context) {
 	defer func() {
 		switch err {
 		case nil:
-			switch p.Params.InputType {
-			case livekit.IngressInput_URL_INPUT:
-				p.SetStatus(livekit.IngressState_ENDPOINT_COMPLETE, "")
-			default:
+			if p.Params.Reusable {
 				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+			} else {
+				p.SetStatus(livekit.IngressState_ENDPOINT_COMPLETE, "")
 			}
 		default:
 			span.RecordError(err)
