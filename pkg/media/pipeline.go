@@ -160,7 +160,11 @@ func (p *Pipeline) Run(ctx context.Context) {
 	defer func() {
 		switch err {
 		case nil:
-			p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+			if p.Params.Reusable {
+				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+			} else {
+				p.SetStatus(livekit.IngressState_ENDPOINT_COMPLETE, "")
+			}
 		default:
 			span.RecordError(err)
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, strings.TrimSpace(err.Error()))
