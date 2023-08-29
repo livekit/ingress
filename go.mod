@@ -8,7 +8,7 @@ require (
 	github.com/Eyevinn/mp4ff v0.35.0
 	github.com/frostbyte73/core v0.0.9
 	github.com/gorilla/mux v1.8.0
-	github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e
+	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/mediatransportutil v0.0.0-20230716190407-fc4944cbc33a
 	github.com/livekit/protocol v1.6.2-0.20230824204903-ecca17670daa
