@@ -83,8 +83,8 @@ github.com/lithammer/shortuuid/v4 v4.0.0 h1:QRbbVkfgNippHOS8PXDkti4NaWeyYfcBTHtw
 github.com/lithammer/shortuuid/v4 v4.0.0/go.mod h1:Zs8puNcrvf2rV9rTH51ZLLcj7ZXqQI3lv67aw4KiB1Y=
 github.com/livekit/go-glib v0.0.0-20230811224737-7bfaa4e57420 h1:b5RICTDRq0U35xgmm3VafZyh5Z7w6xFEPbT7HtgTGwQ=
 github.com/livekit/go-glib v0.0.0-20230811224737-7bfaa4e57420/go.mod h1:ltV0gO6xNFzZhsIRbFXv8RTq9NGoNT2dmAER4YmZfaM=
-github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e h1:Fw7uyi8OK3M7iApZpE+sHnV5u7nDl3uYI5qvat6Wah4=
-github.com/livekit/go-rtmp v0.0.0-20230317185657-6e9cfa387c7e/go.mod h1:X+CliWDrjhm5C+NgmxVt2ncdO3MnKDlbZHTwkuf0808=
+github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed h1:w4c3K0j/I2qG+6PUF/ep4tf93HRibNs9QOWWD1SID50=
+github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed/go.mod h1:X+CliWDrjhm5C+NgmxVt2ncdO3MnKDlbZHTwkuf0808=
 github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1 h1:jm09419p0lqTkDaKb5iXdynYrzB84ErPPO4LbRASk58=
 github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1/go.mod h1:Rs3MhFwutWhGwmY1VQsygw28z5bWcnEYmS1OG9OxjOQ=
 github.com/livekit/mediatransportutil v0.0.0-20230716190407-fc4944cbc33a h1:JWpPHcMFuw0fP4swE89CfMgeUXiSN5IKvCJL/5HLI3A=
