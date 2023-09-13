@@ -160,16 +160,22 @@ redis:
   address: localhost:6379
 ```
 
-On MacOS, if GStreamer was installed using Homebrew, the following environment must be set:
+On MacOS, if GStreamer was installed using Homebrew, the following environment must be set in order to ensure that GStreamer can load all its plugins:
 
 ```shell
-export GST_PLUGIN_PATH=/opt/homebrew/Cellar/gst-plugins-base:/opt/homebrew/Cellar/gst-plugins-good:/opt/homebrew/Cellar/gst-plugins-bad:/opt/homebrew/Cellar/gst-plugins-ugly:/opt/homebrew/Cellar/gst-plugins-bad:/opt/homebrew/Cellar/gst-libav 
+export DYLD_LIBRARY_PATH=/opt/homebrew/lib
 ```
 
 Then to run the service:
 
 ```shell
 ingress --config=config.yaml
+```
+
+If starting an Ingress fails with a GStreamer error such as `Failed to load libsoup library` or `no such element factory "souphttpsrc`, try deleting your GStreamer plugin registry with:
+
+```shell 
+rm -rf ~/.cache/gstreamer-1.0/
 ```
 
 #### Running with Docker
