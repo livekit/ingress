@@ -46,7 +46,7 @@ type URLSource struct {
 func NewURLSource(ctx context.Context, p *params.Params) (*URLSource, error) {
 	bin := gst.NewBin("input")
 
-	elem, err := gst.NewElement("curlhttpsrc")
+	elem, err := gst.NewElement("souphttpsrc")
 	if err != nil {
 		return nil, err
 	}
