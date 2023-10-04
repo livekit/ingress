@@ -16,6 +16,7 @@ package whip
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -62,11 +63,8 @@ type whipTrackHandler struct {
 	firstPacket sync.Once
 	fuse        core.Fuse
 	samplesChan chan sample
-}
 
-type sample struct {
-	sample *media.Sample
-	ts     time.Duration
+	pullTime time.Time
 }
 
 func newWHIPTrackHandler(
@@ -166,6 +164,8 @@ func (t *whipTrackHandler) startRTPReceiver(onDone func(err error)) {
 
 }
 
+var i int
+
 // TODO drain on close?
 func (t *whipTrackHandler) processRTPPacket() error {
 	var pkt *rtp.Packet
@@ -182,6 +182,12 @@ func (t *whipTrackHandler) processRTPPacket() error {
 		t.sync.Initialize(pkt)
 	})
 
+	i++
+	if i == 1 {
+		fmt.Println("DROP")
+		time.Sleep(1000 * time.Millisecond)
+	}
+
 	t.jb.Push(pkt)
 
 	samples := t.jb.PopSamples(false)
@@ -189,6 +195,14 @@ func (t *whipTrackHandler) processRTPPacket() error {
 		if len(pkts) == 0 {
 			continue
 		}
+
+		now := time.Now()
+
+		if now.Sub(t.pullTime) > 100*time.Millisecond {
+			fmt.Println("GAP", now.Sub(t.pullTime))
+		}
+
+		t.pullTime = now
 
 		var ts time.Duration
 		var err error
@@ -256,7 +270,7 @@ func (t *whipTrackHandler) mediaWriterWorker(onDone func(err error)) {
 	for {
 		select {
 		case s := <-t.samplesChan:
-			err := t.mediaSink.PushSample(s.sample, s.ts)
+			err := t.mediaSink.PushSample(s.s, s.ts)
 			switch err {
 			case nil, errors.ErrPrerollBufferReset:
 				// continue

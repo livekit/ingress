@@ -23,18 +23,18 @@ import (
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/ingress/pkg/whip"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
-	"github.com/livekit/protocol/utils"
+	putils "github.com/livekit/protocol/utils"
 )
 
 type WebRTCSink struct {
 	params *params.Params
 
 	sdkOut     *lksdk_output.LKSDKOutput
-	outputSync *whip.OutputSynchronizer
+	outputSync *utils.OutputSynchronizer
 }
 
 func NewWebRTCSink(ctx context.Context, p *params.Params) (*WebRTCSink, error) {
@@ -49,7 +49,7 @@ func NewWebRTCSink(ctx context.Context, p *params.Params) (*WebRTCSink, error) {
 	return &WebRTCSink{
 		params:     p,
 		sdkOut:     sdkOut,
-		outputSync: whip.NewOutputSynchronizer(),
+		outputSync: utils.NewOutputSynchronizer(),
 	}, nil
 }
 
@@ -60,7 +60,7 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 		return nil, err
 	}
 
-	err = s.sdkOut.AddAudioTrack(output, utils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec), s.params.AudioEncodingOptions.DisableDtx, s.params.AudioEncodingOptions.Channels > 1)
+	err = s.sdkOut.AddAudioTrack(output, putils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec), s.params.AudioEncodingOptions.DisableDtx, s.params.AudioEncodingOptions.Channels > 1)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +85,7 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 		outLayers = append(outLayers, layer)
 	}
 
-	err := s.sdkOut.AddVideoTrack(sbArray, outLayers, utils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
+	err := s.sdkOut.AddVideoTrack(sbArray, outLayers, putils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
 	if err != nil {
 		return nil, err
 	}

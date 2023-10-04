@@ -31,6 +31,7 @@ import (
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/psrpc"
@@ -45,7 +46,7 @@ type SDKMediaSink struct {
 	params     *params.Params
 	writePLI   func()
 	track      *webrtc.TrackRemote
-	outputSync *TrackOutputSynchronizer
+	outputSync *utils.TrackOutputSynchronizer
 	sdkOutput  *lksdk_output.LKSDKOutput
 
 	readySamples     chan *sample
@@ -58,7 +59,7 @@ type sample struct {
 	ts time.Duration
 }
 
-func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, outputSync *TrackOutputSynchronizer, writePLI func()) *SDKMediaSink {
+func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, outputSync *utils.TrackOutputSynchronizer, writePLI func()) *SDKMediaSink {
 	s := &SDKMediaSink{
 		logger:       l,
 		params:       p,
