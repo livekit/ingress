@@ -17,6 +17,7 @@ package media
 import (
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/pion/webrtc/v3/pkg/media"
@@ -25,6 +26,7 @@ import (
 	"github.com/tinyzimmer/go-gst/gst/app"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 )
@@ -41,12 +43,18 @@ type Output struct {
 	bin    *gst.Bin
 	logger logger.Logger
 
-	elements []*gst.Element
-	enc      *gst.Element
-	sink     *app.Sink
+	elements   []*gst.Element
+	enc        *gst.Element
+	sink       *app.Sink
+	outputSync *whip.TrackOutputSynchronizer
 
-	samples chan *media.Sample
+	samples chan *sample
 	fuse    core.Fuse
+}
+
+type sample struct {
+	s  *media.Sample
+	ts time.Duration
 }
 
 // FIXME Use generics instead?
@@ -62,8 +70,8 @@ type AudioOutput struct {
 	codec livekit.AudioCodec
 }
 
-func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*VideoOutput, error) {
-	e, err := newVideoOutput(codec)
+func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *whip.TrackOutputSynchronizer) (*VideoOutput, error) {
+	e, err := newVideoOutput(codec, outputSync)
 	if err != nil {
 		return nil, err
 	}
@@ -207,8 +215,8 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer) (*Video
 	return e, nil
 }
 
-func NewAudioOutput(options *livekit.IngressAudioEncodingOptions) (*AudioOutput, error) {
-	e, err := newAudioOutput(options.AudioCodec)
+func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *whip.TrackOutputSynchronizer) (*AudioOutput, error) {
+	e, err := newAudioOutput(options.AudioCodec, outputSync)
 	if err != nil {
 		return nil, err
 	}
@@ -294,8 +302,8 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions) (*AudioOutput,
 	return e, nil
 }
 
-func newVideoOutput(codec livekit.VideoCodec) (*VideoOutput, error) {
-	e, err := newOutput()
+func newVideoOutput(codec livekit.VideoCodec, outputSync *whip.TrackOutputSynchronizer) (*VideoOutput, error) {
+	e, err := newOutput(outputSync)
 	if err != nil {
 		return nil, err
 	}
@@ -313,8 +321,8 @@ func newVideoOutput(codec livekit.VideoCodec) (*VideoOutput, error) {
 	return o, nil
 }
 
-func newAudioOutput(codec livekit.AudioCodec) (*AudioOutput, error) {
-	e, err := newOutput()
+func newAudioOutput(codec livekit.AudioCodec, outputSync *whip.TrackOutputSynchronizer) (*AudioOutput, error) {
+	e, err := newOutput(outputSync)
 	if err != nil {
 		return nil, err
 	}
@@ -332,16 +340,17 @@ func newAudioOutput(codec livekit.AudioCodec) (*AudioOutput, error) {
 	return o, nil
 }
 
-func newOutput() (*Output, error) {
+func newOutput(outputSync *whip.TrackOutputSynchronizer) (*Output, error) {
 	sink, err := app.NewAppSink()
 	if err != nil {
 		return nil, err
 	}
 
 	e := &Output{
-		sink:    sink,
-		samples: make(chan *media.Sample, 100),
-		fuse:    core.NewFuse(),
+		sink:       sink,
+		outputSync: outputSync,
+		samples:    make(chan *sample, 100),
+		fuse:       core.NewFuse(),
 	}
 
 	return e, nil
@@ -381,9 +390,9 @@ func (e *Output) handleEOS(_ *app.Sink) {
 	e.fuse.Break()
 }
 
-func (e *Output) writeSample(sample *media.Sample) error {
+func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 	select {
-	case e.samples <- sample:
+	case e.samples <- &sample{s, pts}:
 		return nil
 	case <-e.fuse.Watch():
 		return io.EOF
@@ -391,18 +400,23 @@ func (e *Output) writeSample(sample *media.Sample) error {
 }
 
 func (e *Output) NextSample() (media.Sample, error) {
-	var sample *media.Sample
+	var s *sample
 
 	select {
-	case sample = <-e.samples:
+	case s = <-e.samples:
 	case <-e.fuse.Watch():
 	}
 
-	if sample == nil {
+	if s == nil {
 		return media.Sample{}, io.EOF
 	}
 
-	return *sample, nil
+	err := e.outputSync.WaitForMediaTime(s.ts)
+	if err != nil {
+		return media.Sample{}, err
+	}
+
+	return *s.s, nil
 }
 
 func (e *Output) OnBind() error {
@@ -420,6 +434,7 @@ func (e *Output) OnUnbind() error {
 func (e *Output) Close() error {
 
 	e.fuse.Break()
+	e.outputSync.Close()
 
 	return nil
 }
@@ -438,6 +453,7 @@ func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 	}
 
 	duration := buffer.Duration()
+	pts := buffer.PresentationTimestamp()
 
 	var err error
 	switch e.codec {
@@ -480,14 +496,14 @@ func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 		err = e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
 			Duration: duration,
-		})
+		}, pts)
 
 	case livekit.VideoCodec_VP8:
 		// untested
 		err = e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
 			Duration: duration,
-		})
+		}, pts)
 	}
 
 	return errors.ErrorToGstFlowReturn(err)
@@ -507,6 +523,7 @@ func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 	}
 
 	duration := buffer.Duration()
+	pts := buffer.PresentationTimestamp()
 
 	var err error
 
@@ -515,7 +532,7 @@ func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 		err = e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
 			Duration: duration,
-		})
+		}, pts)
 	}
 
 	return errors.ErrorToGstFlowReturn(err)

@@ -23,6 +23,7 @@ import (
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
@@ -32,7 +33,8 @@ import (
 type WebRTCSink struct {
 	params *params.Params
 
-	sdkOut *lksdk_output.LKSDKOutput
+	sdkOut     *lksdk_output.LKSDKOutput
+	outputSync *whip.OutputSynchronizer
 }
 
 func NewWebRTCSink(ctx context.Context, p *params.Params) (*WebRTCSink, error) {
@@ -45,13 +47,14 @@ func NewWebRTCSink(ctx context.Context, p *params.Params) (*WebRTCSink, error) {
 	}
 
 	return &WebRTCSink{
-		params: p,
-		sdkOut: sdkOut,
+		params:     p,
+		sdkOut:     sdkOut,
+		outputSync: whip.NewOutputSynchronizer(),
 	}, nil
 }
 
 func (s *WebRTCSink) addAudioTrack() (*Output, error) {
-	output, err := NewAudioOutput(s.params.AudioEncodingOptions)
+	output, err := NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync.AddTrack(types.Audio))
 	if err != nil {
 		logger.Errorw("could not create output", err)
 		return nil, err
@@ -73,7 +76,7 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 
 	var outLayers []*livekit.VideoLayer
 	for _, layer := range sortedLayers {
-		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer)
+		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, s.outputSync.AddTrack(types.Video))
 		if err != nil {
 			return nil, err
 		}
