@@ -56,6 +56,7 @@ type whipHandler struct {
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
+	outputSync         *OutputSynchronizer
 	stats              *stats.MediaStatsReporter
 	sdkOutput          *lksdk_output.LKSDKOutput // only for passthrough
 	expectedTrackCount int
@@ -76,6 +77,7 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 	return &whipHandler{
 		rtcConfig:           &rtcConfCopy,
 		sync:                synchronizer.NewSynchronizer(nil),
+		outputSync:          NewOutputSynchronizer(),
 		result:              make(chan error, 1),
 		tracks:              make(map[string]*webrtc.TrackRemote),
 		trackHandlers:       make(map[types.StreamKind]*whipTrackHandler),
@@ -387,14 +389,16 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 }
 
 func (h *whipHandler) newMediaSink(track *webrtc.TrackRemote) (MediaSink, error) {
+	kind := streamKindFromCodecType(track.Kind())
+
 	if h.sdkOutput != nil {
 		// pasthrough
-		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, func() {
+		trackSync := h.outputSync.AddTrack(kind)
+
+		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, trackSync, func() {
 			h.writePLI(track.SSRC())
 		}), nil
 	} else {
-		kind := streamKindFromCodecType(track.Kind())
-
 		s := NewRelayMediaSink(h.logger.WithValues("trackID", track.ID(), "kind", kind))
 
 		h.trackRelayMediaSink[kind] = s

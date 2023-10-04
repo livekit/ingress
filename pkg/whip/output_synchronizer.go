@@ -15,7 +15,6 @@
 package whip
 
 import (
-	"context"
 	"sync"
 	"time"
 
@@ -91,14 +90,12 @@ func newTrackOutputSynchronizer(os *OutputSynchronizer) *TrackOutputSynchronizer
 	}
 }
 
-func (ts *TrackOutputSynchronizer) WaitForMediaTime(ctx context.Context, pts time.Duration) error {
+func (ts *TrackOutputSynchronizer) WaitForMediaTime(pts time.Duration) error {
 	waitTime := ts.outputSynchronizer.getWaitDuration(pts)
 
 	select {
 	case <-time.After(waitTime):
 		return nil
-	case <-ctx.Done():
-		return errors.ErrIngressClosing
 	case <-ts.closed.Watch():
 		return errors.ErrIngressClosing
 	}
