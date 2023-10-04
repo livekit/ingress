@@ -74,7 +74,7 @@ func (os *OutputSynchronizer) getWaitDuration(pts time.Duration) time.Duration {
 
 	waitTime := mediaTime.Sub(now)
 
-	if -waitTime > leeway {
+	if os.zeroTime.IsZero() || -waitTime > leeway {
 		// Reset zeroTime
 		os.zeroTime = now.Add(-pts)
 		waitTime = 0
