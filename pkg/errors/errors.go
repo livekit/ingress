@@ -38,6 +38,7 @@ var (
 	ErrIngressNotFound         = psrpc.NewErrorf(psrpc.NotFound, "ingress not found")
 	ErrServerCapacityExceeded  = psrpc.NewErrorf(psrpc.ResourceExhausted, "server capacity exceeded")
 	ErrServerShuttingDown      = psrpc.NewErrorf(psrpc.Unavailable, "server shutting down")
+	ErrIngressClosing          = psrpc.NewErrorf(psrpc.Unavailable, "ingress closing")
 	ErrMissingStreamKey        = psrpc.NewErrorf(psrpc.InvalidArgument, "missing stream key")
 	ErrPrerollBufferReset      = psrpc.NewErrorf(psrpc.Internal, "preroll buffer reset")
 )
