@@ -123,6 +123,7 @@ func (w *whipAppSource) copyRelayedData(r io.Reader) error {
 		}
 
 		data, ts, err := utils.DeserializeMediaForRelay(r)
+
 		switch err {
 		case nil:
 			// continue

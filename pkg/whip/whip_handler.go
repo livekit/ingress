@@ -31,12 +31,13 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
-	"github.com/livekit/protocol/utils"
+	putils "github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 	"github.com/livekit/server-sdk-go/pkg/synchronizer"
 )
@@ -56,7 +57,7 @@ type whipHandler struct {
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
-	outputSync         *OutputSynchronizer
+	outputSync         *utils.OutputSynchronizer
 	stats              *stats.MediaStatsReporter
 	sdkOutput          *lksdk_output.LKSDKOutput // only for passthrough
 	expectedTrackCount int
@@ -77,7 +78,7 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 	return &whipHandler{
 		rtcConfig:           &rtcConfCopy,
 		sync:                synchronizer.NewSynchronizer(nil),
-		outputSync:          NewOutputSynchronizer(),
+		outputSync:          utils.NewOutputSynchronizer(),
 		result:              make(chan error, 1),
 		tracks:              make(map[string]*webrtc.TrackRemote),
 		trackHandlers:       make(map[types.StreamKind]*whipTrackHandler),
@@ -193,6 +194,8 @@ func (h *whipHandler) Close() {
 	if h.pc != nil {
 		h.pc.Close()
 	}
+
+	h.outputSync.Close()
 }
 
 func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
@@ -208,7 +211,7 @@ func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
 	}()
 
 	var trackDoneCount int
-	var errs utils.ErrArray
+	var errs putils.ErrArray
 
 	for {
 		select {
@@ -393,9 +396,7 @@ func (h *whipHandler) newMediaSink(track *webrtc.TrackRemote) (MediaSink, error)
 
 	if h.sdkOutput != nil {
 		// pasthrough
-		trackSync := h.outputSync.AddTrack(kind)
-
-		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, trackSync, func() {
+		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, h.outputSync, func() {
 			h.writePLI(track.SSRC())
 		}), nil
 	} else {

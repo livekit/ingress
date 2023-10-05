@@ -16,7 +16,6 @@ package whip
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -63,8 +62,6 @@ type whipTrackHandler struct {
 	firstPacket sync.Once
 	fuse        core.Fuse
 	samplesChan chan sample
-
-	pullTime time.Time
 }
 
 func newWHIPTrackHandler(
@@ -182,12 +179,6 @@ func (t *whipTrackHandler) processRTPPacket() error {
 		t.sync.Initialize(pkt)
 	})
 
-	i++
-	if i == 1 {
-		fmt.Println("DROP")
-		time.Sleep(1000 * time.Millisecond)
-	}
-
 	t.jb.Push(pkt)
 
 	samples := t.jb.PopSamples(false)
@@ -195,14 +186,6 @@ func (t *whipTrackHandler) processRTPPacket() error {
 		if len(pkts) == 0 {
 			continue
 		}
-
-		now := time.Now()
-
-		if now.Sub(t.pullTime) > 100*time.Millisecond {
-			fmt.Println("GAP", now.Sub(t.pullTime))
-		}
-
-		t.pullTime = now
 
 		var ts time.Duration
 		var err error

@@ -54,7 +54,7 @@ func NewWebRTCSink(ctx context.Context, p *params.Params) (*WebRTCSink, error) {
 }
 
 func (s *WebRTCSink) addAudioTrack() (*Output, error) {
-	output, err := NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync.AddTrack(types.Audio))
+	output, err := NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync)
 	if err != nil {
 		logger.Errorw("could not create output", err)
 		return nil, err
@@ -76,7 +76,7 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 
 	var outLayers []*livekit.VideoLayer
 	for _, layer := range sortedLayers {
-		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, s.outputSync.AddTrack(types.Video))
+		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, s.outputSync)
 		if err != nil {
 			return nil, err
 		}
@@ -134,6 +134,7 @@ func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps) (*gst.Bin, 
 
 func (s *WebRTCSink) Close() {
 	s.sdkOut.Close()
+	s.outputSync.Close()
 }
 
 func getResolution(caps *gst.Caps) (w int, h int, err error) {

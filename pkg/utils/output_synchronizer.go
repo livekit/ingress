@@ -20,7 +20,6 @@ import (
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/ingress/pkg/types"
 )
 
 const (
@@ -31,38 +30,17 @@ type OutputSynchronizer struct {
 	lock sync.Mutex
 
 	zeroTime time.Time
-	tracks   map[types.StreamKind]*TrackOutputSynchronizer
-}
-
-type TrackOutputSynchronizer struct {
-	outputSynchronizer *OutputSynchronizer
-	closed             core.Fuse
+	closed   core.Fuse
 }
 
 func NewOutputSynchronizer() *OutputSynchronizer {
 	return &OutputSynchronizer{
-		tracks: make(map[types.StreamKind]*TrackOutputSynchronizer),
+		closed: core.NewFuse(),
 	}
-}
-
-func (os *OutputSynchronizer) AddTrack(trackType types.StreamKind) *TrackOutputSynchronizer {
-	ts := newTrackOutputSynchronizer(os)
-
-	os.lock.Lock()
-	defer os.lock.Unlock()
-
-	os.tracks[trackType] = ts
-
-	return ts
 }
 
 func (os *OutputSynchronizer) Close() {
-	os.lock.Lock()
-	defer os.lock.Unlock()
-
-	for _, t := range os.tracks {
-		t.Close()
-	}
+	os.closed.Break()
 }
 
 func (os *OutputSynchronizer) getWaitDuration(pts time.Duration) time.Duration {
@@ -83,24 +61,13 @@ func (os *OutputSynchronizer) getWaitDuration(pts time.Duration) time.Duration {
 	return waitTime
 }
 
-func newTrackOutputSynchronizer(os *OutputSynchronizer) *TrackOutputSynchronizer {
-	return &TrackOutputSynchronizer{
-		outputSynchronizer: os,
-		closed:             core.NewFuse(),
-	}
-}
-
-func (ts *TrackOutputSynchronizer) WaitForMediaTime(pts time.Duration) error {
-	waitTime := ts.outputSynchronizer.getWaitDuration(pts)
+func (os *OutputSynchronizer) WaitForMediaTime(pts time.Duration) error {
+	waitTime := os.getWaitDuration(pts)
 
 	select {
 	case <-time.After(waitTime):
 		return nil
-	case <-ts.closed.Watch():
+	case <-os.closed.Watch():
 		return errors.ErrIngressClosing
 	}
-}
-
-func (ts *TrackOutputSynchronizer) Close() {
-	ts.closed.Break()
 }
