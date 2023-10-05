@@ -15,6 +15,7 @@
 package utils
 
 import (
+	"fmt"
 	"sync"
 	"time"
 
@@ -30,6 +31,7 @@ type OutputSynchronizer struct {
 	lock sync.Mutex
 
 	zeroTime time.Time
+	maxPts   time.Duration
 	closed   core.Fuse
 }
 
@@ -52,10 +54,18 @@ func (os *OutputSynchronizer) getWaitDuration(pts time.Duration) time.Duration {
 
 	waitTime := mediaTime.Sub(now)
 
-	if os.zeroTime.IsZero() || -waitTime > leeway {
+	if os.zeroTime.IsZero() || (-waitTime > leeway && pts >= os.maxPts) {
 		// Reset zeroTime
 		os.zeroTime = now.Add(-pts)
 		waitTime = 0
+	}
+
+	if pts > os.maxPts {
+		os.maxPts = pts
+	}
+
+	if -waitTime > 100*time.Millisecond {
+		fmt.Println("WAITTIME", waitTime)
 	}
 
 	return waitTime
