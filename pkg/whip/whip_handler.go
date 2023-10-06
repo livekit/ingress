@@ -194,8 +194,6 @@ func (h *whipHandler) Close() {
 	if h.pc != nil {
 		h.pc.Close()
 	}
-
-	h.outputSync.Close()
 }
 
 func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
@@ -396,7 +394,7 @@ func (h *whipHandler) newMediaSink(track *webrtc.TrackRemote) (MediaSink, error)
 
 	if h.sdkOutput != nil {
 		// pasthrough
-		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, h.outputSync, func() {
+		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, h.outputSync.AddTrack(), func() {
 			h.writePLI(track.SSRC())
 		}), nil
 	} else {

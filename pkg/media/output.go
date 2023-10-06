@@ -46,7 +46,7 @@ type Output struct {
 	elements   []*gst.Element
 	enc        *gst.Element
 	sink       *app.Sink
-	outputSync *utils.OutputSynchronizer
+	outputSync *utils.TrackOutputSynchronizer
 
 	samples chan *sample
 	fuse    core.Fuse
@@ -70,7 +70,7 @@ type AudioOutput struct {
 	codec livekit.AudioCodec
 }
 
-func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *utils.OutputSynchronizer) (*VideoOutput, error) {
+func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *utils.TrackOutputSynchronizer) (*VideoOutput, error) {
 	e, err := newVideoOutput(codec, outputSync)
 	if err != nil {
 		return nil, err
@@ -215,7 +215,7 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 	return e, nil
 }
 
-func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *utils.OutputSynchronizer) (*AudioOutput, error) {
+func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *utils.TrackOutputSynchronizer) (*AudioOutput, error) {
 	e, err := newAudioOutput(options.AudioCodec, outputSync)
 	if err != nil {
 		return nil, err
@@ -302,7 +302,7 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 	return e, nil
 }
 
-func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.OutputSynchronizer) (*VideoOutput, error) {
+func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynchronizer) (*VideoOutput, error) {
 	e, err := newOutput(outputSync)
 	if err != nil {
 		return nil, err
@@ -321,7 +321,7 @@ func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.OutputSynchroniz
 	return o, nil
 }
 
-func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.OutputSynchronizer) (*AudioOutput, error) {
+func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynchronizer) (*AudioOutput, error) {
 	e, err := newOutput(outputSync)
 	if err != nil {
 		return nil, err
@@ -340,7 +340,7 @@ func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.OutputSynchroniz
 	return o, nil
 }
 
-func newOutput(outputSync *utils.OutputSynchronizer) (*Output, error) {
+func newOutput(outputSync *utils.TrackOutputSynchronizer) (*Output, error) {
 	sink, err := app.NewAppSink()
 	if err != nil {
 		return nil, err
@@ -439,6 +439,7 @@ func (e *Output) OnUnbind() error {
 func (e *Output) Close() error {
 
 	e.fuse.Break()
+	e.outputSync.Close()
 
 	return nil
 }

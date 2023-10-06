@@ -30,21 +30,23 @@ type OutputSynchronizer struct {
 	lock sync.Mutex
 
 	zeroTime time.Time
-	maxPts   time.Duration
-	closed   core.Fuse
+}
+
+type TrackOutputSynchronizer struct {
+	os              *OutputSynchronizer
+	closed          core.Fuse
+	firstSampleSent bool
 }
 
 func NewOutputSynchronizer() *OutputSynchronizer {
-	return &OutputSynchronizer{
-		closed: core.NewFuse(),
-	}
+	return &OutputSynchronizer{}
 }
 
-func (os *OutputSynchronizer) Close() {
-	os.closed.Break()
+func (os *OutputSynchronizer) AddTrack() *TrackOutputSynchronizer {
+	return newTrackOutputSynchronizer(os)
 }
 
-func (os *OutputSynchronizer) getWaitDuration(pts time.Duration) time.Duration {
+func (os *OutputSynchronizer) getWaitDuration(pts time.Duration, firstSampleSent bool) time.Duration {
 	os.lock.Lock()
 	defer os.lock.Unlock()
 
@@ -53,30 +55,39 @@ func (os *OutputSynchronizer) getWaitDuration(pts time.Duration) time.Duration {
 
 	waitTime := mediaTime.Sub(now)
 
-	if os.zeroTime.IsZero() || (waitTime < leeway && pts >= os.maxPts) {
+	if os.zeroTime.IsZero() || (waitTime < leeway && firstSampleSent) {
 		// Reset zeroTime if the earliest track is late
 		os.zeroTime = now.Add(-pts)
 		waitTime = 0
 	}
 
-	if pts > os.maxPts {
-		os.maxPts = pts
-	}
-
 	return waitTime
 }
 
-func (os *OutputSynchronizer) WaitForMediaTime(pts time.Duration) (bool, error) {
-	waitTime := os.getWaitDuration(pts)
+func newTrackOutputSynchronizer(os *OutputSynchronizer) *TrackOutputSynchronizer {
+	return &TrackOutputSynchronizer{
+		os:     os,
+		closed: core.NewFuse(),
+	}
+}
+
+func (ost *TrackOutputSynchronizer) Close() {
+	ost.closed.Break()
+}
+
+func (ost *TrackOutputSynchronizer) WaitForMediaTime(pts time.Duration) (bool, error) {
+	waitTime := ost.os.getWaitDuration(pts, ost.firstSampleSent)
 
 	if waitTime < -leeway {
 		return true, nil
 	}
 
+	ost.firstSampleSent = true
+
 	select {
 	case <-time.After(waitTime):
 		return false, nil
-	case <-os.closed.Watch():
+	case <-ost.closed.Watch():
 		return false, errors.ErrIngressClosing
 	}
 }

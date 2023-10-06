@@ -46,7 +46,7 @@ type SDKMediaSink struct {
 	params     *params.Params
 	writePLI   func()
 	track      *webrtc.TrackRemote
-	outputSync *utils.OutputSynchronizer
+	outputSync *utils.TrackOutputSynchronizer
 	sdkOutput  *lksdk_output.LKSDKOutput
 
 	readySamples     chan *sample
@@ -59,7 +59,7 @@ type sample struct {
 	ts time.Duration
 }
 
-func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, outputSync *utils.OutputSynchronizer, writePLI func()) *SDKMediaSink {
+func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, outputSync *utils.TrackOutputSynchronizer, writePLI func()) *SDKMediaSink {
 	s := &SDKMediaSink{
 		logger:       l,
 		params:       p,
@@ -145,6 +145,7 @@ func (sp *SDKMediaSink) SetWriter(w io.WriteCloser) error {
 
 func (sp *SDKMediaSink) Close() error {
 	sp.fuse.Break()
+	sp.outputSync.Close()
 
 	return nil
 }
