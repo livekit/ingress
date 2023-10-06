@@ -55,7 +55,7 @@ func (os *OutputSynchronizer) getWaitDuration(pts time.Duration, firstSampleSent
 
 	waitTime := mediaTime.Sub(now)
 
-	if os.zeroTime.IsZero() || (waitTime < leeway && firstSampleSent) {
+	if os.zeroTime.IsZero() || (waitTime < -leeway && firstSampleSent) {
 		// Reset zeroTime if the earliest track is late
 		os.zeroTime = now.Add(-pts)
 		waitTime = 0
