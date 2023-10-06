@@ -15,7 +15,6 @@
 package utils
 
 import (
-	"fmt"
 	"sync"
 	"time"
 
@@ -54,8 +53,8 @@ func (os *OutputSynchronizer) getWaitDuration(pts time.Duration) time.Duration {
 
 	waitTime := mediaTime.Sub(now)
 
-	if os.zeroTime.IsZero() || (-waitTime > leeway && pts >= os.maxPts) {
-		// Reset zeroTime
+	if os.zeroTime.IsZero() || (waitTime < leeway && pts >= os.maxPts) {
+		// Reset zeroTime if the earliest track is late
 		os.zeroTime = now.Add(-pts)
 		waitTime = 0
 	}
@@ -64,17 +63,13 @@ func (os *OutputSynchronizer) getWaitDuration(pts time.Duration) time.Duration {
 		os.maxPts = pts
 	}
 
-	if -waitTime > 100*time.Millisecond {
-		fmt.Println("WAITTIME", waitTime)
-	}
-
 	return waitTime
 }
 
 func (os *OutputSynchronizer) WaitForMediaTime(pts time.Duration) (bool, error) {
 	waitTime := os.getWaitDuration(pts)
 
-	if -waitTime > 100*time.Millisecond {
+	if waitTime < -leeway {
 		return true, nil
 	}
 

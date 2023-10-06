@@ -161,8 +161,6 @@ func (t *whipTrackHandler) startRTPReceiver(onDone func(err error)) {
 
 }
 
-var i int
-
 // TODO drain on close?
 func (t *whipTrackHandler) processRTPPacket() error {
 	var pkt *rtp.Packet
