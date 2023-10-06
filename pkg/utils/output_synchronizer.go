@@ -71,13 +71,17 @@ func (os *OutputSynchronizer) getWaitDuration(pts time.Duration) time.Duration {
 	return waitTime
 }
 
-func (os *OutputSynchronizer) WaitForMediaTime(pts time.Duration) error {
+func (os *OutputSynchronizer) WaitForMediaTime(pts time.Duration) (bool, error) {
 	waitTime := os.getWaitDuration(pts)
+
+	if -waitTime > 100*time.Millisecond {
+		return true, nil
+	}
 
 	select {
 	case <-time.After(waitTime):
-		return nil
+		return false, nil
 	case <-os.closed.Watch():
-		return errors.ErrIngressClosing
+		return false, errors.ErrIngressClosing
 	}
 }

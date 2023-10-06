@@ -98,16 +98,22 @@ func (sp *SDKMediaSink) PushSample(s *media.Sample, ts time.Duration) error {
 }
 
 func (sp *SDKMediaSink) NextSample() (media.Sample, error) {
-	select {
-	case <-sp.fuse.Watch():
-		return media.Sample{}, io.EOF
-	case s := <-sp.readySamples:
-		err := sp.outputSync.WaitForMediaTime(s.ts)
-		if err != nil {
-			return media.Sample{}, err
-		}
+	for {
+		select {
+		case <-sp.fuse.Watch():
+			return media.Sample{}, io.EOF
+		case s := <-sp.readySamples:
+			drop, err := sp.outputSync.WaitForMediaTime(s.ts)
+			if err != nil {
+				return media.Sample{}, err
+			}
+			if drop {
+				sp.logger.Debugw("dropping sample", "timestamp", s.ts)
+				continue
+			}
 
-		return *s.s, nil
+			return *s.s, nil
+		}
 	}
 }
 

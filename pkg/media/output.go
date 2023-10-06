@@ -402,21 +402,26 @@ func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 func (e *Output) NextSample() (media.Sample, error) {
 	var s *sample
 
-	select {
-	case s = <-e.samples:
-	case <-e.fuse.Watch():
-	}
+	for {
+		select {
+		case s = <-e.samples:
+		case <-e.fuse.Watch():
+		}
 
-	if s == nil {
-		return media.Sample{}, io.EOF
-	}
+		if s == nil {
+			return media.Sample{}, io.EOF
+		}
 
-	err := e.outputSync.WaitForMediaTime(s.ts)
-	if err != nil {
-		return media.Sample{}, err
+		drop, err := e.outputSync.WaitForMediaTime(s.ts)
+		if err != nil {
+			return media.Sample{}, err
+		}
+		if drop {
+			e.logger.Debugw("Dropping sample", "timestamp", s.ts)
+			continue
+		}
+		return *s.s, nil
 	}
-
-	return *s.s, nil
 }
 
 func (e *Output) OnBind() error {
