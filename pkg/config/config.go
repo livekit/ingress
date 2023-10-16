@@ -122,8 +122,8 @@ func (c *Config) InitWhipConf() error {
 		return nil
 	}
 
-	if c.RTCConfig.UDPPort == 0 && c.RTCConfig.ICEPortRangeStart == 0 {
-		c.RTCConfig.UDPPort = 7885
+	if c.RTCConfig.UDPPort.Start == 0 && c.RTCConfig.ICEPortRangeStart == 0 {
+		c.RTCConfig.UDPPort.Start = 7885
 	}
 
 	// Validate will set the NodeIP

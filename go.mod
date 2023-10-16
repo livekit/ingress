@@ -10,15 +10,15 @@ require (
 	github.com/gorilla/mux v1.8.0
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
-	github.com/livekit/mediatransportutil v0.0.0-20230716190407-fc4944cbc33a
+	github.com/livekit/mediatransportutil v0.0.0-20230906055425-e81fd5f6fb3f
 	github.com/livekit/protocol v1.7.3-0.20231002023823-525419ade0bf
 	github.com/livekit/psrpc v0.3.3
-	github.com/livekit/server-sdk-go v1.0.16-0.20230815025737-c12cd2eb8fe8
+	github.com/livekit/server-sdk-go v1.0.17-0.20230928233454-b49bf45b164b
 	github.com/pion/dtls/v2 v2.2.7
 	github.com/pion/interceptor v0.1.18
 	github.com/pion/rtcp v1.2.10
 	github.com/pion/rtp v1.8.1
-	github.com/pion/webrtc/v3 v3.2.19
+	github.com/pion/webrtc/v3 v3.2.20
 	github.com/prometheus/client_golang v1.16.0
 	github.com/sirupsen/logrus v1.9.0
 	github.com/stretchr/testify v1.8.4
@@ -88,11 +88,11 @@ require (
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	go.uber.org/zap v1.25.0 // indirect
-	golang.org/x/crypto v0.13.0 // indirect
+	golang.org/x/crypto v0.14.0 // indirect
 	golang.org/x/exp v0.0.0-20230905200255-921286631fa9 // indirect
-	golang.org/x/net v0.15.0 // indirect
-	golang.org/x/sync v0.3.0 // indirect
-	golang.org/x/sys v0.12.0 // indirect
+	golang.org/x/net v0.17.0 // indirect
+	golang.org/x/sync v0.4.0 // indirect
+	golang.org/x/sys v0.13.0 // indirect
 	golang.org/x/text v0.13.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230815205213-6bfd019c3878 // indirect
 )

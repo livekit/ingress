@@ -31,12 +31,13 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
-	"github.com/livekit/protocol/utils"
+	putils "github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 	"github.com/livekit/server-sdk-go/pkg/synchronizer"
 )
@@ -56,6 +57,7 @@ type whipHandler struct {
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
+	outputSync         *utils.OutputSynchronizer
 	stats              *stats.MediaStatsReporter
 	sdkOutput          *lksdk_output.LKSDKOutput // only for passthrough
 	expectedTrackCount int
@@ -76,6 +78,7 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 	return &whipHandler{
 		rtcConfig:           &rtcConfCopy,
 		sync:                synchronizer.NewSynchronizer(nil),
+		outputSync:          utils.NewOutputSynchronizer(),
 		result:              make(chan error, 1),
 		tracks:              make(map[string]*webrtc.TrackRemote),
 		trackHandlers:       make(map[types.StreamKind]*whipTrackHandler),
@@ -206,7 +209,7 @@ func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
 	}()
 
 	var trackDoneCount int
-	var errs utils.ErrArray
+	var errs putils.ErrArray
 
 	for {
 		select {
@@ -387,14 +390,14 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 }
 
 func (h *whipHandler) newMediaSink(track *webrtc.TrackRemote) (MediaSink, error) {
+	kind := streamKindFromCodecType(track.Kind())
+
 	if h.sdkOutput != nil {
 		// pasthrough
-		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, func() {
+		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, h.outputSync.AddTrack(), func() {
 			h.writePLI(track.SSRC())
 		}), nil
 	} else {
-		kind := streamKindFromCodecType(track.Kind())
-
 		s := NewRelayMediaSink(h.logger.WithValues("trackID", track.ID(), "kind", kind))
 
 		h.trackRelayMediaSink[kind] = s
