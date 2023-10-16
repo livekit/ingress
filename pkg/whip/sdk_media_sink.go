@@ -31,6 +31,7 @@ import (
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/psrpc"
@@ -41,25 +42,32 @@ var (
 )
 
 type SDKMediaSink struct {
-	logger    logger.Logger
-	params    *params.Params
-	writePLI  func()
-	track     *webrtc.TrackRemote
-	sdkOutput *lksdk_output.LKSDKOutput
+	logger     logger.Logger
+	params     *params.Params
+	writePLI   func()
+	track      *webrtc.TrackRemote
+	outputSync *utils.TrackOutputSynchronizer
+	sdkOutput  *lksdk_output.LKSDKOutput
 
-	readySamples     chan *media.Sample
+	readySamples     chan *sample
 	fuse             core.Fuse
 	trackInitialized bool
 }
 
-func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, writePLI func()) *SDKMediaSink {
+type sample struct {
+	s  *media.Sample
+	ts time.Duration
+}
+
+func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, outputSync *utils.TrackOutputSynchronizer, writePLI func()) *SDKMediaSink {
 	s := &SDKMediaSink{
 		logger:       l,
 		params:       p,
 		writePLI:     writePLI,
 		track:        track,
+		outputSync:   outputSync,
 		sdkOutput:    sdkOutput,
-		readySamples: make(chan *media.Sample, 1),
+		readySamples: make(chan *sample, 1),
 		fuse:         core.NewFuse(),
 	}
 
@@ -83,18 +91,29 @@ func (sp *SDKMediaSink) PushSample(s *media.Sample, ts time.Duration) error {
 	select {
 	case <-sp.fuse.Watch():
 		return io.EOF
-	case sp.readySamples <- s:
+	case sp.readySamples <- &sample{s, ts}:
 	}
 
 	return nil
 }
 
 func (sp *SDKMediaSink) NextSample() (media.Sample, error) {
-	select {
-	case <-sp.fuse.Watch():
-		return media.Sample{}, io.EOF
-	case s := <-sp.readySamples:
-		return *s, nil
+	for {
+		select {
+		case <-sp.fuse.Watch():
+			return media.Sample{}, io.EOF
+		case s := <-sp.readySamples:
+			drop, err := sp.outputSync.WaitForMediaTime(s.ts)
+			if err != nil {
+				return media.Sample{}, err
+			}
+			if drop {
+				sp.logger.Debugw("dropping sample", "timestamp", s.ts)
+				continue
+			}
+
+			return *s.s, nil
+		}
 	}
 }
 
@@ -126,6 +145,7 @@ func (sp *SDKMediaSink) SetWriter(w io.WriteCloser) error {
 
 func (sp *SDKMediaSink) Close() error {
 	sp.fuse.Break()
+	sp.outputSync.Close()
 
 	return nil
 }

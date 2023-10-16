@@ -64,11 +64,6 @@ type whipTrackHandler struct {
 	samplesChan chan sample
 }
 
-type sample struct {
-	sample *media.Sample
-	ts     time.Duration
-}
-
 func newWHIPTrackHandler(
 	logger logger.Logger,
 	track *webrtc.TrackRemote,
@@ -256,7 +251,7 @@ func (t *whipTrackHandler) mediaWriterWorker(onDone func(err error)) {
 	for {
 		select {
 		case s := <-t.samplesChan:
-			err := t.mediaSink.PushSample(s.sample, s.ts)
+			err := t.mediaSink.PushSample(s.s, s.ts)
 			switch err {
 			case nil, errors.ErrPrerollBufferReset:
 				// continue
