@@ -86,6 +86,62 @@ func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livek
 				Bitrate: 3_500_000,
 			}, 1),
 		}, nil
+	case livekit.IngressVideoEncodingPreset_H264_720P_30FPS_3_LAYERS_HIGH_MOTION:
+		return &livekit.IngressVideoEncodingOptions{
+			VideoCodec: livekit.VideoCodec_H264_BASELINE,
+			FrameRate:  30,
+			Layers: computeVideoLayers(&livekit.VideoLayer{
+				Quality: livekit.VideoQuality_HIGH,
+				Width:   1280,
+				Height:  720,
+				Bitrate: 2_500_000,
+			}, 3),
+		}, nil
+	case livekit.IngressVideoEncodingPreset_H264_1080P_30FPS_3_LAYERS_HIGH_MOTION:
+		return &livekit.IngressVideoEncodingOptions{
+			VideoCodec: livekit.VideoCodec_H264_BASELINE,
+			FrameRate:  30,
+			Layers: computeVideoLayers(&livekit.VideoLayer{
+				Quality: livekit.VideoQuality_HIGH,
+				Width:   1920,
+				Height:  1080,
+				Bitrate: 4_500_000,
+			}, 3),
+		}, nil
+	case livekit.IngressVideoEncodingPreset_H264_540P_25FPS_2_LAYERS_HIGH_MOTION:
+		return &livekit.IngressVideoEncodingOptions{
+			VideoCodec: livekit.VideoCodec_H264_BASELINE,
+			FrameRate:  25,
+			Layers: computeVideoLayers(&livekit.VideoLayer{
+				Quality: livekit.VideoQuality_HIGH,
+				Width:   960,
+				Height:  540,
+				Bitrate: 1_300_000,
+			}, 2),
+		}, nil
+	case livekit.IngressVideoEncodingPreset_H264_720P_30FPS_1_LAYER_HIGH_MOTION:
+		return &livekit.IngressVideoEncodingOptions{
+			VideoCodec: livekit.VideoCodec_H264_BASELINE,
+			FrameRate:  30,
+			Layers: computeVideoLayers(&livekit.VideoLayer{
+				Quality: livekit.VideoQuality_HIGH,
+				Width:   1280,
+				Height:  720,
+				Bitrate: 2_500_000,
+			}, 1),
+		}, nil
+	case livekit.IngressVideoEncodingPreset_H264_1080P_30FPS_1_LAYER_HIGH_MOTION:
+		return &livekit.IngressVideoEncodingOptions{
+			VideoCodec: livekit.VideoCodec_H264_BASELINE,
+			FrameRate:  30,
+			Layers: computeVideoLayers(&livekit.VideoLayer{
+				Quality: livekit.VideoQuality_HIGH,
+				Width:   1920,
+				Height:  1080,
+				Bitrate: 4_500_000,
+			}, 1),
+		}, nil
+
 	default:
 		return nil, errors.ErrInvalidVideoPreset
 	}
