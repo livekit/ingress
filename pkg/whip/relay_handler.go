@@ -66,7 +66,28 @@ func (h *WHIPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	done := make(chan error)
 
 	go func() {
-		_, err = io.Copy(w, pr)
+		b := make([]byte, 2000)
+		var err error
+		var n int
+		for {
+			n, err = pr.Read(b)
+			if err != nil {
+				break
+			}
+
+			_, err = w.Write(b[:n])
+			if err != nil {
+				break
+			}
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+
+		if err == io.EOF {
+			err = nil
+		}
+
 		done <- err
 		close(done)
 	}()
