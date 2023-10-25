@@ -28,7 +28,7 @@ require (
 	github.com/yutopp/go-flv v0.2.0
 	go.uber.org/atomic v1.11.0
 	golang.org/x/image v0.7.0
-	google.golang.org/grpc v1.58.0
+	google.golang.org/grpc v1.58.3
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v3 v3.0.1
 )
