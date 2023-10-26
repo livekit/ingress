@@ -106,7 +106,7 @@ func runService(c *cli.Context) error {
 	}
 
 	bus := psrpc.NewRedisMessageBus(rc)
-	psrpcClient, err := rpc.NewIOInfoClient(conf.NodeID, bus)
+	psrpcClient, err := rpc.NewIOInfoClient(bus)
 	if err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func runService(c *cli.Context) error {
 		rtmpsrv = rtmp.NewRTMPServer()
 	}
 	if conf.WHIPPort > 0 {
-		psrpcWHIPClient, err := rpc.NewIngressHandlerClient(conf.NodeID, bus)
+		psrpcWHIPClient, err := rpc.NewIngressHandlerClient(bus)
 		if err != nil {
 			return err
 		}
@@ -134,7 +134,7 @@ func runService(c *cli.Context) error {
 
 	svc := service.NewService(conf, psrpcClient, bus, whipsrv)
 
-	_, err = rpc.NewIngressInternalServer(conf.NodeID, svc, bus)
+	_, err = rpc.NewIngressInternalServer(svc, bus)
 	if err != nil {
 		return err
 	}
@@ -252,7 +252,7 @@ func runHandler(c *cli.Context) error {
 	}
 
 	bus := psrpc.NewRedisMessageBus(rc)
-	rpcClient, err := rpc.NewIOInfoClient(conf.NodeID, bus)
+	rpcClient, err := rpc.NewIOInfoClient(bus)
 	if err != nil {
 		return err
 	}
@@ -283,7 +283,7 @@ func runHandler(c *cli.Context) error {
 }
 
 func setupHandlerRPCHandlers(conf *config.Config, handler *service.Handler, bus psrpc.MessageBus, info *livekit.IngressInfo, ep any) error {
-	rpcServer, err := rpc.NewIngressHandlerServer(conf.NodeID, handler, bus)
+	rpcServer, err := rpc.NewIngressHandlerServer(handler, bus)
 	if err != nil {
 		return err
 	}
