@@ -30,6 +30,10 @@ import (
 	"github.com/livekit/protocol/utils"
 )
 
+const (
+	minIdle float64 = 0.3 // Target at least 30% idle CPU
+)
+
 type Monitor struct {
 	cpuCostConfig config.CPUCostConfig
 	maxCost       float64
@@ -59,8 +63,9 @@ func (m *Monitor) Start(conf *config.Config) error {
 		return err
 	}
 	m.cpuStats = cpuStats
+	m.cpuCostConfig = conf.CPUCost
 
-	if err := m.checkCPUConfig(conf.CPUCost); err != nil {
+	if err := m.checkCPUConfig(); err != nil {
 		return err
 	}
 
@@ -110,44 +115,44 @@ func (m *Monitor) Stop() {
 	prometheus.Unregister(m.promNodeAvailable)
 }
 
-func (m *Monitor) checkCPUConfig(costConfig config.CPUCostConfig) error {
-	if costConfig.RTMPCpuCost < 1 {
+func (m *Monitor) checkCPUConfig() error {
+	if m.cpuCostConfig.RTMPCpuCost < 1 {
 		logger.Warnw("rtmp input requirement too low", nil,
-			"config value", costConfig.RTMPCpuCost,
+			"config value", m.cpuCostConfig.RTMPCpuCost,
 			"minimum value", 1,
 			"recommended value", 2,
 		)
 	}
 
-	if costConfig.WHIPCpuCost < 1 {
+	if m.cpuCostConfig.WHIPCpuCost < 1 {
 		logger.Warnw("whip input requirement too low", nil,
-			"config value", costConfig.WHIPCpuCost,
+			"config value", m.cpuCostConfig.WHIPCpuCost,
 			"minimum value", 1,
 			"recommended value", 2,
 		)
 	}
 
-	if costConfig.WHIPBypassTranscodingCpuCost < 0.05 {
+	if m.cpuCostConfig.WHIPBypassTranscodingCpuCost < 0.05 {
 		logger.Warnw("whip input with transcoding bypassed requirement too low", nil,
-			"config value", costConfig.WHIPCpuCost,
+			"config value", m.cpuCostConfig.WHIPCpuCost,
 			"minimum value", 0.05,
 			"recommended value", 0.1,
 		)
 	}
 
-	if costConfig.URLCpuCost < 1 {
+	if m.cpuCostConfig.URLCpuCost < 1 {
 		logger.Warnw("url input requirement too low", nil,
-			"config value", costConfig.URLCpuCost,
+			"config value", m.cpuCostConfig.URLCpuCost,
 			"minimum value", 1,
 			"recommended value", 2,
 		)
 	}
 
 	requirements := []float64{
-		costConfig.RTMPCpuCost,
-		costConfig.WHIPCpuCost,
-		costConfig.WHIPBypassTranscodingCpuCost,
-		costConfig.URLCpuCost,
+		m.cpuCostConfig.RTMPCpuCost,
+		m.cpuCostConfig.WHIPCpuCost,
+		m.cpuCostConfig.WHIPBypassTranscodingCpuCost,
+		m.cpuCostConfig.URLCpuCost,
 	}
 	sort.Float64s(requirements)
 	m.maxCost = requirements[len(requirements)-1]
@@ -200,7 +205,7 @@ func (m *Monitor) canAcceptIngress(info *livekit.IngressInfo) (bool, float64, fl
 
 	var cpuHold float64
 	var accept bool
-	available := m.cpuStats.GetCPUIdle() - m.pendingCPUs.Load()
+	available := m.cpuStats.GetCPUIdle() - m.pendingCPUs.Load() - minIdle*m.cpuStats.NumCPU()
 
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
