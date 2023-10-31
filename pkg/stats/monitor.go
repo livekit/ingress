@@ -46,11 +46,13 @@ type Monitor struct {
 
 	pendingCPUs atomic.Float64
 
+	started  core.Fuse
 	shutdown core.Fuse
 }
 
 func NewMonitor() *Monitor {
 	return &Monitor{
+		started:  core.NewFuse(),
 		shutdown: core.NewFuse(),
 	}
 }
@@ -95,6 +97,8 @@ func (m *Monitor) Start(conf *config.Config) error {
 	}, []string{"type", "transcoding"})
 
 	prometheus.MustRegister(m.promCPULoad, m.promNodeAvailable, m.requestGauge)
+
+	m.started.Break()
 
 	return nil
 }
@@ -189,7 +193,7 @@ func (m *Monitor) GetCPULoad() float64 {
 }
 
 func (m *Monitor) CanAccept() bool {
-	if m.shutdown.IsBroken() {
+	if !m.started.IsBroken() || m.shutdown.IsBroken() {
 		return false
 	}
 
@@ -197,7 +201,7 @@ func (m *Monitor) CanAccept() bool {
 }
 
 func (m *Monitor) canAcceptIngress(info *livekit.IngressInfo) (bool, float64, float64) {
-	if m.shutdown.IsBroken() {
+	if !m.started.IsBroken() || m.shutdown.IsBroken() {
 		return false, 0, 0
 	}
 
