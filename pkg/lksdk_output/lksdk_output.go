@@ -97,6 +97,7 @@ func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string
 		output.Close()
 	}
 	track.OnBind(func() {
+		// Start write is idempotent if the sample provider doesn't change
 		if err := track.StartWrite(output, onComplete); err != nil {
 			s.logger.Errorw("could not start writing audio track", err)
 		}

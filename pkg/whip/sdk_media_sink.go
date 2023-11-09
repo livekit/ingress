@@ -126,8 +126,6 @@ func (sp *SDKMediaSink) OnBind() error {
 func (sp *SDKMediaSink) OnUnbind() error {
 	sp.logger.Infow("media sink unbound")
 
-	sp.Close()
-
 	return nil
 }
 

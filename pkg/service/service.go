@@ -167,7 +167,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 	if pRes.params.BypassTranscoding {
 		// RPC is handled in the handler process when transcoding
 
-		rpcServer, err = rpc.NewIngressHandlerServer(s.conf.NodeID, ihs, s.bus)
+		rpcServer, err = rpc.NewIngressHandlerServer(ihs, s.bus)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -440,7 +440,7 @@ func (s *Service) StartIngress(ctx context.Context, req *rpc.StartIngressRequest
 	return s.HandleURLPublishRequest(utils.NewGuid(utils.URLResourcePrefix), req)
 }
 
-func (s *Service) StartIngressAffinity(req *rpc.StartIngressRequest) float32 {
+func (s *Service) StartIngressAffinity(ctx context.Context, req *rpc.StartIngressRequest) float32 {
 	if !s.monitor.CanAcceptIngress(req.Info) {
 		return -1
 	}

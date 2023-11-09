@@ -433,7 +433,7 @@ func (e *Output) OnBind() error {
 func (e *Output) OnUnbind() error {
 	e.logger.Infow("sample provider unbound")
 
-	return e.Close()
+	return nil
 }
 
 func (e *Output) Close() error {
