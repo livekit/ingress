@@ -97,10 +97,11 @@ func (sp *SDKMediaSink) PushSample(s *media.Sample, ts time.Duration) error {
 	return nil
 }
 
-func (sp *SDKMediaSink) NextSample() (media.Sample, error) {
+func (sp *SDKMediaSink) NextSample(ctx context.Context) (media.Sample, error) {
 	for {
 		select {
 		case <-sp.fuse.Watch():
+		case <-ctx.Done():
 			return media.Sample{}, io.EOF
 		case s := <-sp.readySamples:
 			drop, err := sp.outputSync.WaitForMediaTime(s.ts)

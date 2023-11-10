@@ -15,6 +15,7 @@
 package media
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"time"
@@ -399,13 +400,14 @@ func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 	}
 }
 
-func (e *Output) NextSample() (media.Sample, error) {
+func (e *Output) NextSample(ctx context.Context) (media.Sample, error) {
 	var s *sample
 
 	for {
 		select {
 		case s = <-e.samples:
 		case <-e.fuse.Watch():
+		case <-ctx.Done():
 		}
 
 		if s == nil {

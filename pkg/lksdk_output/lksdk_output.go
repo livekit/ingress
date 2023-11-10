@@ -124,10 +124,8 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 	var err error
 	var activeLayerCount int32
 
-	tracks := make([]*lksdk.LocalSampleTrack, 0)
-	for i, layer := range layers {
-		output := outputs[i]
-		onComplete := func() {
+	getOnComplete := func(layer *livekit.VideoLayer, output VideoSampleProvider) func() {
+		return func() {
 			s.logger.Debugw("video track layer write complete", "layer", layer.Quality.String())
 			// don't unpublish if the completion is due to the output closing
 			if pub != nil && !s.closed.IsBroken() {
@@ -140,6 +138,11 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 			}
 			output.Close()
 		}
+	}
+
+	tracks := make([]*lksdk.LocalSampleTrack, 0)
+	for i, layer := range layers {
+		output := outputs[i]
 
 		onRTCP := func(pkt rtcp.Packet) {
 			switch pkt.(type) {
@@ -159,6 +162,7 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 			return err
 		}
 
+		onComplete := getOnComplete(layer, output)
 		track.OnBind(func() {
 			if err := track.StartWrite(output, onComplete); err != nil {
 				s.logger.Errorw("could not start writing video track", err)

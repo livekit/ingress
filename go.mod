@@ -1,5 +1,7 @@
 module github.com/livekit/ingress
 
+replace github.com/livekit/server-sdk-go => ../server-sdk-go
+
 go 1.20
 
 replace github.com/tinyzimmer/go-glib => github.com/livekit/go-glib v0.0.0-20230811224737-7bfaa4e57420
@@ -44,7 +46,7 @@ require (
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/gammazero/deque v0.2.1 // indirect
 	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
-	github.com/go-logr/logr v1.2.4 // indirect
+	github.com/go-logr/logr v1.3.0 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/google/uuid v1.3.1 // indirect
