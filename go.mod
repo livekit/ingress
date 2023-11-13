@@ -1,7 +1,5 @@
 module github.com/livekit/ingress
 
-replace github.com/livekit/server-sdk-go => ../server-sdk-go
-
 go 1.20
 
 replace github.com/tinyzimmer/go-glib => github.com/livekit/go-glib v0.0.0-20230811224737-7bfaa4e57420
@@ -15,7 +13,7 @@ require (
 	github.com/livekit/mediatransportutil v0.0.0-20231017082622-43f077b4e60e
 	github.com/livekit/protocol v1.9.0
 	github.com/livekit/psrpc v0.5.0
-	github.com/livekit/server-sdk-go v1.1.2-0.20231109200842-49b1d3c9a294
+	github.com/livekit/server-sdk-go v1.1.2-0.20231113183636-7e90bc64e464
 	github.com/pion/dtls/v2 v2.2.7
 	github.com/pion/interceptor v0.1.25
 	github.com/pion/rtcp v1.2.12
