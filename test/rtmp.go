@@ -107,7 +107,7 @@ func RunRTMPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPs
 		return &rpc.GetIngressInfoResponse{Info: info, WsUrl: conf.WsUrl}, nil
 	}
 
-	ioPsrpc, err := rpc.NewIOInfoServer("ingress_test_server", ios, bus)
+	ioPsrpc, err := rpc.NewIOInfoServer(ios, bus)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		ioPsrpc.Kill()

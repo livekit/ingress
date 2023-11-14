@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/emptypb"
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
 
@@ -47,7 +48,19 @@ type ioServer struct {
 	updateIngressState func(*rpc.UpdateIngressStateRequest) error
 }
 
-func (s *ioServer) UpdateEgressInfo(context.Context, *livekit.EgressInfo) (*google_protobuf2.Empty, error) {
+func (s *ioServer) CreateEgress(ctx context.Context, info *livekit.EgressInfo) (*emptypb.Empty, error) {
+	return &google_protobuf2.Empty{}, nil
+}
+
+func (s *ioServer) GetEgress(ctx context.Context, req *rpc.GetEgressRequest) (*livekit.EgressInfo, error) {
+	return nil, nil
+}
+
+func (s *ioServer) ListEgress(ctx context.Context, req *livekit.ListEgressRequest) (*livekit.ListEgressResponse, error) {
+	return nil, nil
+}
+
+func (s *ioServer) UpdateEgress(ctx context.Context, info *livekit.EgressInfo) (*emptypb.Empty, error) {
 	return &google_protobuf2.Empty{}, nil
 }
 
@@ -90,13 +103,13 @@ func getConfig(t *testing.T) *TestConfig {
 }
 
 func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
-	psrpcClient, err := rpc.NewIOInfoClient("ingress_test_service", bus)
+	psrpcClient, err := rpc.NewIOInfoClient(bus)
 	require.NoError(t, err)
 
 	conf.Config.RTCConfig.Validate(conf.Development)
 	conf.Config.RTCConfig.EnableLoopbackCandidate = true
 
-	commandPsrpcClient, err := rpc.NewIngressHandlerClient("ingress_test_client", bus, psrpc.WithClientTimeout(5*time.Second))
+	commandPsrpcClient, err := rpc.NewIngressHandlerClient(bus, psrpc.WithClientTimeout(5*time.Second))
 	require.NoError(t, err)
 
 	if !conf.WhipOnly && !conf.URLOnly {
