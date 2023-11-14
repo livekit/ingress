@@ -43,10 +43,10 @@ func RunURLTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsr
 		svc.Stop(true)
 	})
 
-	_, err := rpc.NewIngressInternalServer(conf.NodeID, svc, bus)
+	_, err := rpc.NewIngressInternalServer(svc, bus)
 	require.NoError(t, err)
 
-	internalPsrpcClient, err := rpc.NewIngressInternalClient("ingress_test_internal_client", bus, psrpc.WithClientTimeout(5*time.Second))
+	internalPsrpcClient, err := rpc.NewIngressInternalClient(bus, psrpc.WithClientTimeout(5*time.Second))
 	require.NoError(t, err)
 
 	updates := make(chan *rpc.UpdateIngressStateRequest, 10)
@@ -101,7 +101,7 @@ func RunURLTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsr
 		return nil, psrpc.NewErrorf(psrpc.NotFound, "not found")
 	}
 
-	ioPsrpc, err := rpc.NewIOInfoServer("ingress_test_server", ios, bus)
+	ioPsrpc, err := rpc.NewIOInfoServer(ios, bus)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		ioPsrpc.Kill()
