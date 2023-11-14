@@ -350,7 +350,7 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer) (*Output, error) {
 	e := &Output{
 		sink:       sink,
 		outputSync: outputSync,
-		samples:    make(chan *sample, 100),
+		samples:    make(chan *sample, 15),
 		fuse:       core.NewFuse(),
 	}
 
@@ -397,6 +397,9 @@ func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 		return nil
 	case <-e.fuse.Watch():
 		return io.EOF
+	default:
+		// drop the sample if the output queue is full
+		return nil
 	}
 }
 
