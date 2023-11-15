@@ -388,10 +388,20 @@ func (e *Output) ForceKeyFrame() error {
 func (e *Output) handleEOS(_ *app.Sink) {
 	e.logger.Infow("app sink EOS")
 
-	e.fuse.Break()
+	e.Close()
 }
 
 func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
+
+	drop, err := e.outputSync.WaitForMediaTime(pts)
+	if err != nil {
+		return err
+	}
+	if drop {
+		e.logger.Debugw("Dropping sample", "timestamp", pts)
+		return nil
+	}
+
 	select {
 	case e.samples <- &sample{s, pts}:
 		return nil
@@ -417,14 +427,6 @@ func (e *Output) NextSample(ctx context.Context) (media.Sample, error) {
 			return media.Sample{}, io.EOF
 		}
 
-		drop, err := e.outputSync.WaitForMediaTime(s.ts)
-		if err != nil {
-			return media.Sample{}, err
-		}
-		if drop {
-			e.logger.Debugw("Dropping sample", "timestamp", s.ts)
-			continue
-		}
 		return *s.s, nil
 	}
 }

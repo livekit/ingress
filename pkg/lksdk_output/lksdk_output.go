@@ -98,6 +98,8 @@ func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string
 		s.logger.Debugw("audio track write complete callback")
 	}
 	track.OnBind(func() {
+		s.logger.Debugw("audio track start write")
+
 		// Start write is idempotent if the sample provider doesn't change
 		if err := track.StartWrite(output, onComplete); err != nil {
 			s.logger.Errorw("could not start writing audio track", err)
@@ -156,7 +158,10 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 		}
 
 		onComplete := getOnComplete(layer, output)
+		localLayer := layer
 		track.OnBind(func() {
+			s.logger.Debugw("video track start write", "layer", localLayer.Quality.String())
+
 			if err := track.StartWrite(output, onComplete); err != nil {
 				s.logger.Errorw("could not start writing video track", err)
 			}
