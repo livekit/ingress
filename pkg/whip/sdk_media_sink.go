@@ -88,6 +88,8 @@ func (sp *SDKMediaSink) PushSample(s *media.Sample, ts time.Duration) error {
 		return nil
 	}
 
+	// Synchronize the outputs before the network jitter buffer to avoid old samples stuck
+	// in the channel from increasing the whole pipeline delay.
 	drop, err := sp.outputSync.WaitForMediaTime(ts)
 	if err != nil {
 		return err
@@ -102,7 +104,7 @@ func (sp *SDKMediaSink) PushSample(s *media.Sample, ts time.Duration) error {
 		return io.EOF
 	case sp.readySamples <- &sample{s, ts}:
 	default:
-		// drop the sample
+		// drop the sample if the output queue is full. This is needed if we are reconnecting.
 	}
 
 	return nil

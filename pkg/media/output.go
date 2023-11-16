@@ -393,6 +393,8 @@ func (e *Output) handleEOS(_ *app.Sink) {
 
 func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 
+	// Synchronize the outputs before the network jitter buffer to avoid old samples stuck
+	// in the channel from increasing the whole pipeline delay.
 	drop, err := e.outputSync.WaitForMediaTime(pts)
 	if err != nil {
 		return err
@@ -408,7 +410,7 @@ func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 	case <-e.fuse.Watch():
 		return io.EOF
 	default:
-		// drop the sample if the output queue is full
+		// drop the sample if the output queue is full. This is needed if we are reconnecting.
 		return nil
 	}
 }
