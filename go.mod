@@ -13,12 +13,12 @@ require (
 	github.com/livekit/mediatransportutil v0.0.0-20231017082622-43f077b4e60e
 	github.com/livekit/protocol v1.9.1
 	github.com/livekit/psrpc v0.5.1
-	github.com/livekit/server-sdk-go v1.1.2-0.20231113183636-7e90bc64e464
+	github.com/livekit/server-sdk-go v1.1.2-0.20231116164929-fa537419c3ba
 	github.com/pion/dtls/v2 v2.2.8
 	github.com/pion/interceptor v0.1.25
 	github.com/pion/rtcp v1.2.12
 	github.com/pion/rtp v1.8.3
-	github.com/pion/webrtc/v3 v3.2.22
+	github.com/pion/webrtc/v3 v3.2.23
 	github.com/prometheus/client_golang v1.17.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
