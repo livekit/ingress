@@ -67,7 +67,7 @@ func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.
 		track:        track,
 		outputSync:   outputSync,
 		sdkOutput:    sdkOutput,
-		readySamples: make(chan *sample, 1),
+		readySamples: make(chan *sample, 15),
 		fuse:         core.NewFuse(),
 	}
 
@@ -88,10 +88,23 @@ func (sp *SDKMediaSink) PushSample(s *media.Sample, ts time.Duration) error {
 		return nil
 	}
 
+	// Synchronize the outputs before the network jitter buffer to avoid old samples stuck
+	// in the channel from increasing the whole pipeline delay.
+	drop, err := sp.outputSync.WaitForMediaTime(ts)
+	if err != nil {
+		return err
+	}
+	if drop {
+		sp.logger.Debugw("dropping sample", "timestamp", ts)
+		return nil
+	}
+
 	select {
 	case <-sp.fuse.Watch():
 		return io.EOF
 	case sp.readySamples <- &sample{s, ts}:
+	default:
+		// drop the sample if the output queue is full. This is needed if we are reconnecting.
 	}
 
 	return nil
@@ -104,15 +117,6 @@ func (sp *SDKMediaSink) NextSample(ctx context.Context) (media.Sample, error) {
 		case <-ctx.Done():
 			return media.Sample{}, io.EOF
 		case s := <-sp.readySamples:
-			drop, err := sp.outputSync.WaitForMediaTime(s.ts)
-			if err != nil {
-				return media.Sample{}, err
-			}
-			if drop {
-				sp.logger.Debugw("dropping sample", "timestamp", s.ts)
-				continue
-			}
-
 			return *s.s, nil
 		}
 	}
