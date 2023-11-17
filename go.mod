@@ -5,9 +5,9 @@ go 1.20
 replace github.com/tinyzimmer/go-glib => github.com/livekit/go-glib v0.0.0-20230811224737-7bfaa4e57420
 
 require (
-	github.com/Eyevinn/mp4ff v0.39.0
+	github.com/Eyevinn/mp4ff v0.40.2
 	github.com/frostbyte73/core v0.0.9
-	github.com/gorilla/mux v1.8.0
+	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/mediatransportutil v0.0.0-20231017082622-43f077b4e60e
@@ -27,7 +27,7 @@ require (
 	github.com/urfave/cli/v2 v2.25.7
 	github.com/yutopp/go-flv v0.3.1
 	go.uber.org/atomic v1.11.0
-	golang.org/x/image v0.13.0
+	golang.org/x/image v0.14.0
 	google.golang.org/grpc v1.59.0
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v3 v3.0.1
