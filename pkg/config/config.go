@@ -40,6 +40,9 @@ var (
 )
 
 type Config struct {
+}
+
+type ServiceConfig struct {
 	Redis     *redis.RedisConfig `yaml:"redis"`      // required
 	ApiKey    string             `yaml:"api_key"`    // required (env LIVEKIT_API_KEY)
 	ApiSecret string             `yaml:"api_secret"` // required (env LIVEKIT_API_SECRET)
@@ -59,10 +62,12 @@ type Config struct {
 
 	// CPU costs for various ingress types
 	CPUCost CPUCostConfig `yaml:"cpu_cost"`
+}
 
+type InternalConfig struct {
 	// internal
-	ServiceName string `yaml:"-"`
-	NodeID      string // Do not provide, will be overwritten
+	ServiceName string `yaml:"service_name"`
+	NodeID      string `yaml:"node_id"` // Do not provide, will be overwritten
 }
 
 type CPUCostConfig struct {
@@ -95,6 +100,19 @@ func NewConfig(confString string) (*Config, error) {
 func (conf *Config) Init() error {
 	conf.NodeID = utils.NewGuid("NE_")
 
+	err := conf.InitDefaults()
+	if err != nil {
+		return err
+	}
+
+	if err := conf.InitLogger(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (conf *Config) InitDefaults() error {
 	if conf.RTMPPort == 0 {
 		conf.RTMPPort = DefaultRTMPPort
 	}
@@ -109,12 +127,6 @@ func (conf *Config) Init() error {
 	if err != nil {
 		return err
 	}
-
-	if err := conf.InitLogger(); err != nil {
-		return err
-	}
-
-	return nil
 }
 
 func (c *Config) InitWhipConf() error {
