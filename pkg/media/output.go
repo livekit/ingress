@@ -350,7 +350,7 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer) (*Output, error) {
 	e := &Output{
 		sink:       sink,
 		outputSync: outputSync,
-		samples:    make(chan *sample, 100),
+		samples:    make(chan *sample, 15),
 		fuse:       core.NewFuse(),
 	}
 
@@ -388,15 +388,30 @@ func (e *Output) ForceKeyFrame() error {
 func (e *Output) handleEOS(_ *app.Sink) {
 	e.logger.Infow("app sink EOS")
 
-	e.fuse.Break()
+	e.Close()
 }
 
 func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
+
+	// Synchronize the outputs before the network jitter buffer to avoid old samples stuck
+	// in the channel from increasing the whole pipeline delay.
+	drop, err := e.outputSync.WaitForMediaTime(pts)
+	if err != nil {
+		return err
+	}
+	if drop {
+		e.logger.Debugw("Dropping sample", "timestamp", pts)
+		return nil
+	}
+
 	select {
 	case e.samples <- &sample{s, pts}:
 		return nil
 	case <-e.fuse.Watch():
 		return io.EOF
+	default:
+		// drop the sample if the output queue is full. This is needed if we are reconnecting.
+		return nil
 	}
 }
 
@@ -414,14 +429,6 @@ func (e *Output) NextSample(ctx context.Context) (media.Sample, error) {
 			return media.Sample{}, io.EOF
 		}
 
-		drop, err := e.outputSync.WaitForMediaTime(s.ts)
-		if err != nil {
-			return media.Sample{}, err
-		}
-		if drop {
-			e.logger.Debugw("Dropping sample", "timestamp", s.ts)
-			continue
-		}
 		return *s.s, nil
 	}
 }

@@ -72,6 +72,14 @@ func (s *ioServer) UpdateIngressState(ctx context.Context, req *rpc.UpdateIngres
 	return &google_protobuf2.Empty{}, s.updateIngressState(req)
 }
 
+func (s *ioServer) EvaluateSIPDispatchRules(context.Context, *rpc.EvaluateSIPDispatchRulesRequest) (*rpc.EvaluateSIPDispatchRulesResponse, error) {
+	return nil, nil
+}
+
+func (s *ioServer) GetSIPTrunkAuthentication(context.Context, *rpc.GetSIPTrunkAuthenticationRequest) (*rpc.GetSIPTrunkAuthenticationResponse, error) {
+	return nil, nil
+}
+
 func GetDefaultConfig(t *testing.T) *TestConfig {
 	tc := &TestConfig{Config: &config.Config{}}
 	// Defaults

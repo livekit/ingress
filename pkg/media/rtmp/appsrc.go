@@ -93,6 +93,8 @@ func (s *RTMPRelaySource) Start(ctx context.Context) error {
 			logger.Errorw("error while copying media from relay", err)
 		}
 
+		logger.Debugw("flv http relay reached end of stream")
+
 		s.flvSrc.EndStream()
 
 		s.result <- err
