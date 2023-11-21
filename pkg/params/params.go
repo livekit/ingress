@@ -32,6 +32,7 @@ import (
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/utils"
+	"github.com/livekit/psrpc"
 )
 
 type Params struct {
@@ -348,7 +349,11 @@ func (p *Params) SendStateUpdate(ctx context.Context) {
 		State:     info.State,
 	})
 	if err != nil {
-		p.logger.Errorw("failed to send update", err)
+		var psrpcErr psrpc.Error
+		if !errors.As(err, &psrpcErr) || psrpcErr.Code() != psrpc.NotFound {
+			// Ingress was deleted
+			p.logger.Errorw("failed to send update", err)
+		}
 	}
 }
 
