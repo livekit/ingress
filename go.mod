@@ -5,19 +5,20 @@ go 1.20
 replace github.com/tinyzimmer/go-glib => github.com/livekit/go-glib v0.0.0-20230811224737-7bfaa4e57420
 
 require (
-	github.com/Eyevinn/mp4ff v0.39.0
+	github.com/Eyevinn/mp4ff v0.40.2
 	github.com/frostbyte73/core v0.0.9
-	github.com/gorilla/mux v1.8.0
+	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/mediatransportutil v0.0.0-20231017082622-43f077b4e60e
 	github.com/livekit/protocol v1.9.1
 	github.com/livekit/psrpc v0.5.1
-	github.com/livekit/server-sdk-go v1.1.2-0.20231116164929-fa537419c3ba
+	github.com/livekit/server-sdk-go v1.1.2-0.20231120143656-86b7cf883b89
 	github.com/pion/dtls/v2 v2.2.8
 	github.com/pion/interceptor v0.1.25
 	github.com/pion/rtcp v1.2.12
 	github.com/pion/rtp v1.8.3
+	github.com/pion/rtp/v2 v2.0.0
 	github.com/pion/webrtc/v3 v3.2.23
 	github.com/prometheus/client_golang v1.17.0
 	github.com/sirupsen/logrus v1.9.3
@@ -27,7 +28,7 @@ require (
 	github.com/urfave/cli/v2 v2.25.7
 	github.com/yutopp/go-flv v0.3.1
 	go.uber.org/atomic v1.11.0
-	golang.org/x/image v0.13.0
+	golang.org/x/image v0.14.0
 	google.golang.org/grpc v1.59.0
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v3 v3.0.1
