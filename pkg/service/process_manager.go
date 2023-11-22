@@ -100,7 +100,7 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) er
 
 	args := []string{
 		"run-handler",
-		"--config-body", string(confString),
+		"--config", string(confString),
 		"--info", string(infoString),
 	}
 
