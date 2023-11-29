@@ -4,8 +4,6 @@ go 1.20
 
 replace github.com/livekit/protocol => ../protocol
 
-replace github.com/livekit/psrpc => ../psrpc
-
 replace github.com/tinyzimmer/go-glib => github.com/livekit/go-glib v0.0.0-20230811224737-7bfaa4e57420
 
 require (

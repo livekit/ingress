@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"github.com/frostbyte73/core"
@@ -71,7 +72,9 @@ type Service struct {
 	promServer *http.Server
 
 	publishRequests chan publishRequest
-	shutdown        core.Fuse
+
+	acceptNewRequests atomic.Bool
+	shutdown          core.Fuse
 }
 
 func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, whipSrv *whip.WHIPServer) *Service {
@@ -89,6 +92,8 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		publishRequests: make(chan publishRequest, 5),
 		shutdown:        core.NewFuse(),
 	}
+
+	s.acceptNewRequests.Store(true)
 
 	s.manager.onFatalError(func(info *livekit.IngressInfo, err error) {
 		s.sendUpdate(context.Background(), info, err)
