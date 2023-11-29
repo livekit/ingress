@@ -170,6 +170,8 @@ func filterAndSortLayersByQuality(layers []*livekit.VideoLayer, sourceW, sourceH
 			continue
 		}
 
+		applyResolutionToLayer(layer, sourceW, sourceH)
+
 		ret = append(ret, layer)
 
 		if layer.Width >= uint32(sourceW) && layer.Height >= uint32(sourceH) {
@@ -179,4 +181,26 @@ func filterAndSortLayersByQuality(layers []*livekit.VideoLayer, sourceW, sourceH
 
 	}
 	return ret
+}
+
+func applyResolutionToLayer(layer *livekit.VideoLayer, sourceW, sourceH int) {
+	w := uint32(sourceW)
+	h := uint32(sourceH)
+
+	if w > layer.Width {
+		w = layer.Width
+		h = uint32((int64(w) * int64(sourceH)) / int64(sourceW))
+	}
+
+	if h > layer.Height {
+		h = layer.Height
+		w = uint32((int64(h) * int64(sourceW)) / int64(sourceH))
+	}
+
+	// Roubd up to the next even dimension
+	w = ((w + 1) >> 1) << 1
+	h = ((h + 1) >> 1) << 1
+
+	layer.Width = w
+	layer.Height = h
 }
