@@ -2,6 +2,10 @@ module github.com/livekit/ingress
 
 go 1.20
 
+replace github.com/livekit/protocol => ../protocol
+
+replace github.com/livekit/psrpc => ../psrpc
+
 replace github.com/tinyzimmer/go-glib => github.com/livekit/go-glib v0.0.0-20230811224737-7bfaa4e57420
 
 require (
@@ -18,7 +22,6 @@ require (
 	github.com/pion/interceptor v0.1.25
 	github.com/pion/rtcp v1.2.12
 	github.com/pion/rtp v1.8.3
-	github.com/pion/rtp/v2 v2.0.0
 	github.com/pion/webrtc/v3 v3.2.23
 	github.com/prometheus/client_golang v1.17.0
 	github.com/sirupsen/logrus v1.9.3
@@ -66,15 +69,21 @@ require (
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pion/datachannel v1.5.5 // indirect
 	github.com/pion/ice/v2 v2.3.11 // indirect
+	github.com/pion/ice/v3 v3.0.2 // indirect
 	github.com/pion/logging v0.2.2 // indirect
 	github.com/pion/mdns v0.0.9 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pion/sctp v1.8.9 // indirect
 	github.com/pion/sdp/v3 v3.0.6 // indirect
 	github.com/pion/srtp/v2 v2.0.18 // indirect
+	github.com/pion/srtp/v3 v3.0.1 // indirect
 	github.com/pion/stun v0.6.1 // indirect
+	github.com/pion/stun/v2 v2.0.0 // indirect
 	github.com/pion/transport/v2 v2.2.4 // indirect
+	github.com/pion/transport/v3 v3.0.1 // indirect
 	github.com/pion/turn/v2 v2.1.3 // indirect
+	github.com/pion/turn/v3 v3.0.1 // indirect
+	github.com/pion/webrtc/v4 v4.0.0-beta.7 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.4.1-0.20230718164431-9a2bf3000d16 // indirect

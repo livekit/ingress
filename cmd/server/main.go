@@ -134,7 +134,13 @@ func runService(c *cli.Context) error {
 
 	svc := service.NewService(conf, psrpcClient, bus, whipsrv)
 
-	_, err = rpc.NewIngressInternalServer(svc, bus)
+	psrpcServer, err := rpc.NewIngressInternalServer(svc, bus)
+	if err != nil {
+		return err
+	}
+
+	// Only support empty topics for now. May be used to support more than one clusterID in the future
+	err = psrpcServer.RegisterStartIngressTopic("")
 	if err != nil {
 		return err
 	}
