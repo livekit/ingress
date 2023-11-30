@@ -58,7 +58,7 @@ func main() {
 						Name: "info",
 					},
 					&cli.StringFlag{
-						Name: "config",
+						Name: "config-body",
 					},
 					&cli.StringFlag{
 						Name: "token",
