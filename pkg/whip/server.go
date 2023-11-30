@@ -52,7 +52,6 @@ type WHIPServer struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	confLock     sync.Mutex
 	conf         *config.Config
 	webRTCConfig *rtcconfig.WebRTCConfig
 	onPublish    func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.MediaStatsReporter, func(error), error)
@@ -83,8 +82,10 @@ func (s *WHIPServer) Start(
 	}
 
 	s.onPublish = onPublish
+	s.conf = conf
 
-	err := s.UpdateConfig(conf)
+	var err error
+	s.webRTCConfig, err = rtcconfig.NewWebRTCConfig(&conf.RTCConfig, conf.Development)
 	if err != nil {
 		return err
 	}
@@ -223,22 +224,6 @@ func (s *WHIPServer) handleError(err error, w http.ResponseWriter) {
 	}
 }
 
-func (s *WHIPServer) UpdateConfig(conf *config.Config) error {
-	s.confLock.Lock()
-	defer s.confLock.Unlock()
-
-	var err error
-	webRTCConfig, err := rtcconfig.NewWebRTCConfig(&conf.RTCConfig, conf.Development)
-	if err != nil {
-		return err
-	}
-
-	s.webRTCConfig = webRTCConfig
-	s.conf = conf
-
-	return nil
-}
-
 func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request, streamKey string) error {
 	// TODO return ETAG header
 
@@ -274,9 +259,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
 
-	s.confLock.Lock()
 	h := NewWHIPHandler(s.webRTCConfig)
-	s.confLock.Unlock()
 
 	p, ready, ended, err := s.onPublish(streamKey, resourceId, h)
 	if err != nil {
