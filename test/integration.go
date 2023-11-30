@@ -81,7 +81,12 @@ func (s *ioServer) GetSIPTrunkAuthentication(context.Context, *rpc.GetSIPTrunkAu
 }
 
 func GetDefaultConfig(t *testing.T) *TestConfig {
-	tc := &TestConfig{Config: &config.Config{}}
+	tc := &TestConfig{
+		Config: &config.Config{
+			ServiceConfig:  &config.ServiceConfig{},
+			InternalConfig: &config.InternalConfig{},
+		},
+	}
 	// Defaults
 	tc.RTMPPort = 1935
 	tc.HTTPRelayPort = 9090
