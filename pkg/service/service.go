@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -60,7 +61,9 @@ type publishResponse struct {
 }
 
 type Service struct {
-	conf    *config.Config
+	confLock sync.Mutex
+	conf     *config.Config
+
 	monitor *stats.Monitor
 	manager *ProcessManager
 	sm      *SessionManager
@@ -85,7 +88,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		conf:            conf,
 		monitor:         monitor,
 		sm:              sm,
-		manager:         NewProcessManager(conf, sm),
+		manager:         NewProcessManager(sm),
 		whipSrv:         whipSrv,
 		psrpcClient:     psrpcClient,
 		bus:             bus,
@@ -283,12 +286,16 @@ func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inp
 		ResourceId: resourceId,
 	}
 
+	s.confLock.Lock()
+	conf := s.conf
+	s.confLock.Unlock()
+
 	if wsUrl == "" {
-		wsUrl = s.conf.WsUrl
+		wsUrl = conf.WsUrl
 	}
 
 	// This validates the ingress info
-	p, err := params.GetParams(ctx, s.psrpcClient, s.conf, info, wsUrl, token, nil)
+	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -306,6 +313,18 @@ func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inp
 	return p, nil
 }
 
+func (s *Service) UpdateConfig(conf *config.Config) {
+	s.confLock.Lock()
+	defer s.confLock.Unlock()
+
+	s.conf = conf
+
+	err := s.monitor.UpdateCostConfig(&conf.CPUCost)
+	if err != nil {
+		logger.Errorw("monitor cost config validation failed", err)
+	}
+}
+
 func (s *Service) Run() error {
 	logger.Debugw("starting service", "version", version.Version)
 
@@ -319,7 +338,11 @@ func (s *Service) Run() error {
 		}()
 	}
 
-	if err := s.monitor.Start(s.conf); err != nil {
+	s.confLock.Lock()
+	conf := s.conf
+	s.confLock.Unlock()
+
+	if err := s.monitor.Start(conf); err != nil {
 		return err
 	}
 
@@ -391,6 +414,14 @@ func (s *Service) Run() error {
 	}
 }
 
+func (s *Service) Pause() {
+	s.acceptNewRequests.Store(false)
+}
+
+func (s *Service) Resume() {
+	s.acceptNewRequests.Store(true)
+}
+
 func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {
 	var state *livekit.IngressState
 	if info == nil {
@@ -416,7 +447,7 @@ func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err
 }
 
 func (s *Service) CanAccept() bool {
-	return s.monitor.CanAccept()
+	return s.acceptNewRequests.Load() && s.monitor.CanAccept()
 }
 
 func (s *Service) Stop(kill bool) {
@@ -446,7 +477,7 @@ func (s *Service) StartIngress(ctx context.Context, req *rpc.StartIngressRequest
 }
 
 func (s *Service) StartIngressAffinity(ctx context.Context, req *rpc.StartIngressRequest) float32 {
-	if !s.monitor.CanAcceptIngress(req.Info) {
+	if !s.acceptNewRequests.Load() || !s.monitor.CanAcceptIngress(req.Info) {
 		return -1
 	}
 
