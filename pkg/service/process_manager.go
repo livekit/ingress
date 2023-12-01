@@ -30,7 +30,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/frostbyte73/core"
-	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
@@ -49,17 +48,15 @@ type process struct {
 }
 
 type ProcessManager struct {
-	conf *config.Config
-	sm   *SessionManager
+	sm *SessionManager
 
 	mu             sync.RWMutex
 	activeHandlers map[string]*process
 	onFatal        func(info *livekit.IngressInfo, err error)
 }
 
-func NewProcessManager(conf *config.Config, sm *SessionManager) *ProcessManager {
+func NewProcessManager(sm *SessionManager) *ProcessManager {
 	return &ProcessManager{
-		conf:           conf,
 		sm:             sm,
 		activeHandlers: make(map[string]*process),
 	}
@@ -74,7 +71,7 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) er
 	_, span := tracer.Start(ctx, "Service.launchHandler")
 	defer span.End()
 
-	confString, err := yaml.Marshal(s.conf)
+	confString, err := yaml.Marshal(p.Config)
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("could not marshal config", err)

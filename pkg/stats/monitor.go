@@ -17,6 +17,7 @@ package stats
 import (
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/frostbyte73/core"
@@ -35,8 +36,9 @@ const (
 )
 
 type Monitor struct {
-	cpuCostConfig config.CPUCostConfig
-	maxCost       float64
+	costConfigLock sync.Mutex
+	cpuCostConfig  config.CPUCostConfig
+	maxCost        float64
 
 	promCPULoad       prometheus.Gauge
 	requestGauge      *prometheus.GaugeVec
@@ -101,6 +103,21 @@ func (m *Monitor) Start(conf *config.Config) error {
 	m.started.Break()
 
 	return nil
+}
+
+func (m *Monitor) UpdateCostConfig(cpuCostConfig *config.CPUCostConfig) error {
+	m.costConfigLock.Lock()
+	defer m.costConfigLock.Unlock()
+
+	// No change
+	if m.cpuCostConfig == *cpuCostConfig {
+		return nil
+	}
+
+	// Update config, but return an error if validation fails
+	m.cpuCostConfig = *cpuCostConfig
+
+	return m.checkCPUConfig()
 }
 
 // Server is shutting down, but may stay up for some time for draining
@@ -197,6 +214,9 @@ func (m *Monitor) CanAccept() bool {
 		return false
 	}
 
+	m.costConfigLock.Lock()
+	defer m.costConfigLock.Unlock()
+
 	return m.getAvailable() > m.maxCost
 }
 
@@ -208,6 +228,9 @@ func (m *Monitor) canAcceptIngress(info *livekit.IngressInfo) (bool, float64, fl
 	var cpuHold float64
 	var accept bool
 	available := m.getAvailable()
+
+	m.costConfigLock.Lock()
+	defer m.costConfigLock.Unlock()
 
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
