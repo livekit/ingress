@@ -76,8 +76,8 @@ type Service struct {
 
 	publishRequests chan publishRequest
 
-	acceptNewRequests atomic.Bool
-	shutdown          core.Fuse
+	isActive atomic.Bool
+	shutdown core.Fuse
 }
 
 func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, whipSrv *whip.WHIPServer) *Service {
@@ -96,7 +96,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		shutdown:        core.NewFuse(),
 	}
 
-	s.acceptNewRequests.Store(true)
+	s.isActive.Store(true)
 
 	s.manager.onFatalError(func(info *livekit.IngressInfo, err error) {
 		s.sendUpdate(context.Background(), info, err)
@@ -414,14 +414,6 @@ func (s *Service) Run() error {
 	}
 }
 
-func (s *Service) Pause() {
-	s.acceptNewRequests.Store(false)
-}
-
-func (s *Service) Resume() {
-	s.acceptNewRequests.Store(true)
-}
-
 func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {
 	var state *livekit.IngressState
 	if info == nil {
@@ -447,7 +439,19 @@ func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err
 }
 
 func (s *Service) CanAccept() bool {
-	return s.acceptNewRequests.Load() && s.monitor.CanAccept()
+	return s.monitor.CanAccept()
+}
+
+func (s *Service) IsActive() bool {
+	return s.isActive.Load()
+}
+
+func (s *Service) Pause() {
+	s.isActive.Store(false)
+}
+
+func (s *Service) Resume() {
+	s.isActive.Store(true)
 }
 
 func (s *Service) Stop(kill bool) {
@@ -477,7 +481,7 @@ func (s *Service) StartIngress(ctx context.Context, req *rpc.StartIngressRequest
 }
 
 func (s *Service) StartIngressAffinity(ctx context.Context, req *rpc.StartIngressRequest) float32 {
-	if !s.acceptNewRequests.Load() || !s.monitor.CanAcceptIngress(req.Info) {
+	if !s.isActive.Load() || !s.monitor.CanAcceptIngress(req.Info) {
 		return -1
 	}
 
