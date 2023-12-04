@@ -46,7 +46,7 @@ func main() {
 		}
 
 		return nil
-	})
+	}, nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed starting WHIP server %s", err))
 	}

@@ -155,7 +155,7 @@ func runService(c *cli.Context) error {
 		}
 	}
 	if whipsrv != nil {
-		err = whipsrv.Start(conf, svc.HandleWHIPPublishRequest, svc)
+		err = whipsrv.Start(conf, svc.HandleWHIPPublishRequest, svc.GetHealthHandlers())
 		if err != nil {
 			return err
 		}
