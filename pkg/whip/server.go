@@ -43,10 +43,7 @@ const (
 	rpcTimeout          = 5 * time.Second
 )
 
-type HealthHandler interface {
-	HealthHandler(http.ResponseWriter, *http.Request)
-	AvailabilityHandler(http.ResponseWriter, *http.Request)
-}
+type HealthHandlers map[string]http.HandlerFunc
 
 type WHIPServer struct {
 	ctx    context.Context
@@ -71,7 +68,7 @@ func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
 func (s *WHIPServer) Start(
 	conf *config.Config,
 	onPublish func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.MediaStatsReporter, func(error), error),
-	healthHandler HealthHandler,
+	healthHandlers HealthHandlers,
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
 
@@ -161,10 +158,11 @@ func (s *WHIPServer) Start(
 		setCORSHeaders(w, r, true)
 	}).Methods("OPTIONS")
 
-	// Expose the health and availability endpoints on the WHIP server as well to make
+	// Expose the health endpoints on the WHIP server as well to make
 	// deployment as a k8s ingress more straightforward
-	r.HandleFunc("/health", healthHandler.HealthHandler).Methods("GET")
-	r.HandleFunc("/availability", healthHandler.AvailabilityHandler).Methods("GET")
+	for path, handler := range healthHandlers {
+		r.HandleFunc(path, handler).Methods("GET")
+	}
 
 	hs := &http.Server{
 		Addr:         fmt.Sprintf(":%d", conf.WHIPPort),

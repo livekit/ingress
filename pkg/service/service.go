@@ -484,6 +484,13 @@ func (s *Service) StartIngressAffinity(ctx context.Context, req *rpc.StartIngres
 	return 1
 }
 
+func (s *Service) GetHealthHandlers() whip.HealthHandlers {
+	return whip.HealthHandlers{
+		"/health":       http.HandlerFunc(s.HealthHandler),
+		"/availability": http.HandlerFunc(s.AvailabilityHandler),
+	}
+}
+
 func (s *Service) AvailabilityHandler(w http.ResponseWriter, r *http.Request) {
 	if !s.CanAccept() {
 		w.WriteHeader(http.StatusServiceUnavailable)
