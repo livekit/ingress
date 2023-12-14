@@ -16,19 +16,19 @@ require (
 	github.com/livekit/server-sdk-go v1.1.2-0.20231120143656-86b7cf883b89
 	github.com/pion/dtls/v2 v2.2.8
 	github.com/pion/interceptor v0.1.25
-	github.com/pion/rtcp v1.2.12
+	github.com/pion/rtcp v1.2.13
 	github.com/pion/rtp v1.8.3
-	github.com/pion/webrtc/v3 v3.2.23
+	github.com/pion/webrtc/v3 v3.2.24
 	github.com/prometheus/client_golang v1.17.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
 	github.com/tinyzimmer/go-glib v0.0.25
 	github.com/tinyzimmer/go-gst v0.2.33
-	github.com/urfave/cli/v2 v2.25.7
+	github.com/urfave/cli/v2 v2.26.0
 	github.com/yutopp/go-flv v0.3.1
 	go.uber.org/atomic v1.11.0
 	golang.org/x/image v0.14.0
-	google.golang.org/grpc v1.59.0
+	google.golang.org/grpc v1.60.0
 	google.golang.org/protobuf v1.31.0
 	gopkg.in/yaml.v3 v3.0.1
 )
