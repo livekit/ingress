@@ -281,8 +281,10 @@ func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
 		m.requestGauge.With(prometheus.Labels{"type": "rtmp", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Add(1)
 	case livekit.IngressInput_WHIP_INPUT:
 		m.requestGauge.With(prometheus.Labels{"type": "whip", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Add(1)
-	}
+	case livekit.IngressInput_URL_INPUT:
+		m.requestGauge.With(prometheus.Labels{"type": "url", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Add(1)
 
+	}
 }
 
 func (m *Monitor) IngressEnded(info *livekit.IngressInfo) {
@@ -291,7 +293,8 @@ func (m *Monitor) IngressEnded(info *livekit.IngressInfo) {
 		m.requestGauge.With(prometheus.Labels{"type": "rtmp", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Sub(1)
 	case livekit.IngressInput_WHIP_INPUT:
 		m.requestGauge.With(prometheus.Labels{"type": "whip", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Sub(1)
-
+	case livekit.IngressInput_URL_INPUT:
+		m.requestGauge.With(prometheus.Labels{"type": "url", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Sub(1)
 	}
 }
 
