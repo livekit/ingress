@@ -278,7 +278,20 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 	p.closed.Once(func() {
 		logger.Debugw("sending EOS to pipeline")
 		p.input.Close()
-		p.sink.Close()
+
+		go func() {
+			t := time.NewTimer(5 * time.Second)
+
+			select {
+			case <-p.sink.GetEOSChan():
+				t.Stop()
+			case <-t.C:
+				// Do not set ingress in error state as we are stopping and this causes some media at the end
+				// to not be sent to the room at worse
+				logger.Errorw("pipeline frozen", psrpc.NewErrorf(psrpc.Internal, "pipeline frozen"))
+			}
+			p.sink.Close()
+		}()
 	})
 }
 

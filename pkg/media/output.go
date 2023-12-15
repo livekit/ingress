@@ -453,6 +453,10 @@ func (e *Output) Close() error {
 	return nil
 }
 
+func (e *Output) WaitForEOS() {
+	<-e.fuse.Watch()
+}
+
 func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 	// Pull the sample that triggered this callback
 	s := sink.PullSample()

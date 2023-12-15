@@ -136,6 +136,17 @@ func (s *WebRTCSink) Close() {
 	s.sdkOut.Close()
 }
 
+func (s *WebRTCSink) GetEOSChan() <-chan struct{} {
+	c := make(chan struct{})
+
+	go func() {
+		s.sdkOut.WaitForMediaPipelineEOS()
+		close(c)
+	}()
+
+	return c
+}
+
 func getResolution(caps *gst.Caps) (w int, h int, err error) {
 	if caps.GetSize() == 0 {
 		return 0, 0, errors.ErrUnsupportedDecodeFormat
