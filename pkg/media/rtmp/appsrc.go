@@ -165,5 +165,7 @@ func (w *appSrcWriter) Write(p []byte) (int, error) {
 func (w *appSrcWriter) Close() error {
 	w.eos.Store(true)
 
+	w.appSrc.EndStream()
+
 	return nil
 }

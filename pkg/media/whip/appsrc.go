@@ -109,6 +109,8 @@ func (w *whipAppSource) Close() <-chan error {
 	logger.Debugw("WHIP app source relay Close called", "resourceID", w.resourceId, "kind", w.trackKind)
 	w.fuse.Break()
 
+	w.appSrc.EndStream()
+
 	return w.result
 }
 

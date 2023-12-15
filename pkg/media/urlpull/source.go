@@ -125,5 +125,7 @@ func (u *URLSource) Start(ctx context.Context) error {
 func (u *URLSource) Close() error {
 	// TODO find a way to send a EOS event without hanging
 
+	u.src.SendEvent(gst.NewEOSEvent())
+
 	return nil
 }
