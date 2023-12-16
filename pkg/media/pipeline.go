@@ -279,6 +279,12 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 		logger.Debugw("sending EOS to pipeline")
 		p.input.Close()
 
+		err := p.pipeline.SetState(gst.StateNull)
+		p.loop.Quit()
+		if err != nil {
+			logger.Errorw("failed stopping pipeline", err)
+		}
+
 		go func() {
 			t := time.NewTimer(5 * time.Second)
 
