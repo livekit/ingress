@@ -28,14 +28,8 @@ import (
 	lksdk "github.com/livekit/server-sdk-go"
 )
 
-type SampleProvider interface {
-	lksdk.SampleProvider
-
-	WaitForEOS()
-}
-
 type VideoSampleProvider interface {
-	SampleProvider
+	lksdk.SampleProvider
 
 	ForceKeyFrame() error
 }
@@ -46,7 +40,7 @@ type LKSDKOutput struct {
 	params *params.Params
 
 	lock    sync.Mutex
-	outputs []SampleProvider
+	outputs []lksdk.SampleProvider
 }
 
 func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error) {
@@ -82,7 +76,7 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 	return s, nil
 }
 
-func (s *LKSDKOutput) AddAudioTrack(output SampleProvider, mimeType string, disableDTX bool, stereo bool) error {
+func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string, disableDTX bool, stereo bool) error {
 	opts := &lksdk.TrackPublicationOptions{
 		Name:       s.params.Audio.Name,
 		Source:     s.params.Audio.Source,
@@ -184,12 +178,6 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 	s.logger.Debugw("published video track")
 
 	return nil
-}
-
-func (s *LKSDKOutput) WaitForMediaPipelineEOS() {
-	for _, o := range s.outputs {
-		o.WaitForEOS()
-	}
 }
 
 func (s *LKSDKOutput) Close() {

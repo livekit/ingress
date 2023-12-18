@@ -134,12 +134,6 @@ func (sp *SDKMediaSink) OnUnbind() error {
 	return nil
 }
 
-func (sp *SDKMediaSink) WaitForEOS() {
-	sp.logger.Infow("wait for EOS")
-
-	// No pipeline to drain when not transcoding
-}
-
 func (sp *SDKMediaSink) ForceKeyFrame() error {
 	if sp.writePLI != nil {
 		sp.writePLI()

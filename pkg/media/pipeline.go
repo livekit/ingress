@@ -276,27 +276,34 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 	defer span.End()
 
 	p.closed.Once(func() {
-		logger.Debugw("sending EOS to pipeline")
-		p.input.Close()
+		logger.Debugw("closing pipeline")
 
-		err := p.pipeline.SetState(gst.StateNull)
-		p.loop.Quit()
-		if err != nil {
-			logger.Errorw("failed stopping pipeline", err)
-		}
+		c := make(chan struct{})
+
+		go func() {
+			err := p.pipeline.BlockSetState(gst.StateNull)
+			if err != nil {
+				logger.Errorw("failed stopping pipeline", err)
+			}
+			p.loop.Quit()
+
+			close(c)
+		}()
 
 		go func() {
 			t := time.NewTimer(5 * time.Second)
 
 			select {
-			case <-p.sink.GetEOSChan():
+			case <-c:
 				t.Stop()
 			case <-t.C:
 				// Do not set ingress in error state as we are stopping and this causes some media at the end
 				// to not be sent to the room at worse
 				logger.Errorw("pipeline frozen", psrpc.NewErrorf(psrpc.Internal, "pipeline frozen"))
+
+				p.input.Close()
+				p.sink.Close()
 			}
-			p.sink.Close()
 		}()
 	})
 }
