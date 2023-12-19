@@ -147,7 +147,7 @@ func (w *whipAppSource) readRelayedData(r io.Reader, dataC chan<- readResult) {
 }
 
 func (w *whipAppSource) copyRelayedData(r io.Reader) error {
-	dataC := make(chan readResult, 10)
+	dataC := make(chan readResult, 1)
 	go w.readRelayedData(r, dataC)
 
 	for {
