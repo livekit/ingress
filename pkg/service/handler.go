@@ -138,11 +138,7 @@ func (h *Handler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPRes
 	_, span := tracer.Start(ctx, "Handler.DeleteWHIPResource")
 	defer span.End()
 
-	logger.Errorw("DELETE", nil)
-
 	h.killAndReturnState(ctx)
-
-	logger.Errorw("DELETE 3", nil)
 
 	return &google_protobuf2.Empty{}, nil
 }

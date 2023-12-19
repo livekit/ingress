@@ -285,7 +285,6 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 			if err != nil {
 				logger.Errorw("failed stopping pipeline", err)
 			}
-			p.loop.Quit()
 
 			close(c)
 		}()
@@ -300,10 +299,9 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 				// Do not set ingress in error state as we are stopping and this causes some media at the end
 				// to not be sent to the room at worse
 				logger.Errorw("pipeline frozen", psrpc.NewErrorf(psrpc.Internal, "pipeline frozen"))
-
-				p.input.Close()
-				p.sink.Close()
 			}
+
+			p.loop.Quit()
 		}()
 	})
 }

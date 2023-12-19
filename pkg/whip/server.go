@@ -147,9 +147,6 @@ func (s *WHIPServer) Start(
 		if err == psrpc.ErrNoResponse {
 			err = errors.ErrIngressNotFound
 		}
-
-		logger.Errorw("DELETE 2", err)
-
 	}).Methods("DELETE")
 
 	// Trickle, ICE Restart unimplemented for now

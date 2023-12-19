@@ -127,36 +127,38 @@ func (w *whipAppSource) GetAppSource() *app.Source {
 
 func (w *whipAppSource) readRelayedData(r io.Reader, dataC chan<- readResult) {
 	var err error
+	var ts time.Duration
+	var data []byte
 
 	for err == nil && !w.fuse.IsBroken() {
-		data, ts, err := utils.DeserializeMediaForRelay(r)
+		data, ts, err = utils.DeserializeMediaForRelay(r)
 
-		r := readResult{
+		re := readResult{
 			data: data,
 			ts:   ts,
 			err:  err,
 		}
 
 		select {
-		case dataC <- r:
+		case dataC <- re:
 		case <-w.fuse.Watch():
 		}
 	}
 }
 
 func (w *whipAppSource) copyRelayedData(r io.Reader) error {
-	for {
-		dataC := make(chan readResult)
-		go w.readRelayedData(r, dataC)
+	dataC := make(chan readResult, 10)
+	go w.readRelayedData(r, dataC)
 
-		var r readResult
+	for {
+		var re readResult
 		select {
-		case r = <-dataC:
+		case re = <-dataC:
 		case <-w.fuse.Watch():
 			return io.EOF
 		}
 
-		switch r.err {
+		switch re.err {
 		case nil:
 			// continue
 		case io.EOF:
@@ -168,11 +170,11 @@ func (w *whipAppSource) copyRelayedData(r io.Reader) error {
 				return io.ErrUnexpectedEOF
 			}
 		default:
-			return r.err
+			return re.err
 		}
 
-		b := gst.NewBufferFromBytes(r.data)
-		b.SetPresentationTimestamp(r.ts)
+		b := gst.NewBufferFromBytes(re.data)
+		b.SetPresentationTimestamp(re.ts)
 
 		ret := w.appSrc.PushBuffer(b)
 		switch ret {
