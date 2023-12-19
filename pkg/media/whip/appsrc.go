@@ -20,6 +20,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/errors"
@@ -40,6 +41,12 @@ type whipAppSource struct {
 
 	fuse   core.Fuse
 	result chan error
+}
+
+type readResult struct {
+	data []byte
+	ts   time.Duration
+	err  error
 }
 
 func NewWHIPAppSource(ctx context.Context, resourceId string, trackKind types.StreamKind, mimeType string, relayUrl string) (*whipAppSource, error) {
@@ -116,14 +123,38 @@ func (w *whipAppSource) GetAppSource() *app.Source {
 	return w.appSrc
 }
 
+func (w *whipAppSource) readRelayedData(r io.Reader, dataC chan<- readResult) {
+	var err error
+
+	for err == nil && !w.fuse.IsBroken() {
+		data, ts, err := utils.DeserializeMediaForRelay(r)
+
+		r := readResult{
+			data: data,
+			ts:   ts,
+			err:  err,
+		}
+
+		select {
+		case dataC <- r:
+		case <-w.fuse.Watch():
+		}
+	}
+}
+
 func (w *whipAppSource) copyRelayedData(r io.Reader) error {
 	for {
-		if w.fuse.IsBroken() {
+		dataC := make(chan readResult)
+		go w.readRelayedData(r, dataC)
+
+		var r readResult
+		select {
+		case r = <-dataC:
+		case <-w.fuse.Watch():
 			return io.EOF
 		}
 
-		data, ts, err := utils.DeserializeMediaForRelay(r)
-		switch err {
+		switch r.err {
 		case nil:
 			// continue
 		case io.EOF:
@@ -135,11 +166,11 @@ func (w *whipAppSource) copyRelayedData(r io.Reader) error {
 				return io.ErrUnexpectedEOF
 			}
 		default:
-			return err
+			return r.err
 		}
 
-		b := gst.NewBufferFromBytes(data)
-		b.SetPresentationTimestamp(ts)
+		b := gst.NewBufferFromBytes(r.data)
+		b.SetPresentationTimestamp(r.ts)
 
 		ret := w.appSrc.PushBuffer(b)
 		switch ret {
