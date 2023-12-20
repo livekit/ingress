@@ -50,7 +50,8 @@ type Output struct {
 	outputSync *utils.TrackOutputSynchronizer
 
 	samples chan *sample
-	fuse    core.Fuse
+	closed  core.Fuse
+	flushed core.Fuse
 }
 
 type sample struct {
@@ -351,7 +352,8 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer) (*Output, error) {
 		sink:       sink,
 		outputSync: outputSync,
 		samples:    make(chan *sample, 15),
-		fuse:       core.NewFuse(),
+		closed:     core.NewFuse(),
+		flushed:    core.NewFuse(),
 	}
 
 	return e, nil
@@ -388,7 +390,24 @@ func (e *Output) ForceKeyFrame() error {
 func (e *Output) handleEOS(_ *app.Sink) {
 	e.logger.Infow("app sink EOS")
 
+	e.Flush()
 	e.Close()
+}
+
+func (e *Output) Flush() {
+	select {
+	case e.samples <- nil:
+	case <-e.closed.Watch():
+	case <-time.After(time.Second):
+		e.logger.Errorw("output pipeline flush timed out", errors.New("could not enqueue EOS marker"))
+	}
+
+	select {
+	case <-e.flushed.Watch():
+	case <-e.closed.Watch():
+	case <-time.After(5 * time.Second):
+		e.logger.Errorw("output pipeline flush timed out", errors.New("flush timed out"))
+	}
 }
 
 func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
@@ -407,7 +426,7 @@ func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 	select {
 	case e.samples <- &sample{s, pts}:
 		return nil
-	case <-e.fuse.Watch():
+	case <-e.closed.Watch():
 		return io.EOF
 	default:
 		// drop the sample if the output queue is full. This is needed if we are reconnecting.
@@ -421,11 +440,12 @@ func (e *Output) NextSample(ctx context.Context) (media.Sample, error) {
 	for {
 		select {
 		case s = <-e.samples:
-		case <-e.fuse.Watch():
+		case <-e.closed.Watch():
 		case <-ctx.Done():
 		}
 
 		if s == nil {
+			e.flushed.Break()
 			return media.Sample{}, io.EOF
 		}
 
@@ -447,7 +467,7 @@ func (e *Output) OnUnbind() error {
 
 func (e *Output) Close() error {
 
-	e.fuse.Break()
+	e.closed.Break()
 	e.outputSync.Close()
 
 	return nil
