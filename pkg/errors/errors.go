@@ -35,6 +35,7 @@ var (
 	ErrDuplicateTrack          = psrpc.NewErrorf(psrpc.NotAcceptable, "more than 1 track with given media kind")
 	ErrUnableToAddPad          = psrpc.NewErrorf(psrpc.Internal, "could not add pads to bin")
 	ErrMissingResourceId       = psrpc.NewErrorf(psrpc.InvalidArgument, "missing resource ID")
+	ErrInvalidRelayToken       = psrpc.NewErrorf(psrpc.PermissionDenied, "invalid token")
 	ErrIngressNotFound         = psrpc.NewErrorf(psrpc.NotFound, "ingress not found")
 	ErrServerCapacityExceeded  = psrpc.NewErrorf(psrpc.ResourceExhausted, "server capacity exceeded")
 	ErrServerShuttingDown      = psrpc.NewErrorf(psrpc.Unavailable, "server shutting down")

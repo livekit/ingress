@@ -52,8 +52,9 @@ type Params struct {
 	Token string
 
 	// relay info
-	RelayUrl string
-	TmpDir   string
+	RelayUrl   string
+	RelayToken string
+	TmpDir     string
 
 	// Input type specific private parameters
 	ExtraParams any
@@ -88,6 +89,8 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	case livekit.IngressInput_WHIP_INPUT:
 		relayUrl = getWHIPRelayUrlPrefix(conf, info.State.ResourceId)
 	}
+
+	relayToken := utils.NewGuid("")
 
 	l := logger.GetLogger().WithValues(getLoggerFields(info)...)
 
@@ -139,6 +142,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		VideoEncodingOptions: videoEncodingOptions,
 		Token:                token,
 		WsUrl:                wsUrl,
+		RelayToken:           relayToken,
 		RelayUrl:             relayUrl,
 		TmpDir:               tmpDir,
 		ExtraParams:          ep,
