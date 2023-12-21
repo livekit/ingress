@@ -227,9 +227,14 @@ func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
 	}
 }
 
-func (h *whipHandler) AssociateRelay(kind types.StreamKind, w io.WriteCloser) error {
+func (h *whipHandler) AssociateRelay(kind types.StreamKind, token string, w io.WriteCloser) error {
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
+
+	if token != h.params.RelayToken {
+		return errors.ErrInvalidRelayToken
+	}
+
 	th := h.trackRelayMediaSink[kind]
 	if th == nil {
 		return errors.ErrIngressNotFound

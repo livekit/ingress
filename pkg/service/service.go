@@ -114,7 +114,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 	return s
 }
 
-func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (p *params.Params, *stats.MediaStatsReporter, error) {
+func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error) {
 	ctx, span := tracer.Start(context.Background(), "Service.HandleRTMPPublishRequest")
 	defer span.End()
 
@@ -129,7 +129,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (p *par
 	var pRes publishResponse
 	select {
 	case <-s.shutdown.Watch():
-		return nil, errors.ErrServerShuttingDown
+		return nil, nil, errors.ErrServerShuttingDown
 	case s.publishRequests <- r:
 		pRes = <-res
 		if pRes.err != nil {

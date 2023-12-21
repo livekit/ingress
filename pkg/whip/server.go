@@ -185,12 +185,12 @@ func (s *WHIPServer) Stop() {
 	s.cancel()
 }
 
-func (s *WHIPServer) AssociateRelay(resourceId string, kind types.StreamKind, w io.WriteCloser) error {
+func (s *WHIPServer) AssociateRelay(resourceId string, kind types.StreamKind, token string, w io.WriteCloser) error {
 	s.handlersLock.Lock()
 	h, ok := s.handlers[resourceId]
 	s.handlersLock.Unlock()
 	if ok && h != nil {
-		err := h.AssociateRelay(kind, w)
+		err := h.AssociateRelay(kind, token, w)
 		if err != nil {
 			return err
 		}

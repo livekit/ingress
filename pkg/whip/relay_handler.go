@@ -58,6 +58,7 @@ func (h *WHIPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	resourceId := v[0]
 	kind := types.StreamKind(v[1])
+	token := r.URL.Query().Get("token")
 
 	log := logger.Logger(logger.GetLogger().WithValues("resourceId", resourceId, "kind", kind))
 	log.Infow("relaying whip ingress")
@@ -92,14 +93,14 @@ func (h *WHIPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		close(done)
 	}()
 
-	err = h.whipServer.AssociateRelay(resourceId, kind, pw)
-	if err != nil {
-		return
-	}
-
 	defer func() {
 		pw.Close()
 	}()
+
+	err = h.whipServer.AssociateRelay(resourceId, kind, token, pw)
+	if err != nil {
+		return
+	}
 
 	err = <-done
 }
