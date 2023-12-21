@@ -50,6 +50,7 @@ func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}()
 
 	resourceId := strings.TrimLeft(r.URL.Path, "/rtmp/")
+	token := r.URL.Query().Get("token")
 
 	log := logger.Logger(logger.GetLogger().WithValues("resourceID", resourceId))
 	log.Infow("relaying ingress")
@@ -63,7 +64,7 @@ func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		close(done)
 	}()
 
-	err = h.rtmpServer.AssociateRelay(resourceId, pw)
+	err = h.rtmpServer.AssociateRelay(resourceId, token, pw)
 	if err != nil {
 		return
 	}

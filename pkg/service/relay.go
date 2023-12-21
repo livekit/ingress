@@ -53,7 +53,7 @@ func (r *Relay) Start(conf *config.Config) error {
 
 	r.server = &http.Server{
 		Handler: mux,
-		Addr:    fmt.Sprintf(":%d", port),
+		Addr:    fmt.Sprintf("localhost:%d", port),
 	}
 
 	go func() {

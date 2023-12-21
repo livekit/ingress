@@ -16,6 +16,7 @@ package rtmp
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -74,7 +75,8 @@ func (s *RTMPRelaySource) Start(ctx context.Context) error {
 
 	s.result = make(chan error, 1)
 
-	resp, err := http.Get(s.params.RelayUrl)
+	relayUrl := fmt.Sprintf("%s?token=%s", s.params.RelayUrl, s.params.RelayToken)
+	resp, err := http.Get(relayUrl)
 	switch {
 	case err != nil:
 		return err

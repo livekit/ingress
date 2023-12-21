@@ -52,8 +52,9 @@ type Params struct {
 	Token string
 
 	// relay info
-	RelayUrl string
-	TmpDir   string
+	RelayUrl   string
+	RelayToken string
+	TmpDir     string
 
 	// Input type specific private parameters
 	ExtraParams any
@@ -73,7 +74,7 @@ func InitLogger(conf *config.Config, info *livekit.IngressInfo) error {
 
 	return nil
 }
-func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token string, ep any) (*Params, error) {
+func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, relayToken string, ep any) (*Params, error) {
 	var err error
 
 	// The state should have been created by the service, before launching the hander, but be defensive here.
@@ -87,6 +88,10 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		relayUrl = getRTMPRelayUrl(conf, info.State.ResourceId)
 	case livekit.IngressInput_WHIP_INPUT:
 		relayUrl = getWHIPRelayUrlPrefix(conf, info.State.ResourceId)
+	}
+
+	if relayToken == "" {
+		relayToken = utils.NewGuid("")
 	}
 
 	l := logger.GetLogger().WithValues(getLoggerFields(info)...)
@@ -139,6 +144,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		VideoEncodingOptions: videoEncodingOptions,
 		Token:                token,
 		WsUrl:                wsUrl,
+		RelayToken:           relayToken,
 		RelayUrl:             relayUrl,
 		TmpDir:               tmpDir,
 		ExtraParams:          ep,

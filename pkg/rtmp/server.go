@@ -30,6 +30,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/ingress/pkg/utils"
@@ -46,7 +47,7 @@ func NewRTMPServer() *RTMPServer {
 	return &RTMPServer{}
 }
 
-func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resourceId string) (*stats.MediaStatsReporter, error)) error {
+func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error)) error {
 	port := conf.RTMPPort
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", port))
@@ -70,19 +71,20 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 			lf := l.WithFields(conf.GetLoggerFields())
 
 			h := NewRTMPHandler()
-			h.OnPublishCallback(func(streamKey, resourceId string) (*stats.MediaStatsReporter, error) {
+			h.OnPublishCallback(func(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error) {
+				var params *params.Params
 				var stats *stats.MediaStatsReporter
 				var err error
 				if onPublish != nil {
-					stats, err = onPublish(streamKey, resourceId)
+					params, stats, err = onPublish(streamKey, resourceId)
 					if err != nil {
-						return nil, err
+						return nil, nil, err
 					}
 				}
 
 				s.handlers.Store(resourceId, h)
 
-				return stats, nil
+				return params, stats, nil
 			})
 			h.OnCloseCallback(func(resourceId string) {
 				if h.stats != nil {
@@ -114,9 +116,13 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 	return nil
 }
 
-func (s *RTMPServer) AssociateRelay(resourceId string, w io.WriteCloser) error {
+func (s *RTMPServer) AssociateRelay(resourceId string, token string, w io.WriteCloser) error {
 	h, ok := s.handlers.Load(resourceId)
 	if ok && h != nil {
+		if h.(*RTMPHandler).params.RelayToken != token {
+			return errors.ErrInvalidRelayToken
+		}
+
 		err := h.(*RTMPHandler).SetWriter(w)
 		if err != nil {
 			return err
@@ -151,6 +157,7 @@ type RTMPHandler struct {
 
 	flvEnc        *flv.Encoder
 	stats         *stats.MediaStatsReporter
+	params        *params.Params
 	resourceId    string
 	videoInit     *flvtag.VideoData
 	audioInit     *flvtag.AudioData
@@ -159,7 +166,7 @@ type RTMPHandler struct {
 
 	log logger.Logger
 
-	onPublish func(streamKey, resourceId string) (*stats.MediaStatsReporter, error)
+	onPublish func(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error)
 	onClose   func(resourceId string)
 }
 
@@ -178,7 +185,7 @@ func NewRTMPHandler() *RTMPHandler {
 	return h
 }
 
-func (h *RTMPHandler) OnPublishCallback(cb func(streamKey, resourceId string) (*stats.MediaStatsReporter, error)) {
+func (h *RTMPHandler) OnPublishCallback(cb func(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error)) {
 	h.onPublish = cb
 }
 
@@ -196,11 +203,12 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 	h.resourceId = protoutils.NewGuid(protoutils.RTMPResourcePrefix)
 	h.log = logger.GetLogger().WithValues("streamKey", streamKey, "resourceID", h.resourceId)
 	if h.onPublish != nil {
-		stats, err := h.onPublish(streamKey, h.resourceId)
+		params, stats, err := h.onPublish(streamKey, h.resourceId)
 		if err != nil {
 			return err
 		}
 		h.stats = stats
+		h.params = params
 	}
 
 	h.log.Infow("Received a new published stream")

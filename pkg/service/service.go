@@ -114,7 +114,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 	return s
 }
 
-func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*stats.MediaStatsReporter, error) {
+func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error) {
 	ctx, span := tracer.Start(context.Background(), "Service.HandleRTMPPublishRequest")
 	defer span.End()
 
@@ -129,26 +129,26 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*stats
 	var pRes publishResponse
 	select {
 	case <-s.shutdown.Watch():
-		return nil, errors.ErrServerShuttingDown
+		return nil, nil, errors.ErrServerShuttingDown
 	case s.publishRequests <- r:
 		pRes = <-res
 		if pRes.err != nil {
-			return nil, pRes.err
+			return nil, nil, pRes.err
 		}
 	}
 
 	err := s.manager.launchHandler(ctx, pRes.params)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	api, err := s.sm.GetIngressSessionAPI(resourceId)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	stats := stats.NewMediaStats(api)
 
-	return stats, nil
+	return pRes.params, stats, nil
 }
 
 func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error) *stats.MediaStatsReporter, ended func(err error), err error) {
@@ -295,7 +295,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inp
 	}
 
 	// This validates the ingress info
-	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, nil)
+	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, "", nil)
 	if err != nil {
 		return nil, err
 	}

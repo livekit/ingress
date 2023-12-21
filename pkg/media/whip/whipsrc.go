@@ -107,5 +107,5 @@ func (s *WHIPSource) ValidateCaps(*gst.Caps) error {
 }
 
 func (s *WHIPSource) getRelayUrl(kind types.StreamKind) string {
-	return fmt.Sprintf("%s/%s", s.params.RelayUrl, kind)
+	return fmt.Sprintf("%s/%s?token=%s", s.params.RelayUrl, kind, s.params.RelayToken)
 }
