@@ -74,7 +74,7 @@ func InitLogger(conf *config.Config, info *livekit.IngressInfo) error {
 
 	return nil
 }
-func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token string, ep any) (*Params, error) {
+func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, relayToken string, ep any) (*Params, error) {
 	var err error
 
 	// The state should have been created by the service, before launching the hander, but be defensive here.
@@ -90,7 +90,9 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		relayUrl = getWHIPRelayUrlPrefix(conf, info.State.ResourceId)
 	}
 
-	relayToken := utils.NewGuid("")
+	if relayToken == "" {
+		relayToken = utils.NewGuid("")
+	}
 
 	l := logger.GetLogger().WithValues(getLoggerFields(info)...)
 

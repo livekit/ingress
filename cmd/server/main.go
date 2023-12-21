@@ -64,6 +64,9 @@ func main() {
 						Name: "token",
 					},
 					&cli.StringFlag{
+						Name: "relay-token",
+					},
+					&cli.StringFlag{
 						Name: "ws-url",
 					},
 					&cli.StringFlag{
@@ -248,7 +251,7 @@ func runHandler(c *cli.Context) error {
 
 	var handler interface {
 		Kill()
-		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token string, extraParams any)
+		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, extraParams any)
 	}
 
 	bus := psrpc.NewRedisMessageBus(rc)
@@ -278,7 +281,7 @@ func runHandler(c *cli.Context) error {
 		wsUrl = c.String("ws-url")
 	}
 
-	handler.HandleIngress(ctx, info, wsUrl, token, ep)
+	handler.HandleIngress(ctx, info, wsUrl, token, c.String("relay-token"), ep)
 	return nil
 }
 

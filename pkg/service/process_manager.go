@@ -99,6 +99,7 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) er
 		"run-handler",
 		"--config-body", string(confString),
 		"--info", string(infoString),
+		"--relay-token", p.RelayToken,
 	}
 
 	if p.WsUrl != "" {
