@@ -20,7 +20,7 @@ import (
 	"sync"
 
 	"github.com/frostbyte73/core"
-	"github.com/tinyzimmer/go-gst/gst"
+	"github.com/go-gst/go-gst/gst"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media/rtmp"

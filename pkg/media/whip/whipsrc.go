@@ -19,10 +19,10 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/go-gst/go-gst/gst"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/utils"
-	"github.com/tinyzimmer/go-gst/gst"
 )
 
 // TODO STUN & TURN

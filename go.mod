@@ -1,12 +1,14 @@
 module github.com/livekit/ingress
 
-go 1.20
+go 1.21
 
-replace github.com/tinyzimmer/go-glib => github.com/livekit/go-glib v0.0.0-20230811224737-7bfaa4e57420
+toolchain go1.21.4
 
 require (
 	github.com/Eyevinn/mp4ff v0.40.2
 	github.com/frostbyte73/core v0.0.9
+	github.com/go-gst/go-glib v0.0.0-20231207075824-6d6aaf082c65
+	github.com/go-gst/go-gst v0.0.0-20231207080415-7f6bb5a2d4c5
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
@@ -22,8 +24,6 @@ require (
 	github.com/prometheus/client_golang v1.17.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
-	github.com/tinyzimmer/go-glib v0.0.25
-	github.com/tinyzimmer/go-gst v0.2.33
 	github.com/urfave/cli/v2 v2.26.0
 	github.com/yutopp/go-flv v0.3.1
 	go.uber.org/atomic v1.11.0

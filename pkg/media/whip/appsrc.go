@@ -23,14 +23,14 @@ import (
 	"time"
 
 	"github.com/frostbyte73/core"
+	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/gst/app"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 	"github.com/pion/webrtc/v3"
-	"github.com/tinyzimmer/go-gst/gst"
-	"github.com/tinyzimmer/go-gst/gst/app"
 )
 
 type whipAppSource struct {
@@ -174,7 +174,7 @@ func (w *whipAppSource) copyRelayedData(r io.Reader) error {
 		}
 
 		b := gst.NewBufferFromBytes(re.data)
-		b.SetPresentationTimestamp(re.ts)
+		b.SetPresentationTimestamp(gst.ClockTime(re.ts))
 
 		ret := w.appSrc.PushBuffer(b)
 		switch ret {

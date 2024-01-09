@@ -20,8 +20,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/tinyzimmer/go-gst/gst"
-	"github.com/tinyzimmer/go-gst/gst/app"
+	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/gst/app"
 	"go.uber.org/atomic"
 
 	"github.com/livekit/ingress/pkg/errors"
