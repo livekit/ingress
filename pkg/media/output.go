@@ -21,10 +21,10 @@ import (
 	"time"
 
 	"github.com/frostbyte73/core"
+	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/gst/app"
 	"github.com/pion/webrtc/v3/pkg/media"
 	"github.com/pion/webrtc/v3/pkg/media/h264reader"
-	"github.com/tinyzimmer/go-gst/gst"
-	"github.com/tinyzimmer/go-gst/gst/app"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/utils"
@@ -536,14 +536,14 @@ func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 		}
 		err = e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
-			Duration: duration,
+			Duration: time.Duration(duration),
 		}, ts)
 
 	case livekit.VideoCodec_VP8:
 		// untested
 		err = e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
-			Duration: duration,
+			Duration: time.Duration(duration),
 		}, ts)
 	}
 
@@ -579,7 +579,7 @@ func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 	case livekit.AudioCodec_OPUS:
 		err = e.writeSample(&media.Sample{
 			Data:     buffer.Bytes(),
-			Duration: duration,
+			Duration: time.Duration(duration),
 		}, ts)
 	}
 
