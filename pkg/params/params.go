@@ -270,6 +270,15 @@ func (p *Params) SetStatus(status livekit.IngressState_Status, errString string)
 
 	p.State.Status = status
 	p.State.Error = errString
+
+	switch status {
+	case livekit.IngressState_ENDPOINT_COMPLETE,
+		livekit.IngressState_ENDPOINT_INACTIVE,
+		livekit.IngressState_ENDPOINT_ERROR:
+		if p.State.EndedAt == 0 {
+			p.State.EndedAt = time.Now().UnixNano()
+		}
+	}
 }
 
 func (p *Params) SetRoomId(roomId string) {
