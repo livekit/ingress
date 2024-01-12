@@ -1,5 +1,5 @@
-github.com/Eyevinn/mp4ff v0.40.2 h1:TYEZ4a7Dla2eeegWjTCfrYPySu59YhAIV09PK8LTuLM=
-github.com/Eyevinn/mp4ff v0.40.2/go.mod h1:w/6GSa5ghZ1VavzJK6McQ2/flx8mKtcrKDr11SsEweA=
+github.com/Eyevinn/mp4ff v0.41.0 h1:EdXMeorCcuzMrnHShC7xX5dyNVYAkgp2lwK/ed64JKk=
+github.com/Eyevinn/mp4ff v0.41.0/go.mod h1:w/6GSa5ghZ1VavzJK6McQ2/flx8mKtcrKDr11SsEweA=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/bep/debounce v1.2.1 h1:v67fRdBA9UQu2NhLFXrSg0Brw7CexQekrBwDMM8bzeY=
