@@ -89,7 +89,7 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer string) (string, error) {
 	var err error
 
-	h.logger = logger.GetLogger().WithValues("ingressID", p.IngressId, "resourceID", p.State.ResourceId)
+	h.logger = p.GetLogger()
 	h.params = p
 
 	h.updateSettings()
