@@ -67,7 +67,7 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 	}
 
 	s.room = room
-	s.logger = logger.GetLogger().WithValues("ingressID", p.IngressId, "resourceID", p.State.ResourceId, "roomID", room.SID())
+	s.logger = p.GetLogger().WithValues("roomID", room.SID())
 
 	s.logger.Infow("connected to room")
 

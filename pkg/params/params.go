@@ -154,7 +154,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 }
 
 func getLoggerFields(info *livekit.IngressInfo) []interface{} {
-	return []interface{}{"ingressID", info.IngressId, "resourceID", info.State.ResourceId}
+	return []interface{}{"ingressID", info.IngressId, "resourceID", info.State.ResourceId, "roomName", info.RoomName, "participantIdentity", info.ParticipantIdentity}
 }
 
 func getRTMPRelayUrl(conf *config.Config, resourceId string) string {
@@ -370,6 +370,10 @@ func (p *Params) SendStateUpdate(ctx context.Context) {
 			p.logger.Errorw("failed to send update", err)
 		}
 	}
+}
+
+func (p *Params) GetLogger() logger.Logger {
+	return p.logger
 }
 
 func CopyRedactedIngressInfo(info *livekit.IngressInfo) *livekit.IngressInfo {
