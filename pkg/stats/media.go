@@ -7,15 +7,20 @@ import (
 
 	"github.com/frostbyte73/core"
 
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
 )
 
 type MediaStatsReporter struct {
-	sessionAPI types.SessionAPI
+	statsUpdater types.MediaStatsUpdater
 
 	lock  sync.Mutex
 	done  core.Fuse
 	stats map[types.StreamKind]*trackStats
+}
+
+type LocalStatsUpdater struct {
+	Params *params.Params
 }
 
 type trackStats struct {
@@ -26,11 +31,11 @@ type trackStats struct {
 	lastQueryTime time.Time
 }
 
-func NewMediaStats(sessionAPI types.SessionAPI) *MediaStatsReporter {
+func NewMediaStats(statsUpdater types.MediaStatsUpdater) *MediaStatsReporter {
 	m := &MediaStatsReporter{
-		sessionAPI: sessionAPI,
-		stats:      make(map[types.StreamKind]*trackStats),
-		done:       core.NewFuse(),
+		statsUpdater: statsUpdater,
+		stats:        make(map[types.StreamKind]*trackStats),
+		done:         core.NewFuse(),
 	}
 
 	go func() {
@@ -97,7 +102,7 @@ func (m *MediaStatsReporter) updateIngressState(ctx context.Context) {
 		ms.VideoCurrentBitrate = &videoCurrentBps
 	}
 
-	m.sessionAPI.UpdateMediaStats(ctx, ms)
+	m.statsUpdater.UpdateMediaStats(ctx, ms)
 }
 
 func (s *trackStats) mediaReceived(size int64) {
@@ -122,4 +127,16 @@ func (s *trackStats) getStats() (uint32, uint32) {
 	s.currentBytes = 0
 
 	return averageBps, currentBps
+}
+
+func (a *LocalStatsUpdater) UpdateMediaStats(ctx context.Context, s *types.MediaStats) error {
+	if s.AudioAverageBitrate != nil && s.AudioCurrentBitrate != nil {
+		a.Params.SetInputAudioBitrate(*s.AudioAverageBitrate, *s.AudioCurrentBitrate)
+	}
+
+	if s.VideoAverageBitrate != nil && s.VideoCurrentBitrate != nil {
+		a.Params.SetInputVideoBitrate(*s.VideoAverageBitrate, *s.VideoCurrentBitrate)
+	}
+
+	return nil
 }

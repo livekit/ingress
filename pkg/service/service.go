@@ -206,7 +206,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			pRes.params.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
 			pRes.params.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(pRes.params.IngressInfo, &localSessionAPI{params: pRes.params})
+			s.sm.IngressStarted(pRes.params.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: pRes.params}})
 		} else {
 			pRes.params.SetExtraParams(&params.WhipExtraParams{
 				MimeTypes: mimeTypes,
@@ -509,7 +509,7 @@ func (s *Service) HealthHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 type localSessionAPI struct {
-	params *params.Params
+	stats.LocalStatsUpdater
 }
 
 func (a *localSessionAPI) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {
@@ -519,18 +519,6 @@ func (a *localSessionAPI) GetProfileData(ctx context.Context, profileName string
 func (a *localSessionAPI) GetPipelineDot(ctx context.Context) (string, error) {
 	// No dot file if transcoding is disabled
 	return "", errors.ErrIngressNotFound
-}
-
-func (a *localSessionAPI) UpdateMediaStats(ctx context.Context, s *types.MediaStats) error {
-	if s.AudioAverageBitrate != nil && s.AudioCurrentBitrate != nil {
-		a.params.SetInputAudioBitrate(*s.AudioAverageBitrate, *s.AudioCurrentBitrate)
-	}
-
-	if s.VideoAverageBitrate != nil && s.VideoCurrentBitrate != nil {
-		a.params.SetInputVideoBitrate(*s.VideoAverageBitrate, *s.VideoCurrentBitrate)
-	}
-
-	return nil
 }
 
 func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) error {
