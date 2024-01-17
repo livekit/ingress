@@ -7,6 +7,7 @@ import (
 
 	"github.com/frostbyte73/core"
 
+	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
 )
@@ -83,27 +84,31 @@ func (m *MediaStatsReporter) updateIngressState(ctx context.Context) {
 	}
 	m.lock.Unlock()
 
-	ms := &types.MediaStats{}
+	ms := &ipc.MediaStats{}
 
 	if audioOk {
-		ms.AudioAverageBitrate = &audioAverageBps
-		ms.AudioCurrentBitrate = &audioCurrentBps
+		ms.AudioInputStats = &ipc.TrackStats{
+			AverageBitrate: audioAverageBps,
+			CurrentBitrate: audioCurrentBps,
+		}
 	}
 	if videoOk {
-		ms.VideoAverageBitrate = &videoAverageBps
-		ms.VideoCurrentBitrate = &videoCurrentBps
+		ms.VideoInputStats = &ipc.TrackStats{
+			AverageBitrate: videoAverageBps,
+			CurrentBitrate: videoCurrentBps,
+		}
 	}
 
 	m.statsUpdater.UpdateMediaStats(ctx, ms)
 }
 
-func (a *LocalStatsUpdater) UpdateMediaStats(ctx context.Context, s *types.MediaStats) error {
-	if s.AudioAverageBitrate != nil && s.AudioCurrentBitrate != nil {
-		a.Params.SetInputAudioBitrate(*s.AudioAverageBitrate, *s.AudioCurrentBitrate)
+func (a *LocalStatsUpdater) UpdateMediaStats(ctx context.Context, s *ipc.MediaStats) error {
+	if s.AudioInputStats != nil {
+		a.Params.SetInputAudioBitrate(s.AudioInputStats.AverageBitrate, s.AudioInputStats.CurrentBitrate)
 	}
 
-	if s.VideoAverageBitrate != nil && s.VideoCurrentBitrate != nil {
-		a.Params.SetInputVideoBitrate(*s.VideoAverageBitrate, *s.VideoCurrentBitrate)
+	if s.VideoInputStats != nil {
+		a.Params.SetInputVideoBitrate(s.VideoInputStats.AverageBitrate, s.VideoInputStats.CurrentBitrate)
 	}
 
 	return nil

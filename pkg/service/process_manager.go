@@ -32,7 +32,6 @@ import (
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
-	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
@@ -217,12 +216,9 @@ func (p *process) GetPipelineDot(ctx context.Context) (string, error) {
 	return resp.DotFile, nil
 }
 
-func (p *process) UpdateMediaStats(ctx context.Context, s *types.MediaStats) error {
+func (p *process) UpdateMediaStats(ctx context.Context, s *ipc.MediaStats) error {
 	req := &ipc.UpdateMediaStatsRequest{
-		AudioAverateBitrate: s.AudioAverageBitrate,
-		AudioCurrentBitrate: s.AudioCurrentBitrate,
-		VideoAverateBitrate: s.VideoAverageBitrate,
-		VideoCurrentBitrate: s.VideoCurrentBitrate,
+		Stats: s,
 	}
 
 	_, err := p.grpcClient.UpdateMediaStats(ctx, req)

@@ -1,9 +1,11 @@
 package types
 
-import "context"
+import (
+	"context"
+
+	"github.com/livekit/ingress/pkg/ipc"
+)
 
 type MediaStatsUpdater interface {
-	UpdateMediaStats(ctx context.Context, stats *MediaStats) error
+	UpdateMediaStats(ctx context.Context, stats *ipc.MediaStats) error
 }
-
-type MediaStats map[string]interface{}

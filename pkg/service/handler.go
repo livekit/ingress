@@ -194,11 +194,15 @@ func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStats
 		return &google_protobuf2.Empty{}, nil
 	}
 
-	if in.AudioAverateBitrate != nil && in.AudioCurrentBitrate != nil {
-		h.pipeline.SetInputAudioBitrate(*in.AudioAverateBitrate, *in.AudioCurrentBitrate)
+	if in.Stats == nil {
+		return &google_protobuf2.Empty{}, nil
 	}
-	if in.VideoAverateBitrate != nil && in.VideoCurrentBitrate != nil {
-		h.pipeline.SetInputVideoBitrate(*in.VideoAverateBitrate, *in.VideoCurrentBitrate)
+
+	if in.Stats.AudioInputStats != nil {
+		h.pipeline.SetInputAudioBitrate(in.Stats.AudioInputStats.AverageBitrate, in.Stats.AudioInputStats.CurrentBitrate)
+	}
+	if in.Stats.VideoInputStats != nil {
+		h.pipeline.SetInputVideoBitrate(in.Stats.VideoInputStats.AverageBitrate, in.Stats.VideoInputStats.CurrentBitrate)
 	}
 
 	return &google_protobuf2.Empty{}, nil
