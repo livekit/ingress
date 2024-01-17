@@ -27,6 +27,7 @@ import (
 	"github.com/livekit/ingress/pkg/media/urlpull"
 	"github.com/livekit/ingress/pkg/media/whip"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
@@ -42,6 +43,8 @@ type Source interface {
 
 type Input struct {
 	lock sync.Mutex
+
+	statsReporter *stats.MediaStatsReporter
 
 	bin    *gst.Bin
 	source Source
@@ -67,6 +70,16 @@ func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 		bin:       bin,
 		source:    src,
 		closeFuse: core.NewFuse(),
+	}
+
+	if p.InputType == livekit.IngressInput_URL_INPUT {
+		// Gather input stats from the pipeline
+
+		statsUpdater := &stats.LocalStatsUpdater{
+			Params: p,
+		}
+
+		i.statsReporter = stats.NewMediaStats(statsUpdater)
 	}
 
 	srcs := src.GetSources()
@@ -178,6 +191,11 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 			return
 		}
 		pad = ghostPad.Pad
+
+		if i.statsReporter != nil {
+			// Gather bitrate stats from pipeline itself
+			i.addBitrateProbe(kind)
+		}
 	} else {
 		var sink *gst.Element
 
@@ -196,4 +214,46 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 	if i.onOutputReady != nil {
 		i.onOutputReady(pad, kind)
 	}
+}
+
+func (i *Input) addBitrateProbe(kind types.StreamKind) {
+	// Do a best effort to add probe to retrieve bitrate.
+	// The multiqueue is generally created in the pipeline before the decoders
+	mq, err := i.bin.GetElementByName("multiqueue0")
+
+	if err != nil {
+		// No multiqueue in that pipeline
+		logger.Debugw("could not retrieve multiqueue element from pipeline", "error", err)
+		return
+	}
+
+	pads, err := mq.GetSinkPads()
+	if err != nil {
+		logger.Errorw("failed retrieving multiqueue sink pads", err)
+		return
+	}
+
+	for _, pad := range pads {
+		caps := pad.GetCurrentCaps()
+		gstStruct := caps.GetStructureAt(0)
+		padKind := getKindFromGstMimeType(gstStruct)
+
+		if padKind == kind {
+			pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+				buffer := info.GetBuffer()
+				if buffer == nil {
+					return gst.PadProbeOK
+				}
+
+				size := buffer.GetSize()
+				i.statsReporter.MediaReceived(kind, size)
+
+				return gst.PadProbeOK
+			})
+
+			return
+		}
+	}
+
+	logger.Debugw("no pad on multiqueue with required kind found", "kind", kind)
 }
