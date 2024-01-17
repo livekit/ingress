@@ -16,7 +16,6 @@ package media
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -234,10 +233,7 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 	case gst.MessageStreamCollection:
 		p.handleStreamCollectionMessage(msg)
 
-	case gst.MessageStateChanged:
-		fmt.Println("STATE_CHANGED", msg)
-
-	case gst.MessageTag:
+	case gst.MessageTag, gst.MessageStateChanged:
 		// ignore
 
 	default:
