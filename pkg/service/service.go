@@ -142,11 +142,10 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 		return nil, nil, err
 	}
 
-	api, err := s.sm.GetIngressSessionAPI(resourceId)
+	stats, err := s.sm.GetIngressMediaStats(resourceId)
 	if err != nil {
 		return nil, nil, err
 	}
-	stats := stats.NewMediaStats(api)
 
 	return pRes.params, stats, nil
 }
@@ -218,11 +217,11 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			}
 		}
 
-		api, err := s.sm.GetIngressSessionAPI(resourceId)
+		stats, err := s.sm.GetIngressMediaStats(resourceId)
 		if err != nil {
 			return nil
 		}
-		return stats.NewMediaStats(api)
+		return stats
 	}
 
 	if pRes.params.BypassTranscoding {

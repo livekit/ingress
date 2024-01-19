@@ -180,13 +180,21 @@ loop:
 	return mimeTypes, nil
 }
 
-func (h *whipHandler) SetMediaStatsHandler(stats *stats.MediaStatsReporter) {
+func (h *whipHandler) SetMediaStatsHandler(st *stats.MediaStatsReporter) {
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
-	h.stats = stats
+	h.stats = st
 
-	for _, th := range h.trackHandlers {
-		th.SetMediaStatsReporter(stats)
+	for k, th := range h.trackHandlers {
+		var t string
+		if k == types.Audio {
+			t = stats.InputAudio
+		} else {
+			t = stats.InputVideo
+		}
+
+		g := st.RegisterTrackStats(t)
+		th.SetMediaTrackStatsGatherer(g)
 	}
 }
 
@@ -202,9 +210,6 @@ func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
 		h.pc.Close()
 		if h.sdkOutput != nil {
 			h.sdkOutput.Close()
-		}
-		if h.stats != nil {
-			h.stats.Close()
 		}
 	}()
 

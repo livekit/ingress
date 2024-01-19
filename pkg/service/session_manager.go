@@ -27,6 +27,7 @@ import (
 type sessionRecord struct {
 	info       *livekit.IngressInfo
 	sessionAPI types.SessionAPI
+	mediaStats *stats.MediaStatsReporter
 }
 
 type SessionManager struct {
@@ -52,6 +53,7 @@ func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI t
 	sm.sessions[info.State.ResourceId] = &sessionRecord{
 		info:       info,
 		sessionAPI: sessionAPI,
+		mediaStats: stats.NewMediaStats(sessionAPI),
 	}
 
 	sm.monitor.IngressStarted(info)
@@ -63,7 +65,11 @@ func (sm *SessionManager) IngressEnded(info *livekit.IngressInfo) {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 
-	delete(sm.sessions, info.State.ResourceId)
+	p := sm.sessions[info.State.ResourceId]
+	if p != nil {
+		delete(sm.sessions, info.State.ResourceId)
+		p.mediaStats.Close()
+	}
 
 	sm.monitor.IngressEnded(info)
 }
@@ -78,6 +84,18 @@ func (sm *SessionManager) GetIngressSessionAPI(resourceId string) (types.Session
 	}
 
 	return record.sessionAPI, nil
+}
+
+func (sm *SessionManager) GetIngressMediaStats(resourceId string) (*stats.MediaStatsReporter, error) {
+	sm.lock.Lock()
+	defer sm.lock.Unlock()
+
+	record, ok := sm.sessions[resourceId]
+	if !ok {
+		return nil, errors.ErrIngressNotFound
+	}
+
+	return record.mediaStats, nil
 }
 
 func (sm *SessionManager) IsIdle() bool {
