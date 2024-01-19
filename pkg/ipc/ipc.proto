@@ -46,8 +46,7 @@ message UpdateMediaStatsRequest {
 }
 
 message MediaStats {
-  optional TrackStats audio_input_stats = 1;
-  optional TrackStats video_input_stats = 2;
+  map<string, TrackStats> track_stats = 1;
 }
 
 message TrackStats {
