@@ -18,15 +18,25 @@ const (
 )
 
 type MediaStatsReporter struct {
-	statsUpdater types.MediaStatsUpdater
+	lock sync.Mutex
 
-	lock  sync.Mutex
-	done  core.Fuse
-	stats []*MediaTrackStatGatherer
+	statsUpdater  types.MediaStatsUpdater
+	statGatherers []MediaStatGatherer
+
+	done core.Fuse
+}
+
+type MediaStatGatherer interface {
+	GatherStats() *ipc.MediaStats
 }
 
 type LocalStatsUpdater struct {
 	Params *params.Params
+}
+
+type LocalMediaStatsGatherer struct {
+	lock  sync.Mutex
+	stats []*MediaTrackStatGatherer
 }
 
 func NewMediaStats(statsUpdater types.MediaStatsUpdater) *MediaStatsReporter {
@@ -46,15 +56,31 @@ func (m *MediaStatsReporter) Close() {
 	m.done.Break()
 }
 
-func (m *MediaStatsReporter) RegisterTrackStats(path string) *MediaTrackStatGatherer {
-	g := NewMediaTrackStatGatherer(path)
-
+func (m *MediaStatsReporter) RegisterGatherer(g MediaStatGatherer) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	m.stats = append(m.stats, g)
+	m.statGatherers = append(m.statGatherers, g)
+}
 
-	return g
+func (m *MediaStatsReporter) UpdateStats(ctx context.Context) {
+	res := &ipc.MediaStats{
+		TrackStats: make(map[string]*ipc.TrackStats),
+	}
+
+	m.lock.Lock()
+	for _, l := range m.statGatherers {
+		ms := l.GatherStats()
+
+		// Merge the result. Keys are assumed to be exclusive
+		for k, v := range ms.TrackStats {
+			res.TrackStats[k] = v
+		}
+
+	}
+	m.lock.Unlock()
+
+	m.statsUpdater.UpdateMediaStats(ctx, res)
 }
 
 func (m *MediaStatsReporter) runMediaStatsCollector() {
@@ -65,26 +91,41 @@ func (m *MediaStatsReporter) runMediaStatsCollector() {
 		select {
 		case <-ticker.C:
 			// TODO extend core.Fuse to provide a context?
-			m.updateStats(context.Background())
+			m.UpdateStats(context.Background())
 		case <-m.done.Watch():
 			return
 		}
 	}
 }
 
-func (m *MediaStatsReporter) updateStats(ctx context.Context) {
+func NewLocalMediaStatsGatherer() *LocalMediaStatsGatherer {
+	return &LocalMediaStatsGatherer{}
+}
+
+func (l *LocalMediaStatsGatherer) RegisterTrackStats(path string) *MediaTrackStatGatherer {
+	g := NewMediaTrackStatGatherer(path)
+
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	l.stats = append(l.stats, g)
+
+	return g
+}
+
+func (l *LocalMediaStatsGatherer) GatherStats(ctx context.Context) *ipc.MediaStats {
 	ms := &ipc.MediaStats{
 		TrackStats: make(map[string]*ipc.TrackStats),
 	}
 
-	m.lock.Lock()
-	for _, ts := range m.stats {
+	l.lock.Lock()
+	for _, ts := range l.stats {
 		s := ts.UpdateStats()
 		ms.TrackStats[ts.Path()] = s
 	}
-	m.lock.Unlock()
+	l.lock.Unlock()
 
-	m.statsUpdater.UpdateMediaStats(ctx, ms)
+	return ms
 }
 
 func (a *LocalStatsUpdater) UpdateMediaStats(ctx context.Context, s *ipc.MediaStats) error {

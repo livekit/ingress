@@ -47,7 +47,7 @@ func NewRTMPServer() *RTMPServer {
 	return &RTMPServer{}
 }
 
-func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error)) error {
+func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error)) error {
 	port := conf.RTMPPort
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", port))
@@ -71,9 +71,9 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 			lf := l.WithFields(conf.GetLoggerFields())
 
 			h := NewRTMPHandler()
-			h.OnPublishCallback(func(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error) {
+			h.OnPublishCallback(func(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error) {
 				var params *params.Params
-				var stats *stats.MediaStatsReporter
+				var stats *stats.LocalMediaStatsGatherer
 				var err error
 				if onPublish != nil {
 					params, stats, err = onPublish(streamKey, resourceId)
@@ -162,7 +162,7 @@ type RTMPHandler struct {
 
 	log logger.Logger
 
-	onPublish func(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error)
+	onPublish func(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error)
 	onClose   func(resourceId string)
 }
 
@@ -182,7 +182,7 @@ func NewRTMPHandler() *RTMPHandler {
 	return h
 }
 
-func (h *RTMPHandler) OnPublishCallback(cb func(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error)) {
+func (h *RTMPHandler) OnPublishCallback(cb func(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error)) {
 	h.onPublish = cb
 }
 

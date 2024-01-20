@@ -58,7 +58,7 @@ type whipHandler struct {
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
 	outputSync         *utils.OutputSynchronizer
-	stats              *stats.MediaStatsReporter
+	stats              *stats.LocalMediaStatsGatherer
 	sdkOutput          *lksdk_output.LKSDKOutput // only for passthrough
 	expectedTrackCount int
 	result             chan error
@@ -180,7 +180,7 @@ loop:
 	return mimeTypes, nil
 }
 
-func (h *whipHandler) SetMediaStatsHandler(st *stats.MediaStatsReporter) {
+func (h *whipHandler) SetMediaStatsHandler(st *stats.LocalMediaStatsGatherer) {
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
 	h.stats = st

@@ -25,9 +25,10 @@ import (
 )
 
 type sessionRecord struct {
-	info       *livekit.IngressInfo
-	sessionAPI types.SessionAPI
-	mediaStats *stats.MediaStatsReporter
+	info               *livekit.IngressInfo
+	sessionAPI         types.SessionAPI
+	mediaStats         *stats.MediaStatsReporter
+	localStatsGatherer *stats.LocalMediaStatsGatherer
 }
 
 type SessionManager struct {
@@ -50,11 +51,15 @@ func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI t
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 
-	sm.sessions[info.State.ResourceId] = &sessionRecord{
-		info:       info,
-		sessionAPI: sessionAPI,
-		mediaStats: stats.NewMediaStats(sessionAPI),
+	r := &sessionRecord{
+		info:               info,
+		sessionAPI:         sessionAPI,
+		mediaStats:         stats.NewMediaStats(sessionAPI),
+		localStatsGatherer: stats.NewLocalMediaStatsGatherer(),
 	}
+	r.mediaStats.RegisterGatherer(r.localStatsGatherer)
+
+	sm.sessions[info.State.ResourceId] = r
 
 	sm.monitor.IngressStarted(info)
 }
@@ -86,7 +91,7 @@ func (sm *SessionManager) GetIngressSessionAPI(resourceId string) (types.Session
 	return record.sessionAPI, nil
 }
 
-func (sm *SessionManager) GetIngressMediaStats(resourceId string) (*stats.MediaStatsReporter, error) {
+func (sm *SessionManager) GetIngressMediaStats(resourceId string) (*stats.LocalMediaStatsGatherer, error) {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 
