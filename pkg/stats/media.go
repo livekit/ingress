@@ -10,6 +10,7 @@ import (
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/protocol/logger"
 )
 
 const (
@@ -21,13 +22,9 @@ type MediaStatsReporter struct {
 	lock sync.Mutex
 
 	statsUpdater  types.MediaStatsUpdater
-	statGatherers []MediaStatGatherer
+	statGatherers []types.MediaStatGatherer
 
 	done core.Fuse
-}
-
-type MediaStatGatherer interface {
-	GatherStats() *ipc.MediaStats
 }
 
 type LocalStatsUpdater struct {
@@ -56,7 +53,7 @@ func (m *MediaStatsReporter) Close() {
 	m.done.Break()
 }
 
-func (m *MediaStatsReporter) RegisterGatherer(g MediaStatGatherer) {
+func (m *MediaStatsReporter) RegisterGatherer(g types.MediaStatGatherer) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
@@ -70,7 +67,11 @@ func (m *MediaStatsReporter) UpdateStats(ctx context.Context) {
 
 	m.lock.Lock()
 	for _, l := range m.statGatherers {
-		ms := l.GatherStats()
+		ms, err := l.GatherStats(ctx)
+		if err != nil {
+			logger.Infow("failed gather media stats", "error", err)
+			continue
+		}
 
 		// Merge the result. Keys are assumed to be exclusive
 		for k, v := range ms.TrackStats {
@@ -113,7 +114,7 @@ func (l *LocalMediaStatsGatherer) RegisterTrackStats(path string) *MediaTrackSta
 	return g
 }
 
-func (l *LocalMediaStatsGatherer) GatherStats(ctx context.Context) *ipc.MediaStats {
+func (l *LocalMediaStatsGatherer) GatherStats(ctx context.Context) (*ipc.MediaStats, error) {
 	ms := &ipc.MediaStats{
 		TrackStats: make(map[string]*ipc.TrackStats),
 	}
@@ -125,7 +126,7 @@ func (l *LocalMediaStatsGatherer) GatherStats(ctx context.Context) *ipc.MediaSta
 	}
 	l.lock.Unlock()
 
-	return ms
+	return ms, nil
 }
 
 func (a *LocalStatsUpdater) UpdateMediaStats(ctx context.Context, s *ipc.MediaStats) error {

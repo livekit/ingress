@@ -9,3 +9,7 @@ import (
 type MediaStatsUpdater interface {
 	UpdateMediaStats(ctx context.Context, stats *ipc.MediaStats) error
 }
+
+type MediaStatGatherer interface {
+	GatherStats(ctx context.Context) (*ipc.MediaStats, error)
+}

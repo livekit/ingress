@@ -58,6 +58,8 @@ func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI t
 		localStatsGatherer: stats.NewLocalMediaStatsGatherer(),
 	}
 	r.mediaStats.RegisterGatherer(r.localStatsGatherer)
+	// Register remote gatherer, if any
+	r.mediaStats.RegisterGatherer(sessionAPI)
 
 	sm.sessions[info.State.ResourceId] = r
 
@@ -100,7 +102,7 @@ func (sm *SessionManager) GetIngressMediaStats(resourceId string) (*stats.LocalM
 		return nil, errors.ErrIngressNotFound
 	}
 
-	return record.mediaStats, nil
+	return record.localStatsGatherer, nil
 }
 
 func (sm *SessionManager) IsIdle() bool {

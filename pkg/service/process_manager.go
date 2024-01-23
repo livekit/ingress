@@ -226,6 +226,17 @@ func (p *process) UpdateMediaStats(ctx context.Context, s *ipc.MediaStats) error
 	return err
 }
 
+func (p *process) GatherStats(ctx context.Context) (*ipc.MediaStats, error) {
+	req := &ipc.GatherMediaStatsRequest{}
+
+	s, err := p.grpcClient.GatherMediaStats(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.Stats, nil
+}
+
 func getSocketAddress(handlerTmpDir string) string {
 	return path.Join(handlerTmpDir, "service_rpc.sock")
 }

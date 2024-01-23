@@ -28,6 +28,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
@@ -150,7 +151,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 	return pRes.params, stats, nil
 }
 
-func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error) *stats.MediaStatsReporter, ended func(err error), err error) {
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, ended func(err error), err error) {
 	res := make(chan publishResponse)
 	r := publishRequest{
 		streamKey:  streamKey,
@@ -185,7 +186,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		}
 	}
 
-	ready = func(mimeTypes map[types.StreamKind]string, err error) *stats.MediaStatsReporter {
+	ready = func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer {
 		ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ready")
 		defer span.End()
 		if err != nil {
@@ -518,6 +519,12 @@ func (a *localSessionAPI) GetProfileData(ctx context.Context, profileName string
 func (a *localSessionAPI) GetPipelineDot(ctx context.Context) (string, error) {
 	// No dot file if transcoding is disabled
 	return "", errors.ErrIngressNotFound
+}
+
+func (a *localSessionAPI) GatherStats(ctx context.Context) (*ipc.MediaStats, error) {
+	// Return a nil stats map. Use the local gatherer in the session manager for local stats
+
+	return nil, nil
 }
 
 func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) error {
