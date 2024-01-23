@@ -13,9 +13,9 @@ require (
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/mediatransportutil v0.0.0-20231213075826-cccbf2b93d3f
-	github.com/livekit/protocol v1.9.5-0.20240122051839-3b4fd6ea4a87
+	github.com/livekit/protocol v1.9.4
 	github.com/livekit/psrpc v0.5.3-0.20231214055026-06ce27a934c9
-	github.com/livekit/server-sdk-go v1.1.5
+	github.com/livekit/server-sdk-go v1.1.6
 	github.com/pion/dtls/v2 v2.2.9
 	github.com/pion/interceptor v0.1.25
 	github.com/pion/rtcp v1.2.13
