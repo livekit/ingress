@@ -70,6 +70,9 @@ func NewVideoOutputBin(options *livekit.IngressVideoEncodingOptions, outputs []*
 	}
 
 	err = o.preProcessorElements[len(o.preProcessorElements)-1].Link(o.tee)
+	if err != nil {
+		return nil, err
+	}
 
 	for _, output := range outputs {
 		err := o.bin.Add(output.bin.Element)

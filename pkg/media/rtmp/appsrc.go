@@ -43,7 +43,7 @@ type RTMPRelaySource struct {
 }
 
 func NewRTMPRelaySource(ctx context.Context, p *params.Params) (*RTMPRelaySource, error) {
-	ctx, span := tracer.Start(ctx, "RTMPRelaySource.New")
+	_, span := tracer.Start(ctx, "RTMPRelaySource.New")
 	defer span.End()
 
 	s := &RTMPRelaySource{
@@ -70,7 +70,7 @@ func NewRTMPRelaySource(ctx context.Context, p *params.Params) (*RTMPRelaySource
 }
 
 func (s *RTMPRelaySource) Start(ctx context.Context) error {
-	ctx, span := tracer.Start(ctx, "RTMPRelaySource.Start")
+	_, span := tracer.Start(ctx, "RTMPRelaySource.Start")
 	defer span.End()
 
 	s.result = make(chan error, 1)

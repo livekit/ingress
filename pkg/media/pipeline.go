@@ -207,8 +207,6 @@ func (p *Pipeline) Run(ctx context.Context) {
 	case err = <-p.pipelineErr:
 	default:
 	}
-
-	return
 }
 
 func (p *Pipeline) messageWatch(msg *gst.Message) bool {
@@ -273,7 +271,7 @@ func (p *Pipeline) handleStreamCollectionMessage(msg *gst.Message) {
 }
 
 func (p *Pipeline) SendEOS(ctx context.Context) {
-	ctx, span := tracer.Start(ctx, "Pipeline.SendEOS")
+	_, span := tracer.Start(ctx, "Pipeline.SendEOS")
 	defer span.End()
 
 	p.closed.Once(func() {

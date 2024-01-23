@@ -28,9 +28,8 @@ import (
 	lksdk "github.com/livekit/server-sdk-go"
 )
 
-type VideoSampleProvider interface {
-	lksdk.SampleProvider
-
+type RTPProvider interface {
+	Close() error
 	ForceKeyFrame() error
 }
 
@@ -40,11 +39,11 @@ type LKSDKOutput struct {
 	params *params.Params
 
 	lock    sync.Mutex
-	outputs []lksdk.SampleProvider
+	outputs []RTPProvider
 }
 
 func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error) {
-	ctx, span := tracer.Start(ctx, "lksdk.NewLKSDKOutput")
+	_, span := tracer.Start(ctx, "lksdk.NewLKSDKOutput")
 	defer span.End()
 
 	s := &LKSDKOutput{
@@ -76,7 +75,7 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 	return s, nil
 }
 
-func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string, disableDTX bool, stereo bool) error {
+func (s *LKSDKOutput) AddAudioTrack(output RTPProvider, mimeType string, disableDTX bool, stereo bool) (*lksdk.LocalTrack, error) {
 	opts := &lksdk.TrackPublicationOptions{
 		Name:       s.params.Audio.Name,
 		Source:     s.params.Audio.Source,
@@ -84,38 +83,29 @@ func (s *LKSDKOutput) AddAudioTrack(output lksdk.SampleProvider, mimeType string
 		Stereo:     stereo,
 	}
 
+	track, err := lksdk.NewLocalTrack(webrtc.RTPCodecCapability{MimeType: mimeType})
+	if err != nil {
+		s.logger.Errorw("could not create audio track", err)
+		return nil, err
+	}
+
+	track.OnBind(func() {
+		s.logger.Debugw("audio track start write")
+	})
+
+	if _, err = s.room.LocalParticipant.PublishTrack(track, opts); err != nil {
+		s.logger.Errorw("could not publish audio track", err)
+		return nil, err
+	}
+
 	s.lock.Lock()
 	s.outputs = append(s.outputs, output)
 	s.lock.Unlock()
 
-	track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{MimeType: mimeType})
-	if err != nil {
-		s.logger.Errorw("could not create audio track", err)
-		return err
-	}
-
-	onComplete := func() {
-		s.logger.Debugw("audio track write complete callback")
-	}
-	track.OnBind(func() {
-		s.logger.Debugw("audio track start write")
-
-		// Start write is idempotent if the sample provider doesn't change
-		if err := track.StartWrite(output, onComplete); err != nil {
-			s.logger.Errorw("could not start writing audio track", err)
-		}
-	})
-
-	_, err = s.room.LocalParticipant.PublishTrack(track, opts)
-	if err != nil {
-		s.logger.Errorw("could not publish audio track", err)
-		return err
-	}
-
-	return nil
+	return track, nil
 }
 
-func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*livekit.VideoLayer, mimeType string) error {
+func (s *LKSDKOutput) AddVideoTrack(outputs []RTPProvider, layers []*livekit.VideoLayer, mimeType string) ([]*lksdk.LocalTrack, error) {
 	opts := &lksdk.TrackPublicationOptions{
 		Name:        s.params.Video.Name,
 		Source:      s.params.Video.Source,
@@ -123,22 +113,9 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 		VideoHeight: int(layers[0].Height),
 	}
 
-	var err error
-
-	getOnComplete := func(layer *livekit.VideoLayer, output VideoSampleProvider) func() {
-		return func() {
-			s.logger.Debugw("video track layer write complete callback", "layer", layer.Quality.String())
-		}
-	}
-
-	tracks := make([]*lksdk.LocalSampleTrack, 0)
+	tracks := make([]*lksdk.LocalTrack, 0)
 	for i, layer := range layers {
 		output := outputs[i]
-
-		s.lock.Lock()
-		s.outputs = append(s.outputs, output)
-		s.lock.Unlock()
-
 		onRTCP := func(pkt rtcp.Packet) {
 			switch pkt.(type) {
 			case *rtcp.PictureLossIndication:
@@ -148,36 +125,36 @@ func (s *LKSDKOutput) AddVideoTrack(outputs []VideoSampleProvider, layers []*liv
 				}
 			}
 		}
-		track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{
+
+		track, err := lksdk.NewLocalTrack(webrtc.RTPCodecCapability{
 			MimeType: mimeType,
 		},
 			lksdk.WithRTCPHandler(onRTCP), lksdk.WithSimulcast(s.params.IngressId, layer))
 		if err != nil {
 			s.logger.Errorw("could not create video track", err)
-			return err
+			return nil, err
 		}
 
-		onComplete := getOnComplete(layer, output)
 		localLayer := layer
 		track.OnBind(func() {
 			s.logger.Debugw("video track start write", "layer", localLayer.Quality.String())
-
-			if err := track.StartWrite(output, onComplete); err != nil {
-				s.logger.Errorw("could not start writing video track", err)
-			}
 		})
+
 		tracks = append(tracks, track)
+
+		s.lock.Lock()
+		s.outputs = append(s.outputs, output)
+		s.lock.Unlock()
 	}
 
-	_, err = s.room.LocalParticipant.PublishSimulcastTrack(tracks, opts)
-	if err != nil {
+	if _, err := s.room.LocalParticipant.PublishSimulcastTrack(tracks, opts); err != nil {
 		s.logger.Errorw("could not publish video track", err)
-		return err
+		return nil, err
 	}
 
 	s.logger.Debugw("published video track")
 
-	return nil
+	return tracks, nil
 }
 
 func (s *LKSDKOutput) Close() {

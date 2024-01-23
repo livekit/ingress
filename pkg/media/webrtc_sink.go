@@ -60,17 +60,19 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 		return nil, err
 	}
 
-	err = s.sdkOut.AddAudioTrack(output, putils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec), s.params.AudioEncodingOptions.DisableDtx, s.params.AudioEncodingOptions.Channels > 1)
+	localTrack, err := s.sdkOut.AddAudioTrack(output, putils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec), s.params.AudioEncodingOptions.DisableDtx, s.params.AudioEncodingOptions.Channels > 1)
 	if err != nil {
 		return nil, err
 	}
+
+	output.localTrack = localTrack
 
 	return output.Output, nil
 }
 
 func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 	outputs := make([]*Output, 0)
-	sbArray := make([]lksdk_output.VideoSampleProvider, 0)
+	sbArray := make([]lksdk_output.RTPProvider, 0)
 
 	sortedLayers := filterAndSortLayersByQuality(s.params.VideoEncodingOptions.Layers, w, h)
 
@@ -85,9 +87,13 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 		outLayers = append(outLayers, layer)
 	}
 
-	err := s.sdkOut.AddVideoTrack(sbArray, outLayers, putils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
+	localTracks, err := s.sdkOut.AddVideoTrack(sbArray, outLayers, putils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
 	if err != nil {
 		return nil, err
+	}
+
+	for i := range localTracks {
+		outputs[i].localTrack = localTracks[i]
 	}
 
 	return outputs, nil

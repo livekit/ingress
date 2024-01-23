@@ -31,7 +31,6 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -57,7 +56,6 @@ type whipHandler struct {
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
-	outputSync         *utils.OutputSynchronizer
 	stats              *stats.LocalMediaStatsGatherer
 	sdkOutput          *lksdk_output.LKSDKOutput // only for passthrough
 	expectedTrackCount int
@@ -78,7 +76,6 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 	return &whipHandler{
 		rtcConfig:           &rtcConfCopy,
 		sync:                synchronizer.NewSynchronizer(nil),
-		outputSync:          utils.NewOutputSynchronizer(),
 		result:              make(chan error, 1),
 		tracks:              make(map[string]*webrtc.TrackRemote),
 		trackHandlers:       make(map[types.StreamKind]*whipTrackHandler),
@@ -385,7 +382,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 		return
 	}
 
-	th, err := newWHIPTrackHandler(logger, track, receiver, sync, mediaSink, h.writePLI, h.sync.OnRTCP)
+	th, err := newWHIPTrackHandler(logger, track, receiver, sync, mediaSink, h.writePLI, h.sync.OnRTCP, h.sdkOutput == nil)
 	if err != nil {
 		logger.Warnw("failed creating whip track handler", err)
 		return
@@ -404,7 +401,7 @@ func (h *whipHandler) newMediaSink(track *webrtc.TrackRemote) (MediaSink, error)
 
 	if h.sdkOutput != nil {
 		// pasthrough
-		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, h.outputSync.AddTrack(), func() {
+		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, func() {
 			h.writePLI(track.SSRC())
 		}), nil
 	} else {

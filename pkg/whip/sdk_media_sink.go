@@ -19,19 +19,19 @@ import (
 	"context"
 	"io"
 	"strings"
-	"time"
 
 	"github.com/Eyevinn/mp4ff/avc"
 	"github.com/frostbyte73/core"
+	lksdk "github.com/livekit/server-sdk-go"
+	"github.com/pion/rtp"
+	"github.com/pion/rtp/codecs"
 	"github.com/pion/webrtc/v3"
-	"github.com/pion/webrtc/v3/pkg/media"
 	"golang.org/x/image/vp8"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/psrpc"
@@ -39,87 +39,47 @@ import (
 
 var (
 	ErrParamsUnavailable = psrpc.NewErrorf(psrpc.InvalidArgument, "codec parameters unavailable in sample")
+	ErrInvalidTracks     = psrpc.NewErrorf(psrpc.InvalidArgument, "lksdk returned an invalid number of tracks")
 )
 
 type SDKMediaSink struct {
-	logger     logger.Logger
-	params     *params.Params
-	writePLI   func()
-	track      *webrtc.TrackRemote
-	outputSync *utils.TrackOutputSynchronizer
+	logger   logger.Logger
+	params   *params.Params
+	writePLI func()
+	track    *webrtc.TrackRemote
+
 	sdkOutput  *lksdk_output.LKSDKOutput
+	localTrack *lksdk.LocalTrack
 
-	readySamples     chan *sample
-	fuse             core.Fuse
-	trackInitialized bool
+	fuse core.Fuse
 }
 
-type sample struct {
-	s  *media.Sample
-	ts time.Duration
-}
-
-func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, outputSync *utils.TrackOutputSynchronizer, writePLI func()) *SDKMediaSink {
+func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, writePLI func()) *SDKMediaSink {
 	s := &SDKMediaSink{
-		logger:       l,
-		params:       p,
-		writePLI:     writePLI,
-		track:        track,
-		outputSync:   outputSync,
-		sdkOutput:    sdkOutput,
-		readySamples: make(chan *sample, 15),
-		fuse:         core.NewFuse(),
+		logger:    l,
+		params:    p,
+		writePLI:  writePLI,
+		track:     track,
+		sdkOutput: sdkOutput,
+		fuse:      core.NewFuse(),
 	}
 
 	return s
 }
 
-func (sp *SDKMediaSink) PushSample(s *media.Sample, ts time.Duration) error {
+func (sp *SDKMediaSink) PushRTP(pkt *rtp.Packet) error {
 	if sp.fuse.IsBroken() {
 		return io.EOF
 	}
 
-	err := sp.ensureTrackInitialized(s)
-	if err != nil {
+	if err := sp.ensureTrackInitialized(pkt); err != nil {
 		return err
-	}
-	if !sp.trackInitialized {
-		// Drop the sample
+	} else if sp.localTrack == nil {
+		// Drop the packet
 		return nil
 	}
 
-	// Synchronize the outputs before the network jitter buffer to avoid old samples stuck
-	// in the channel from increasing the whole pipeline delay.
-	drop, err := sp.outputSync.WaitForMediaTime(ts)
-	if err != nil {
-		return err
-	}
-	if drop {
-		sp.logger.Debugw("dropping sample", "timestamp", ts)
-		return nil
-	}
-
-	select {
-	case <-sp.fuse.Watch():
-		return io.EOF
-	case sp.readySamples <- &sample{s, ts}:
-	default:
-		// drop the sample if the output queue is full. This is needed if we are reconnecting.
-	}
-
-	return nil
-}
-
-func (sp *SDKMediaSink) NextSample(ctx context.Context) (media.Sample, error) {
-	for {
-		select {
-		case <-sp.fuse.Watch():
-		case <-ctx.Done():
-			return media.Sample{}, io.EOF
-		case s := <-sp.readySamples:
-			return *s.s, nil
-		}
-	}
+	return sp.localTrack.WriteRTP(pkt, nil)
 }
 
 func (sp *SDKMediaSink) OnBind() error {
@@ -148,13 +108,12 @@ func (sp *SDKMediaSink) SetWriter(w io.WriteCloser) error {
 
 func (sp *SDKMediaSink) Close() error {
 	sp.fuse.Break()
-	sp.outputSync.Close()
 
 	return nil
 }
 
-func (sp *SDKMediaSink) ensureTrackInitialized(s *media.Sample) error {
-	if sp.trackInitialized {
+func (sp *SDKMediaSink) ensureTrackInitialized(pkt *rtp.Packet) error {
+	if sp.localTrack != nil {
 		return nil
 	}
 
@@ -168,9 +127,12 @@ func (sp *SDKMediaSink) ensureTrackInitialized(s *media.Sample) error {
 		sp.params.SetInputAudioState(context.Background(), audioState, true)
 
 		sp.logger.Infow("adding audio track", "stereo", stereo, "codec", mimeType)
-		sp.sdkOutput.AddAudioTrack(sp, mimeType, false, stereo)
+		var err error
+		if sp.localTrack, err = sp.sdkOutput.AddAudioTrack(sp, mimeType, false, stereo); err != nil {
+			return err
+		}
 	case types.Video:
-		w, h, err := getVideoParams(mimeType, s)
+		w, h, err := getVideoParams(mimeType, pkt)
 		switch err {
 		case nil:
 			// continue
@@ -183,7 +145,7 @@ func (sp *SDKMediaSink) ensureTrackInitialized(s *media.Sample) error {
 		layers := []*livekit.VideoLayer{
 			&livekit.VideoLayer{Width: uint32(w), Height: uint32(h), Quality: livekit.VideoQuality_HIGH},
 		}
-		s := []lksdk_output.VideoSampleProvider{
+		s := []lksdk_output.RTPProvider{
 			sp,
 		}
 
@@ -191,31 +153,42 @@ func (sp *SDKMediaSink) ensureTrackInitialized(s *media.Sample) error {
 		sp.params.SetInputVideoState(context.Background(), videoState, true)
 
 		sp.logger.Infow("adding video track", "width", w, "height", h, "codec", mimeType)
-		sp.sdkOutput.AddVideoTrack(s, layers, mimeType)
-	}
 
-	sp.trackInitialized = true
+		tracks, err := sp.sdkOutput.AddVideoTrack(s, layers, mimeType)
+		if err != nil {
+			return err
+		} else if len(tracks) != 1 {
+			return ErrInvalidTracks
+		}
+
+		sp.localTrack = tracks[0]
+	}
 
 	return nil
 }
 
 func parseAudioFmtp(audioFmtp string) bool {
-	return strings.Index(audioFmtp, "sprop-stereo=1") >= 0
+	return strings.Contains(audioFmtp, "sprop-stereo=1")
 }
 
-func getVideoParams(mimeType string, s *media.Sample) (uint, uint, error) {
+func getVideoParams(mimeType string, pkt *rtp.Packet) (uint, uint, error) {
 	switch strings.ToLower(mimeType) {
 	case strings.ToLower(webrtc.MimeTypeH264):
-		return getH264VideoParams(s)
+		return getH264VideoParams(pkt)
 	case strings.ToLower(webrtc.MimeTypeVP8):
-		return getVP8VideoParams(s)
+		return getVP8VideoParams(pkt)
 	default:
 		return 0, 0, errors.ErrUnsupportedDecodeMimeType(mimeType)
 	}
 }
 
-func getH264VideoParams(s *media.Sample) (uint, uint, error) {
-	spss := avc.ExtractNalusOfTypeFromByteStream(avc.NALU_SPS, s.Data, true)
+func getH264VideoParams(pkt *rtp.Packet) (uint, uint, error) {
+	nalu, err := (&codecs.H264Packet{}).Unmarshal(pkt.Payload)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	spss := avc.ExtractNalusOfTypeFromByteStream(avc.NALU_SPS, nalu, true)
 	if len(spss) == 0 {
 		return 0, 0, ErrParamsUnavailable
 	}
@@ -228,9 +201,14 @@ func getH264VideoParams(s *media.Sample) (uint, uint, error) {
 	return sps.Width, sps.Height, nil
 }
 
-func getVP8VideoParams(s *media.Sample) (uint, uint, error) {
+func getVP8VideoParams(pkt *rtp.Packet) (uint, uint, error) {
+	payload, err := (&codecs.VP8Packet{}).Unmarshal(pkt.Payload)
+	if err != nil {
+		return 0, 0, err
+	}
+
 	d := vp8.NewDecoder()
-	b := bytes.NewReader(s.Data)
+	b := bytes.NewReader(payload)
 
 	d.Init(b, b.Len())
 	fh, err := d.DecodeFrameHeader()

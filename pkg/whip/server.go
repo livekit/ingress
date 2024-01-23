@@ -235,9 +235,9 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 		return err
 	}
 
-	logger.Debugw("new whip request", "streamKey", streamKey, "sdpOffer", string(sdpOffer.Bytes()))
+	logger.Debugw("new whip request", "streamKey", streamKey, "sdpOffer", sdpOffer.String())
 
-	resourceId, sdp, err := s.createStream(streamKey, string(sdpOffer.Bytes()))
+	resourceId, sdp, err := s.createStream(streamKey, sdpOffer.String())
 	if err != nil {
 		return err
 	}

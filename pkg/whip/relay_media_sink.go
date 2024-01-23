@@ -16,12 +16,10 @@ package whip
 
 import (
 	"io"
-	"time"
-
-	"github.com/pion/webrtc/v3/pkg/media"
 
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/logger"
+	"github.com/pion/rtp"
 )
 
 type RelayMediaSink struct {
@@ -40,8 +38,13 @@ func NewRelayMediaSink(logger logger.Logger) *RelayMediaSink {
 	}
 }
 
-func (rs *RelayMediaSink) PushSample(s *media.Sample, ts time.Duration) error {
-	return utils.SerializeMediaForRelay(rs.mediaBuffer, s.Data, ts)
+func (rs *RelayMediaSink) PushRTP(pkt *rtp.Packet) error {
+	buff, err := pkt.Marshal()
+	if err != nil {
+		return err
+	}
+
+	return utils.SerializeMediaForRelay(rs.mediaBuffer, buff)
 }
 
 func (rs *RelayMediaSink) SetWriter(w io.WriteCloser) error {

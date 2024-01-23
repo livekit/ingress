@@ -15,14 +15,13 @@
 package media
 
 import (
-	"context"
 	"fmt"
-	"io"
 	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/go-gst/go-gst/gst"
 	"github.com/go-gst/go-gst/gst/app"
+	lksdk "github.com/livekit/server-sdk-go"
 	"github.com/pion/webrtc/v3/pkg/media"
 	"github.com/pion/webrtc/v3/pkg/media/h264reader"
 
@@ -49,14 +48,10 @@ type Output struct {
 	sink       *app.Sink
 	outputSync *utils.TrackOutputSynchronizer
 
-	samples chan *sample
+	localTrack *lksdk.LocalTrack
+
 	closed  core.Fuse
 	flushed core.Fuse
-}
-
-type sample struct {
-	s  *media.Sample
-	ts time.Duration
 }
 
 // FIXME Use generics instead?
@@ -152,7 +147,7 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 			return nil, err
 		}
 		if err = profileCaps.SetProperty("caps", gst.NewCapsFromString(
-			fmt.Sprintf("video/x-h264,stream-format=byte-stream,profile=baseline"),
+			"video/x-h264,stream-format=byte-stream,profile=baseline",
 		)); err != nil {
 			return nil, err
 		}
@@ -351,7 +346,6 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer) (*Output, error) {
 	e := &Output{
 		sink:       sink,
 		outputSync: outputSync,
-		samples:    make(chan *sample, 15),
 		closed:     core.NewFuse(),
 		flushed:    core.NewFuse(),
 	}
@@ -396,7 +390,6 @@ func (e *Output) handleEOS(_ *app.Sink) {
 
 func (e *Output) Flush() {
 	select {
-	case e.samples <- nil:
 	case <-e.closed.Watch():
 	case <-time.After(time.Second):
 		e.logger.Errorw("output pipeline flush timed out", errors.New("could not enqueue EOS marker"))
@@ -410,7 +403,7 @@ func (e *Output) Flush() {
 	}
 }
 
-func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
+func (e *Output) writeSample(s media.Sample, pts time.Duration) error {
 
 	// Synchronize the outputs before the network jitter buffer to avoid old samples stuck
 	// in the channel from increasing the whole pipeline delay.
@@ -423,34 +416,7 @@ func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 		return nil
 	}
 
-	select {
-	case e.samples <- &sample{s, pts}:
-		return nil
-	case <-e.closed.Watch():
-		return io.EOF
-	default:
-		// drop the sample if the output queue is full. This is needed if we are reconnecting.
-		return nil
-	}
-}
-
-func (e *Output) NextSample(ctx context.Context) (media.Sample, error) {
-	var s *sample
-
-	for {
-		select {
-		case s = <-e.samples:
-		case <-e.closed.Watch():
-		case <-ctx.Done():
-		}
-
-		if s == nil {
-			e.flushed.Break()
-			return media.Sample{}, io.EOF
-		}
-
-		return *s.s, nil
-	}
+	return e.localTrack.WriteSample(s, nil)
 }
 
 func (e *Output) OnBind() error {
@@ -534,14 +500,14 @@ func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 				zeroes = 0
 			}
 		}
-		err = e.writeSample(&media.Sample{
+		err = e.writeSample(media.Sample{
 			Data:     buffer.Bytes(),
 			Duration: time.Duration(duration),
 		}, ts)
 
 	case livekit.VideoCodec_VP8:
 		// untested
-		err = e.writeSample(&media.Sample{
+		err = e.writeSample(media.Sample{
 			Data:     buffer.Bytes(),
 			Duration: time.Duration(duration),
 		}, ts)
@@ -577,7 +543,7 @@ func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 
 	switch e.codec {
 	case livekit.AudioCodec_OPUS:
-		err = e.writeSample(&media.Sample{
+		err = e.writeSample(media.Sample{
 			Data:     buffer.Bytes(),
 			Duration: time.Duration(duration),
 		}, ts)

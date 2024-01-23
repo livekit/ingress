@@ -20,7 +20,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/go-gst/go-gst/gst"
@@ -45,12 +44,11 @@ type whipAppSource struct {
 
 type readResult struct {
 	data []byte
-	ts   time.Duration
 	err  error
 }
 
 func NewWHIPAppSource(ctx context.Context, resourceId string, trackKind types.StreamKind, mimeType string, relayUrl string) (*whipAppSource, error) {
-	ctx, span := tracer.Start(ctx, "WHIPRelaySource.New")
+	_, span := tracer.Start(ctx, "WHIPRelaySource.New")
 	defer span.End()
 
 	w := &whipAppSource{
@@ -84,7 +82,7 @@ func NewWHIPAppSource(ctx context.Context, resourceId string, trackKind types.St
 }
 
 func (w *whipAppSource) Start(ctx context.Context) error {
-	ctx, span := tracer.Start(ctx, "RTMPRelaySource.Start")
+	_, span := tracer.Start(ctx, "RTMPRelaySource.Start")
 	defer span.End()
 
 	logger.Debugw("starting WHIP app source", "resourceID", w.resourceId, "kind", w.trackKind)
@@ -127,15 +125,13 @@ func (w *whipAppSource) GetAppSource() *app.Source {
 
 func (w *whipAppSource) readRelayedData(r io.Reader, dataC chan<- readResult) {
 	var err error
-	var ts time.Duration
 	var data []byte
 
 	for err == nil && !w.fuse.IsBroken() {
-		data, ts, err = utils.DeserializeMediaForRelay(r)
+		data, err = utils.DeserializeMediaForRelay(r)
 
 		re := readResult{
 			data: data,
-			ts:   ts,
 			err:  err,
 		}
 
@@ -174,7 +170,6 @@ func (w *whipAppSource) copyRelayedData(r io.Reader) error {
 		}
 
 		b := gst.NewBufferFromBytes(re.data)
-		b.SetPresentationTimestamp(gst.ClockTime(re.ts))
 
 		ret := w.appSrc.PushBuffer(b)
 		switch ret {
@@ -193,11 +188,11 @@ func getCapsForCodec(mimeType string) (*gst.Caps, error) {
 
 	switch mt {
 	case strings.ToLower(webrtc.MimeTypeH264):
-		return gst.NewCapsFromString("video/x-h264,stream-format=byte-stream,alignment=nal"), nil
+		return gst.NewCapsFromString("application/x-rtp,media=video,clock-rate=90000,encoding-name=H264"), nil
 	case strings.ToLower(webrtc.MimeTypeVP8):
-		return gst.NewCapsFromString("video/x-vp8"), nil
+		return gst.NewCapsFromString("application/x-rtp,media=video,clock-rate=90000,encoding-name=VP8"), nil
 	case strings.ToLower(webrtc.MimeTypeOpus):
-		return gst.NewCapsFromString("audio/x-opus,channel-mapping-family=0"), nil
+		return gst.NewCapsFromString("application/x-rtp,media=audio,payload=96,clock-rate=48000,encoding-name=OPUS"), nil
 	}
 
 	return nil, errors.ErrUnsupportedDecodeMimeType(mimeType)
