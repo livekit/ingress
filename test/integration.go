@@ -64,6 +64,10 @@ func (s *ioServer) UpdateEgress(ctx context.Context, info *livekit.EgressInfo) (
 	return &google_protobuf2.Empty{}, nil
 }
 
+func (s *ioServer) UpdateMetrics(ctx context.Context, req *rpc.UpdateMetricsRequest) (*emptypb.Empty, error) {
+	return &google_protobuf2.Empty{}, nil
+}
+
 func (s *ioServer) GetIngressInfo(ctx context.Context, req *rpc.GetIngressInfoRequest) (*rpc.GetIngressInfoResponse, error) {
 	return s.getIngressInfo(req)
 }
