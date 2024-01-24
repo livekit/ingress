@@ -414,8 +414,9 @@ type TrackStats struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	AverageBitrate uint32 `protobuf:"varint,1,opt,name=average_bitrate,json=averageBitrate,proto3" json:"average_bitrate,omitempty"`
-	CurrentBitrate uint32 `protobuf:"varint,2,opt,name=current_bitrate,json=currentBitrate,proto3" json:"current_bitrate,omitempty"`
+	AverageBitrate uint32       `protobuf:"varint,1,opt,name=average_bitrate,json=averageBitrate,proto3" json:"average_bitrate,omitempty"`
+	CurrentBitrate uint32       `protobuf:"varint,2,opt,name=current_bitrate,json=currentBitrate,proto3" json:"current_bitrate,omitempty"`
+	Jitter         *JitterStats `protobuf:"bytes,3,opt,name=jitter,proto3" json:"jitter,omitempty"`
 }
 
 func (x *TrackStats) Reset() {
@@ -464,6 +465,76 @@ func (x *TrackStats) GetCurrentBitrate() uint32 {
 	return 0
 }
 
+func (x *TrackStats) GetJitter() *JitterStats {
+	if x != nil {
+		return x.Jitter
+	}
+	return nil
+}
+
+type JitterStats struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	P50 float64 `protobuf:"fixed64,1,opt,name=p50,proto3" json:"p50,omitempty"` // in ms
+	P90 float64 `protobuf:"fixed64,2,opt,name=p90,proto3" json:"p90,omitempty"`
+	P99 float64 `protobuf:"fixed64,3,opt,name=p99,proto3" json:"p99,omitempty"`
+}
+
+func (x *JitterStats) Reset() {
+	*x = JitterStats{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_ipc_proto_msgTypes[9]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *JitterStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*JitterStats) ProtoMessage() {}
+
+func (x *JitterStats) ProtoReflect() protoreflect.Message {
+	mi := &file_ipc_proto_msgTypes[9]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use JitterStats.ProtoReflect.Descriptor instead.
+func (*JitterStats) Descriptor() ([]byte, []int) {
+	return file_ipc_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *JitterStats) GetP50() float64 {
+	if x != nil {
+		return x.P50
+	}
+	return 0
+}
+
+func (x *JitterStats) GetP90() float64 {
+	if x != nil {
+		return x.P90
+	}
+	return 0
+}
+
+func (x *JitterStats) GetP99() float64 {
+	if x != nil {
+		return x.P99
+	}
+	return 0
+}
+
 var File_ipc_proto protoreflect.FileDescriptor
 
 var file_ipc_proto_rawDesc = []byte{
@@ -504,13 +575,20 @@ var file_ipc_proto_rawDesc = []byte{
 	0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x25,
 	0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0f, 0x2e,
 	0x69, 0x70, 0x63, 0x2e, 0x54, 0x72, 0x61, 0x63, 0x6b, 0x53, 0x74, 0x61, 0x74, 0x73, 0x52, 0x05,
-	0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x5e, 0x0a, 0x0a, 0x54, 0x72, 0x61,
-	0x63, 0x6b, 0x53, 0x74, 0x61, 0x74, 0x73, 0x12, 0x27, 0x0a, 0x0f, 0x61, 0x76, 0x65, 0x72, 0x61,
-	0x67, 0x65, 0x5f, 0x62, 0x69, 0x74, 0x72, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0d,
-	0x52, 0x0e, 0x61, 0x76, 0x65, 0x72, 0x61, 0x67, 0x65, 0x42, 0x69, 0x74, 0x72, 0x61, 0x74, 0x65,
-	0x12, 0x27, 0x0a, 0x0f, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f, 0x62, 0x69, 0x74, 0x72,
-	0x61, 0x74, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0e, 0x63, 0x75, 0x72, 0x72, 0x65,
-	0x6e, 0x74, 0x42, 0x69, 0x74, 0x72, 0x61, 0x74, 0x65, 0x32, 0xbb, 0x02, 0x0a, 0x0e, 0x49, 0x6e,
+	0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x22, 0x88, 0x01, 0x0a, 0x0a, 0x54, 0x72,
+	0x61, 0x63, 0x6b, 0x53, 0x74, 0x61, 0x74, 0x73, 0x12, 0x27, 0x0a, 0x0f, 0x61, 0x76, 0x65, 0x72,
+	0x61, 0x67, 0x65, 0x5f, 0x62, 0x69, 0x74, 0x72, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x0d, 0x52, 0x0e, 0x61, 0x76, 0x65, 0x72, 0x61, 0x67, 0x65, 0x42, 0x69, 0x74, 0x72, 0x61, 0x74,
+	0x65, 0x12, 0x27, 0x0a, 0x0f, 0x63, 0x75, 0x72, 0x72, 0x65, 0x6e, 0x74, 0x5f, 0x62, 0x69, 0x74,
+	0x72, 0x61, 0x74, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0e, 0x63, 0x75, 0x72, 0x72,
+	0x65, 0x6e, 0x74, 0x42, 0x69, 0x74, 0x72, 0x61, 0x74, 0x65, 0x12, 0x28, 0x0a, 0x06, 0x6a, 0x69,
+	0x74, 0x74, 0x65, 0x72, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x10, 0x2e, 0x69, 0x70, 0x63,
+	0x2e, 0x4a, 0x69, 0x74, 0x74, 0x65, 0x72, 0x53, 0x74, 0x61, 0x74, 0x73, 0x52, 0x06, 0x6a, 0x69,
+	0x74, 0x74, 0x65, 0x72, 0x22, 0x43, 0x0a, 0x0b, 0x4a, 0x69, 0x74, 0x74, 0x65, 0x72, 0x53, 0x74,
+	0x61, 0x74, 0x73, 0x12, 0x10, 0x0a, 0x03, 0x70, 0x35, 0x30, 0x18, 0x01, 0x20, 0x01, 0x28, 0x01,
+	0x52, 0x03, 0x70, 0x35, 0x30, 0x12, 0x10, 0x0a, 0x03, 0x70, 0x39, 0x30, 0x18, 0x02, 0x20, 0x01,
+	0x28, 0x01, 0x52, 0x03, 0x70, 0x39, 0x30, 0x12, 0x10, 0x0a, 0x03, 0x70, 0x39, 0x39, 0x18, 0x03,
+	0x20, 0x01, 0x28, 0x01, 0x52, 0x03, 0x70, 0x39, 0x39, 0x32, 0xbb, 0x02, 0x0a, 0x0e, 0x49, 0x6e,
 	0x67, 0x72, 0x65, 0x73, 0x73, 0x48, 0x61, 0x6e, 0x64, 0x6c, 0x65, 0x72, 0x12, 0x55, 0x0a, 0x0e,
 	0x47, 0x65, 0x74, 0x50, 0x69, 0x70, 0x65, 0x6c, 0x69, 0x6e, 0x65, 0x44, 0x6f, 0x74, 0x12, 0x1f,
 	0x2e, 0x69, 0x70, 0x63, 0x2e, 0x47, 0x73, 0x74, 0x50, 0x69, 0x70, 0x65, 0x6c, 0x69, 0x6e, 0x65,
@@ -548,7 +626,7 @@ func file_ipc_proto_rawDescGZIP() []byte {
 	return file_ipc_proto_rawDescData
 }
 
-var file_ipc_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_ipc_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_ipc_proto_goTypes = []interface{}{
 	(*GstPipelineDebugDotRequest)(nil),  // 0: ipc.GstPipelineDebugDotRequest
 	(*GstPipelineDebugDotResponse)(nil), // 1: ipc.GstPipelineDebugDotResponse
@@ -559,27 +637,29 @@ var file_ipc_proto_goTypes = []interface{}{
 	(*UpdateMediaStatsRequest)(nil),     // 6: ipc.UpdateMediaStatsRequest
 	(*MediaStats)(nil),                  // 7: ipc.MediaStats
 	(*TrackStats)(nil),                  // 8: ipc.TrackStats
-	nil,                                 // 9: ipc.MediaStats.TrackStatsEntry
-	(*emptypb.Empty)(nil),               // 10: google.protobuf.Empty
+	(*JitterStats)(nil),                 // 9: ipc.JitterStats
+	nil,                                 // 10: ipc.MediaStats.TrackStatsEntry
+	(*emptypb.Empty)(nil),               // 11: google.protobuf.Empty
 }
 var file_ipc_proto_depIdxs = []int32{
 	7,  // 0: ipc.GatherMediaStatsResponse.stats:type_name -> ipc.MediaStats
 	7,  // 1: ipc.UpdateMediaStatsRequest.stats:type_name -> ipc.MediaStats
-	9,  // 2: ipc.MediaStats.track_stats:type_name -> ipc.MediaStats.TrackStatsEntry
-	8,  // 3: ipc.MediaStats.TrackStatsEntry.value:type_name -> ipc.TrackStats
-	0,  // 4: ipc.IngressHandler.GetPipelineDot:input_type -> ipc.GstPipelineDebugDotRequest
-	2,  // 5: ipc.IngressHandler.GetPProf:input_type -> ipc.PProfRequest
-	4,  // 6: ipc.IngressHandler.GatherMediaStats:input_type -> ipc.GatherMediaStatsRequest
-	6,  // 7: ipc.IngressHandler.UpdateMediaStats:input_type -> ipc.UpdateMediaStatsRequest
-	1,  // 8: ipc.IngressHandler.GetPipelineDot:output_type -> ipc.GstPipelineDebugDotResponse
-	3,  // 9: ipc.IngressHandler.GetPProf:output_type -> ipc.PProfResponse
-	5,  // 10: ipc.IngressHandler.GatherMediaStats:output_type -> ipc.GatherMediaStatsResponse
-	10, // 11: ipc.IngressHandler.UpdateMediaStats:output_type -> google.protobuf.Empty
-	8,  // [8:12] is the sub-list for method output_type
-	4,  // [4:8] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	10, // 2: ipc.MediaStats.track_stats:type_name -> ipc.MediaStats.TrackStatsEntry
+	9,  // 3: ipc.TrackStats.jitter:type_name -> ipc.JitterStats
+	8,  // 4: ipc.MediaStats.TrackStatsEntry.value:type_name -> ipc.TrackStats
+	0,  // 5: ipc.IngressHandler.GetPipelineDot:input_type -> ipc.GstPipelineDebugDotRequest
+	2,  // 6: ipc.IngressHandler.GetPProf:input_type -> ipc.PProfRequest
+	4,  // 7: ipc.IngressHandler.GatherMediaStats:input_type -> ipc.GatherMediaStatsRequest
+	6,  // 8: ipc.IngressHandler.UpdateMediaStats:input_type -> ipc.UpdateMediaStatsRequest
+	1,  // 9: ipc.IngressHandler.GetPipelineDot:output_type -> ipc.GstPipelineDebugDotResponse
+	3,  // 10: ipc.IngressHandler.GetPProf:output_type -> ipc.PProfResponse
+	5,  // 11: ipc.IngressHandler.GatherMediaStats:output_type -> ipc.GatherMediaStatsResponse
+	11, // 12: ipc.IngressHandler.UpdateMediaStats:output_type -> google.protobuf.Empty
+	9,  // [9:13] is the sub-list for method output_type
+	5,  // [5:9] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_ipc_proto_init() }
@@ -696,6 +776,18 @@ func file_ipc_proto_init() {
 				return nil
 			}
 		}
+		file_ipc_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*JitterStats); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -703,7 +795,7 @@ func file_ipc_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_ipc_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

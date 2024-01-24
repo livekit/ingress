@@ -1,10 +1,13 @@
 package stats
 
 import (
+	"math"
 	"sync"
 	"time"
 
 	"github.com/livekit/ingress/pkg/ipc"
+
+	morestats "github.com/aclements/go-moremath/stats"
 )
 
 type MediaTrackStatGatherer struct {
@@ -17,6 +20,10 @@ type MediaTrackStatGatherer struct {
 
 	currentBytes  int64
 	lastQueryTime time.Time
+
+	lastPacketTime     time.Time
+	lastPacketInterval time.Duration
+	jitter             morestats.Sample
 
 	stats *ipc.TrackStats
 }
@@ -31,15 +38,28 @@ func (g *MediaTrackStatGatherer) MediaReceived(size int64) {
 	g.lock.Lock()
 	defer g.lock.Unlock()
 
-	if g.startTime.IsZero() {
-		now := time.Now()
+	now := time.Now()
 
+	if g.startTime.IsZero() {
 		g.startTime = now
 		g.lastQueryTime = now
 	}
 
 	g.totalBytes += size
 	g.currentBytes += size
+
+	var packetInterval time.Duration
+	if !g.lastPacketTime.IsZero() {
+		packetInterval = now.Sub(g.lastPacketTime)
+	}
+	if g.lastPacketInterval != 0 {
+		jitter := packetInterval - g.lastPacketInterval
+
+		g.jitter.Xs = append(g.jitter.Xs, math.Abs(float64(jitter)/float64(time.Millisecond)))
+	}
+
+	g.lastPacketInterval = packetInterval
+	g.lastPacketTime = now
 }
 
 func (g *MediaTrackStatGatherer) UpdateStats() *ipc.TrackStats {
@@ -54,9 +74,20 @@ func (g *MediaTrackStatGatherer) UpdateStats() *ipc.TrackStats {
 	g.lastQueryTime = now
 	g.currentBytes = 0
 
+	jitter := g.jitter.Sort() // To make quantile computation faster
+
+	jitterStats := &ipc.JitterStats{
+		P50: jitter.Quantile(0.5),
+		P90: jitter.Quantile(0.9),
+		P99: jitter.Quantile(0.99),
+	}
+
+	g.jitter.Xs = nil
+
 	return &ipc.TrackStats{
 		AverageBitrate: averageBps,
 		CurrentBitrate: currentBps,
+		Jitter:         jitterStats,
 	}
 }
 
