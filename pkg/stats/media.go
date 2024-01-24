@@ -73,6 +73,10 @@ func (m *MediaStatsReporter) UpdateStats(ctx context.Context) {
 			continue
 		}
 
+		if ms == nil {
+			continue
+		}
+
 		// Merge the result. Keys are assumed to be exclusive
 		for k, v := range ms.TrackStats {
 			res.TrackStats[k] = v
