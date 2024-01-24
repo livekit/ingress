@@ -216,11 +216,11 @@ func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStats
 
 	ste := in.Stats.TrackStats[stats.InputAudio]
 	if ste != nil {
-		h.pipeline.SetInputAudioBitrate(ste.AverageBitrate, ste.CurrentBitrate)
+		h.pipeline.SetInputAudioStats(ste)
 	}
 	ste = in.Stats.TrackStats[stats.InputVideo]
 	if ste != nil {
-		h.pipeline.SetInputVideoBitrate(ste.AverageBitrate, ste.CurrentBitrate)
+		h.pipeline.SetInputVideoStats(ste)
 	}
 
 	return &google_protobuf2.Empty{}, nil

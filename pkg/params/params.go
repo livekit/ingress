@@ -26,6 +26,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
@@ -328,32 +329,32 @@ func (p *Params) SetInputVideoState(ctx context.Context, videoState *livekit.Inp
 	}
 }
 
-func (p *Params) SetInputAudioBitrate(averageBps uint32, currentBps uint32) {
+func (p *Params) SetInputAudioStats(st *ipc.TrackStats) {
 	p.stateLock.Lock()
 
 	if p.State.Audio == nil {
 		p.State.Audio = &livekit.InputAudioState{}
 	}
 
-	p.State.Audio.AverageBitrate = averageBps
+	p.State.Audio.AverageBitrate = st.AverageBitrate
 
 	p.stateLock.Unlock()
 
-	p.logger.Infow("audio bitate update", "average", averageBps, "current", currentBps)
+	p.logger.Infow("audio input stats update", "averageBitrate", st.AverageBitrate, "currentBitrate", st.CurrentBitrate, "jitter", st.Jitter)
 }
 
-func (p *Params) SetInputVideoBitrate(averageBps uint32, currentBps uint32) {
+func (p *Params) SetInputVideoStats(st *ipc.TrackStats) {
 	p.stateLock.Lock()
 
 	if p.State.Video == nil {
 		p.State.Video = &livekit.InputVideoState{}
 	}
 
-	p.State.Video.AverageBitrate = averageBps
+	p.State.Video.AverageBitrate = st.AverageBitrate
 
 	p.stateLock.Unlock()
 
-	p.logger.Infow("video bitate update", "average", averageBps, "current", currentBps)
+	p.logger.Infow("video input stats update", "averageBitrate", st.AverageBitrate, "currentBitrate", st.CurrentBitrate, "jitter", st.Jitter)
 }
 
 func (p *Params) SendStateUpdate(ctx context.Context) {

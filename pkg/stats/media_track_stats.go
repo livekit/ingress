@@ -83,6 +83,7 @@ func (g *MediaTrackStatGatherer) UpdateStats() *ipc.TrackStats {
 	}
 
 	g.jitter.Xs = nil
+	g.jitter.Sorted = false
 
 	return &ipc.TrackStats{
 		AverageBitrate: averageBps,
