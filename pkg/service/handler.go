@@ -30,6 +30,7 @@ import (
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/media"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/pprof"
@@ -40,9 +41,12 @@ import (
 type Handler struct {
 	ipc.UnimplementedIngressHandlerServer
 
-	conf       *config.Config
-	pipeline   *media.Pipeline
-	rpcClient  rpc.IOInfoClient
+	conf      *config.Config
+	pipeline  *media.Pipeline
+	rpcClient rpc.IOInfoClient
+
+	statsGatherer *stats.LocalMediaStatsGatherer
+
 	grpcServer *grpc.Server
 	kill       core.Fuse
 	done       core.Fuse
@@ -50,11 +54,12 @@ type Handler struct {
 
 func NewHandler(conf *config.Config, rpcClient rpc.IOInfoClient) *Handler {
 	return &Handler{
-		conf:       conf,
-		rpcClient:  rpcClient,
-		grpcServer: grpc.NewServer(),
-		kill:       core.NewFuse(),
-		done:       core.NewFuse(),
+		conf:          conf,
+		rpcClient:     rpcClient,
+		statsGatherer: stats.NewLocalMediaStatsGatherer(),
+		grpcServer:    grpc.NewServer(),
+		kill:          core.NewFuse(),
+		done:          core.NewFuse(),
 	}
 }
 
@@ -186,6 +191,17 @@ func (h *Handler) GetPipelineDot(ctx context.Context, in *ipc.GstPipelineDebugDo
 
 }
 
+func (h *Handler) GatherMediaStats(ctx context.Context, in *ipc.GatherMediaStatsRequest) (*ipc.GatherMediaStatsResponse, error) {
+	st, err := h.statsGatherer.GatherStats(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ipc.GatherMediaStatsResponse{
+		Stats: st,
+	}, nil
+}
+
 func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStatsRequest) (*google_protobuf2.Empty, error) {
 	ctx, span := tracer.Start(ctx, "Handler.UpdateMediaStats")
 	defer span.End()
@@ -194,11 +210,17 @@ func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStats
 		return &google_protobuf2.Empty{}, nil
 	}
 
-	if in.AudioAverateBitrate != nil && in.AudioCurrentBitrate != nil {
-		h.pipeline.SetInputAudioBitrate(*in.AudioAverateBitrate, *in.AudioCurrentBitrate)
+	if in.Stats == nil {
+		return &google_protobuf2.Empty{}, nil
 	}
-	if in.VideoAverateBitrate != nil && in.VideoCurrentBitrate != nil {
-		h.pipeline.SetInputVideoBitrate(*in.VideoAverateBitrate, *in.VideoCurrentBitrate)
+
+	ste := in.Stats.TrackStats[stats.InputAudio]
+	if ste != nil {
+		h.pipeline.SetInputAudioBitrate(ste.AverageBitrate, ste.CurrentBitrate)
+	}
+	ste = in.Stats.TrackStats[stats.InputVideo]
+	if ste != nil {
+		h.pipeline.SetInputVideoBitrate(ste.AverageBitrate, ste.CurrentBitrate)
 	}
 
 	return &google_protobuf2.Empty{}, nil
@@ -213,7 +235,7 @@ func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, 
 	params, err := params.GetParams(ctx, h.rpcClient, h.conf, info, wsUrl, token, relayToken, extraParams)
 	if err == nil {
 		// create the pipeline
-		p, err = media.New(ctx, h.conf, params)
+		p, err = media.New(ctx, h.conf, params, h.statsGatherer)
 	}
 
 	if err != nil {

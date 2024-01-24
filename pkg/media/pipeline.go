@@ -26,6 +26,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -50,7 +51,7 @@ type Pipeline struct {
 	pipelineErr chan error
 }
 
-func New(ctx context.Context, conf *config.Config, params *params.Params) (*Pipeline, error) {
+func New(ctx context.Context, conf *config.Config, params *params.Params, g *stats.LocalMediaStatsGatherer) (*Pipeline, error) {
 	ctx, span := tracer.Start(ctx, "Pipeline.New")
 	defer span.End()
 
@@ -60,7 +61,7 @@ func New(ctx context.Context, conf *config.Config, params *params.Params) (*Pipe
 	// initialize gst
 	gst.Init(nil)
 
-	input, err := NewInput(ctx, params)
+	input, err := NewInput(ctx, params, g)
 	if err != nil {
 		return nil, err
 	}

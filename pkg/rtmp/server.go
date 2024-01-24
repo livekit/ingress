@@ -47,7 +47,7 @@ func NewRTMPServer() *RTMPServer {
 	return &RTMPServer{}
 }
 
-func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error)) error {
+func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error)) error {
 	port := conf.RTMPPort
 
 	tcpAddr, err := net.ResolveTCPAddr("tcp", fmt.Sprintf(":%d", port))
@@ -71,9 +71,9 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 			lf := l.WithFields(conf.GetLoggerFields())
 
 			h := NewRTMPHandler()
-			h.OnPublishCallback(func(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error) {
+			h.OnPublishCallback(func(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error) {
 				var params *params.Params
-				var stats *stats.MediaStatsReporter
+				var stats *stats.LocalMediaStatsGatherer
 				var err error
 				if onPublish != nil {
 					params, stats, err = onPublish(streamKey, resourceId)
@@ -87,10 +87,6 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 				return params, stats, nil
 			})
 			h.OnCloseCallback(func(resourceId string) {
-				if h.stats != nil {
-					h.stats.Close()
-				}
-
 				s.handlers.Delete(resourceId)
 			})
 
@@ -156,7 +152,7 @@ type RTMPHandler struct {
 	rtmp.DefaultHandler
 
 	flvEnc        *flv.Encoder
-	stats         *stats.MediaStatsReporter
+	trackStats    map[types.StreamKind]*stats.MediaTrackStatGatherer
 	params        *params.Params
 	resourceId    string
 	videoInit     *flvtag.VideoData
@@ -166,13 +162,14 @@ type RTMPHandler struct {
 
 	log logger.Logger
 
-	onPublish func(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error)
+	onPublish func(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error)
 	onClose   func(resourceId string)
 }
 
 func NewRTMPHandler() *RTMPHandler {
 	h := &RTMPHandler{
-		log: logger.GetLogger(),
+		log:        logger.GetLogger(),
+		trackStats: make(map[types.StreamKind]*stats.MediaTrackStatGatherer),
 	}
 
 	h.mediaBuffer = utils.NewPrerollBuffer(func() error {
@@ -185,7 +182,7 @@ func NewRTMPHandler() *RTMPHandler {
 	return h
 }
 
-func (h *RTMPHandler) OnPublishCallback(cb func(streamKey, resourceId string) (*params.Params, *stats.MediaStatsReporter, error)) {
+func (h *RTMPHandler) OnPublishCallback(cb func(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error)) {
 	h.onPublish = cb
 }
 
@@ -203,12 +200,14 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 	h.resourceId = protoutils.NewGuid(protoutils.RTMPResourcePrefix)
 	h.log = logger.GetLogger().WithValues("streamKey", streamKey, "resourceID", h.resourceId)
 	if h.onPublish != nil {
-		params, stats, err := h.onPublish(streamKey, h.resourceId)
+		params, st, err := h.onPublish(streamKey, h.resourceId)
 		if err != nil {
 			return err
 		}
-		h.stats = stats
 		h.params = params
+
+		h.trackStats[types.Audio] = st.RegisterTrackStats(stats.InputAudio)
+		h.trackStats[types.Video] = st.RegisterTrackStats(stats.InputVideo)
 	}
 
 	h.log.Infow("Received a new published stream")
@@ -263,8 +262,8 @@ func (h *RTMPHandler) OnAudio(timestamp uint32, payload io.Reader) error {
 	}
 	audio.Data = flvBody
 
-	if h.stats != nil {
-		h.stats.MediaReceived(types.Audio, int64(flvBody.Len()))
+	if st := h.trackStats[types.Audio]; st != nil {
+		st.MediaReceived(int64(flvBody.Len()))
 	}
 
 	if h.audioInit == nil {
@@ -302,8 +301,8 @@ func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
 	}
 	video.Data = flvBody
 
-	if h.stats != nil {
-		h.stats.MediaReceived(types.Video, int64(flvBody.Len()))
+	if st := h.trackStats[types.Video]; st != nil {
+		st.MediaReceived(int64(flvBody.Len()))
 	}
 
 	if h.videoInit == nil {

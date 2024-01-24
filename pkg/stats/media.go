@@ -7,34 +7,38 @@ import (
 
 	"github.com/frostbyte73/core"
 
+	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/protocol/logger"
+)
+
+const (
+	InputAudio = "input.audio"
+	InputVideo = "input.video"
 )
 
 type MediaStatsReporter struct {
-	statsUpdater types.MediaStatsUpdater
+	lock sync.Mutex
 
-	lock  sync.Mutex
-	done  core.Fuse
-	stats map[types.StreamKind]*trackStats
+	statsUpdater  types.MediaStatsUpdater
+	statGatherers []types.MediaStatGatherer
+
+	done core.Fuse
 }
 
 type LocalStatsUpdater struct {
 	Params *params.Params
 }
 
-type trackStats struct {
-	totalBytes int64
-	startTime  time.Time
-
-	currentBytes  int64
-	lastQueryTime time.Time
+type LocalMediaStatsGatherer struct {
+	lock  sync.Mutex
+	stats []*MediaTrackStatGatherer
 }
 
 func NewMediaStats(statsUpdater types.MediaStatsUpdater) *MediaStatsReporter {
 	m := &MediaStatsReporter{
 		statsUpdater: statsUpdater,
-		stats:        make(map[types.StreamKind]*trackStats),
 		done:         core.NewFuse(),
 	}
 
@@ -45,21 +49,39 @@ func NewMediaStats(statsUpdater types.MediaStatsUpdater) *MediaStatsReporter {
 	return m
 }
 
-func (m *MediaStatsReporter) MediaReceived(kind types.StreamKind, size int64) {
+func (m *MediaStatsReporter) Close() {
+	m.done.Break()
+}
+
+func (m *MediaStatsReporter) RegisterGatherer(g types.MediaStatGatherer) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 
-	ts, ok := m.stats[kind]
-	if !ok {
-		ts = &trackStats{}
-		m.stats[kind] = ts
-	}
-
-	ts.mediaReceived(size)
+	m.statGatherers = append(m.statGatherers, g)
 }
 
-func (m *MediaStatsReporter) Close() {
-	m.done.Break()
+func (m *MediaStatsReporter) UpdateStats(ctx context.Context) {
+	res := &ipc.MediaStats{
+		TrackStats: make(map[string]*ipc.TrackStats),
+	}
+
+	m.lock.Lock()
+	for _, l := range m.statGatherers {
+		ms, err := l.GatherStats(ctx)
+		if err != nil {
+			logger.Infow("failed gather media stats", "error", err)
+			continue
+		}
+
+		// Merge the result. Keys are assumed to be exclusive
+		for k, v := range ms.TrackStats {
+			res.TrackStats[k] = v
+		}
+
+	}
+	m.lock.Unlock()
+
+	m.statsUpdater.UpdateMediaStats(ctx, res)
 }
 
 func (m *MediaStatsReporter) runMediaStatsCollector() {
@@ -70,72 +92,52 @@ func (m *MediaStatsReporter) runMediaStatsCollector() {
 		select {
 		case <-ticker.C:
 			// TODO extend core.Fuse to provide a context?
-			m.updateIngressState(context.Background())
+			m.UpdateStats(context.Background())
 		case <-m.done.Watch():
 			return
 		}
 	}
 }
 
-func (m *MediaStatsReporter) updateIngressState(ctx context.Context) {
-	var audioOk, videoOk bool
-	var audioAverageBps, audioCurrentBps, videoAverageBps, videoCurrentBps uint32
-	var s *trackStats
-
-	m.lock.Lock()
-	if s, audioOk = m.stats[types.Audio]; audioOk {
-		audioAverageBps, audioCurrentBps = s.getStats()
-	}
-	if s, videoOk = m.stats[types.Video]; videoOk {
-		videoAverageBps, videoCurrentBps = s.getStats()
-	}
-	m.lock.Unlock()
-
-	ms := &types.MediaStats{}
-
-	if audioOk {
-		ms.AudioAverageBitrate = &audioAverageBps
-		ms.AudioCurrentBitrate = &audioCurrentBps
-	}
-	if videoOk {
-		ms.VideoAverageBitrate = &videoAverageBps
-		ms.VideoCurrentBitrate = &videoCurrentBps
-	}
-
-	m.statsUpdater.UpdateMediaStats(ctx, ms)
+func NewLocalMediaStatsGatherer() *LocalMediaStatsGatherer {
+	return &LocalMediaStatsGatherer{}
 }
 
-func (s *trackStats) mediaReceived(size int64) {
-	if s.startTime.IsZero() {
-		now := time.Now()
+func (l *LocalMediaStatsGatherer) RegisterTrackStats(path string) *MediaTrackStatGatherer {
+	g := NewMediaTrackStatGatherer(path)
 
-		s.startTime = now
-		s.lastQueryTime = now
-	}
+	l.lock.Lock()
+	defer l.lock.Unlock()
 
-	s.totalBytes += size
-	s.currentBytes += size
+	l.stats = append(l.stats, g)
+
+	return g
 }
 
-func (s *trackStats) getStats() (uint32, uint32) {
-	now := time.Now()
-
-	averageBps := uint32(float64(s.totalBytes) * 8 * float64(time.Second) / float64(now.Sub(s.startTime)))
-	currentBps := uint32(float64(s.currentBytes) * 8 * float64(time.Second) / float64(now.Sub(s.lastQueryTime)))
-
-	s.lastQueryTime = now
-	s.currentBytes = 0
-
-	return averageBps, currentBps
-}
-
-func (a *LocalStatsUpdater) UpdateMediaStats(ctx context.Context, s *types.MediaStats) error {
-	if s.AudioAverageBitrate != nil && s.AudioCurrentBitrate != nil {
-		a.Params.SetInputAudioBitrate(*s.AudioAverageBitrate, *s.AudioCurrentBitrate)
+func (l *LocalMediaStatsGatherer) GatherStats(ctx context.Context) (*ipc.MediaStats, error) {
+	ms := &ipc.MediaStats{
+		TrackStats: make(map[string]*ipc.TrackStats),
 	}
 
-	if s.VideoAverageBitrate != nil && s.VideoCurrentBitrate != nil {
-		a.Params.SetInputVideoBitrate(*s.VideoAverageBitrate, *s.VideoCurrentBitrate)
+	l.lock.Lock()
+	for _, ts := range l.stats {
+		s := ts.UpdateStats()
+		ms.TrackStats[ts.Path()] = s
+	}
+	l.lock.Unlock()
+
+	return ms, nil
+}
+
+func (a *LocalStatsUpdater) UpdateMediaStats(ctx context.Context, s *ipc.MediaStats) error {
+	audioStats, ok := s.TrackStats[InputAudio]
+	if ok {
+		a.Params.SetInputAudioBitrate(audioStats.AverageBitrate, audioStats.CurrentBitrate)
+	}
+
+	videoStats, ok := s.TrackStats[InputVideo]
+	if ok {
+		a.Params.SetInputVideoBitrate(videoStats.AverageBitrate, videoStats.CurrentBitrate)
 	}
 
 	return nil

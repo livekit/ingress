@@ -22,6 +22,7 @@ option go_package = "github.com/livekit/ingress/pkg/ipc";
 service IngressHandler {
   rpc GetPipelineDot(GstPipelineDebugDotRequest) returns (GstPipelineDebugDotResponse) {};
   rpc GetPProf(PProfRequest) returns (PProfResponse) {};
+  rpc GatherMediaStats(GatherMediaStatsRequest) returns (GatherMediaStatsResponse) {};
   rpc UpdateMediaStats(UpdateMediaStatsRequest) returns (google.protobuf.Empty) {};
 }
 
@@ -41,9 +42,22 @@ message PProfResponse {
   bytes pprof_file = 1;
 }
 
+message GatherMediaStatsRequest {
+}
+
+message GatherMediaStatsResponse {
+  MediaStats stats = 1;
+}
+
 message UpdateMediaStatsRequest {
-  optional uint32 audio_averate_bitrate = 1;
-  optional uint32 audio_current_bitrate = 2;
-  optional uint32 video_averate_bitrate = 3;
-  optional uint32 video_current_bitrate = 4;
+  MediaStats stats = 1;
+}
+
+message MediaStats {
+  map<string, TrackStats> track_stats = 1;
+}
+
+message TrackStats {
+  uint32 average_bitrate = 1;
+  uint32 current_bitrate = 2;
 }

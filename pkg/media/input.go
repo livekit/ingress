@@ -44,7 +44,7 @@ type Source interface {
 type Input struct {
 	lock sync.Mutex
 
-	statsReporter *stats.MediaStatsReporter
+	trackStatsGatherer map[types.StreamKind]*stats.MediaTrackStatGatherer
 
 	bin    *gst.Bin
 	source Source
@@ -59,7 +59,7 @@ type Input struct {
 
 type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
 
-func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
+func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGatherer) (*Input, error) {
 	src, err := CreateSource(ctx, p)
 	if err != nil {
 		return nil, err
@@ -67,19 +67,16 @@ func NewInput(ctx context.Context, p *params.Params) (*Input, error) {
 
 	bin := gst.NewBin("input")
 	i := &Input{
-		bin:       bin,
-		source:    src,
-		closeFuse: core.NewFuse(),
+		bin:                bin,
+		source:             src,
+		trackStatsGatherer: make(map[types.StreamKind]*stats.MediaTrackStatGatherer),
+		closeFuse:          core.NewFuse(),
 	}
 
 	if p.InputType == livekit.IngressInput_URL_INPUT {
 		// Gather input stats from the pipeline
-
-		statsUpdater := &stats.LocalStatsUpdater{
-			Params: p,
-		}
-
-		i.statsReporter = stats.NewMediaStats(statsUpdater)
+		i.trackStatsGatherer[types.Audio] = g.RegisterTrackStats(stats.InputAudio)
+		i.trackStatsGatherer[types.Video] = g.RegisterTrackStats(stats.InputVideo)
 	}
 
 	srcs := src.GetSources()
@@ -192,7 +189,7 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 		}
 		pad = ghostPad.Pad
 
-		if i.statsReporter != nil {
+		if i.trackStatsGatherer[kind] != nil {
 			// Gather bitrate stats from pipeline itself
 			i.addBitrateProbe(kind)
 		}
@@ -239,6 +236,8 @@ func (i *Input) addBitrateProbe(kind types.StreamKind) {
 		padKind := getKindFromGstMimeType(gstStruct)
 
 		if padKind == kind {
+			g := i.trackStatsGatherer[kind]
+
 			pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
 				buffer := info.GetBuffer()
 				if buffer == nil {
@@ -246,7 +245,7 @@ func (i *Input) addBitrateProbe(kind types.StreamKind) {
 				}
 
 				size := buffer.GetSize()
-				i.statsReporter.MediaReceived(kind, size)
+				g.MediaReceived(size)
 
 				return gst.PadProbeOK
 			})

@@ -56,8 +56,8 @@ type whipTrackHandler struct {
 	writePLI     func(ssrc webrtc.SSRC)
 	onRTCP       func(packet rtcp.Packet)
 
-	statsLock sync.Mutex
-	stats     *stats.MediaStatsReporter
+	statsLock  sync.Mutex
+	trackStats *stats.MediaTrackStatGatherer
 
 	firstPacket sync.Once
 	fuse        core.Fuse
@@ -109,11 +109,11 @@ func (t *whipTrackHandler) Start(onDone func(err error)) (err error) {
 	return nil
 }
 
-func (t *whipTrackHandler) SetMediaStatsReporter(stats *stats.MediaStatsReporter) {
+func (t *whipTrackHandler) SetMediaTrackStatsGatherer(stats *stats.MediaTrackStatGatherer) {
 	t.statsLock.Lock()
 	defer t.statsLock.Unlock()
 
-	t.stats = stats
+	t.trackStats = stats
 }
 
 func (t *whipTrackHandler) Close() {
@@ -208,10 +208,10 @@ func (t *whipTrackHandler) processRTPPacket() error {
 			}
 
 			t.statsLock.Lock()
-			stats := t.stats
+			stats := t.trackStats
 			t.statsLock.Unlock()
 			if stats != nil {
-				t.stats.MediaReceived(streamKindFromCodecType(t.remoteTrack.Kind()), int64(len(buf)))
+				stats.MediaReceived(int64(len(buf)))
 			}
 
 			_, err = buffer.Write(buf)
