@@ -19,6 +19,7 @@ import (
 	"context"
 	"io"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Eyevinn/mp4ff/avc"
@@ -48,7 +49,7 @@ type SDKMediaSink struct {
 	writePLI           func()
 	track              *webrtc.TrackRemote
 	outputSync         *utils.TrackOutputSynchronizer
-	trackStatsGatherer *stats.MediaTrackStatGatherer
+	trackStatsGatherer atomic.Pointer[stats.MediaTrackStatGatherer]
 	sdkOutput          *lksdk_output.LKSDKOutput
 
 	readySamples     chan *sample
@@ -61,27 +62,16 @@ type sample struct {
 	ts time.Duration
 }
 
-func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, outputSync *utils.TrackOutputSynchronizer, st *stats.LocalMediaStatsGatherer, writePLI func()) *SDKMediaSink {
-	var path string
-	switch track.Kind() {
-	case webrtc.RTPCodecTypeAudio:
-		path = stats.OutputAudio
-	case webrtc.RTPCodecTypeVideo:
-		path = stats.OutputVideo
-	default:
-		path = "output.unknown"
-	}
-
+func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, outputSync *utils.TrackOutputSynchronizer, writePLI func()) *SDKMediaSink {
 	s := &SDKMediaSink{
-		logger:             l,
-		params:             p,
-		writePLI:           writePLI,
-		track:              track,
-		outputSync:         outputSync,
-		trackStatsGatherer: st.RegisterTrackStats(path),
-		sdkOutput:          sdkOutput,
-		readySamples:       make(chan *sample, 15),
-		fuse:               core.NewFuse(),
+		logger:       l,
+		params:       p,
+		writePLI:     writePLI,
+		track:        track,
+		outputSync:   outputSync,
+		sdkOutput:    sdkOutput,
+		readySamples: make(chan *sample, 15),
+		fuse:         core.NewFuse(),
 	}
 
 	return s
@@ -130,9 +120,30 @@ func (sp *SDKMediaSink) NextSample(ctx context.Context) (media.Sample, error) {
 		case <-ctx.Done():
 			return media.Sample{}, io.EOF
 		case s := <-sp.readySamples:
+			g := sp.trackStatsGatherer.Load()
+			if g != nil {
+				g.MediaReceived(int64(len(s.s.Data)))
+			}
+
 			return *s.s, nil
 		}
 	}
+}
+
+func (sp *SDKMediaSink) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) {
+	var path string
+	switch sp.track.Kind() {
+	case webrtc.RTPCodecTypeAudio:
+		path = stats.OutputAudio
+	case webrtc.RTPCodecTypeVideo:
+		path = stats.OutputVideo
+	default:
+		path = "output.unknown"
+	}
+
+	g := st.RegisterTrackStats(path)
+
+	sp.trackStatsGatherer.Store(g)
 }
 
 func (sp *SDKMediaSink) OnBind() error {

@@ -185,8 +185,8 @@ func (h *whipHandler) SetMediaStatsGatherer(st *stats.LocalMediaStatsGatherer) {
 	defer h.trackLock.Unlock()
 	h.stats = st
 
-	for k, th := range h.trackHandlers {
-		th.SetMediaTrackStatsGatherer(g)
+	for _, th := range h.trackHandlers {
+		th.SetMediaTrackStatsGatherer(st)
 	}
 }
 
@@ -396,7 +396,7 @@ func (h *whipHandler) newMediaSink(track *webrtc.TrackRemote) (MediaSink, error)
 
 	if h.sdkOutput != nil {
 		// pasthrough
-		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, h.outputSync.AddTrack(), h.stats, func() {
+		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, h.outputSync.AddTrack(), func() {
 			h.writePLI(track.SSRC())
 		}), nil
 	} else {

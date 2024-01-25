@@ -110,26 +110,26 @@ func (t *whipTrackHandler) Start(onDone func(err error)) (err error) {
 	return nil
 }
 
-func (t *whipTrackHandler) SetMediaTrackStatsGatherer(stats *stats.MediaTrackStatGatherer) {
+func (t *whipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaStatsGatherer) {
 	t.statsLock.Lock()
 
-	var t string
+	var path string
 
 	switch t.remoteTrack.Kind() {
 	case webrtc.RTPCodecTypeAudio:
-		t = stats.InputAudio
+		path = stats.InputAudio
 	case webrtc.RTPCodecTypeVideo:
-		t = stats.InputVideo
+		path = stats.InputVideo
 	default:
-		t = "input.unknown"
+		path = "input.unknown"
 	}
 
-	g := st.RegisterTrackStats(t)
+	g := st.RegisterTrackStats(path)
 	t.trackStats = g
 
 	t.statsLock.Unlock()
 
-	t.mediaSink.SetStatsGatherer(g)
+	t.mediaSink.SetStatsGatherer(st)
 }
 
 func (t *whipTrackHandler) Close() {
