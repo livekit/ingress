@@ -446,7 +446,6 @@ func (e *Output) NextSample(ctx context.Context) (media.Sample, error) {
 	for {
 		select {
 		case s = <-e.samples:
-			e.trackStatsGatherer.MediaReceived(int64(len(s.s.Data)))
 		case <-e.closed.Watch():
 		case <-ctx.Done():
 		}
@@ -455,6 +454,8 @@ func (e *Output) NextSample(ctx context.Context) (media.Sample, error) {
 			e.flushed.Break()
 			return media.Sample{}, io.EOF
 		}
+
+		e.trackStatsGatherer.MediaReceived(int64(len(s.s.Data)))
 
 		return *s.s, nil
 	}

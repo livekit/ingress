@@ -180,20 +180,12 @@ loop:
 	return mimeTypes, nil
 }
 
-func (h *whipHandler) SetMediaStatsHandler(st *stats.LocalMediaStatsGatherer) {
+func (h *whipHandler) SetMediaStatsGatherer(st *stats.LocalMediaStatsGatherer) {
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
 	h.stats = st
 
 	for k, th := range h.trackHandlers {
-		var t string
-		if k == types.Audio {
-			t = stats.InputAudio
-		} else {
-			t = stats.InputVideo
-		}
-
-		g := st.RegisterTrackStats(t)
 		th.SetMediaTrackStatsGatherer(g)
 	}
 }
@@ -404,7 +396,7 @@ func (h *whipHandler) newMediaSink(track *webrtc.TrackRemote) (MediaSink, error)
 
 	if h.sdkOutput != nil {
 		// pasthrough
-		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, h.outputSync.AddTrack(), func() {
+		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, h.outputSync.AddTrack(), h.stats, func() {
 			h.writePLI(track.SSRC())
 		}), nil
 	} else {

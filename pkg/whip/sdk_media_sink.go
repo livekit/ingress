@@ -30,6 +30,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
@@ -42,12 +43,13 @@ var (
 )
 
 type SDKMediaSink struct {
-	logger     logger.Logger
-	params     *params.Params
-	writePLI   func()
-	track      *webrtc.TrackRemote
-	outputSync *utils.TrackOutputSynchronizer
-	sdkOutput  *lksdk_output.LKSDKOutput
+	logger             logger.Logger
+	params             *params.Params
+	writePLI           func()
+	track              *webrtc.TrackRemote
+	outputSync         *utils.TrackOutputSynchronizer
+	trackStatsGatherer *stats.MediaTrackStatGatherer
+	sdkOutput          *lksdk_output.LKSDKOutput
 
 	readySamples     chan *sample
 	fuse             core.Fuse
@@ -59,16 +61,27 @@ type sample struct {
 	ts time.Duration
 }
 
-func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, outputSync *utils.TrackOutputSynchronizer, writePLI func()) *SDKMediaSink {
+func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, outputSync *utils.TrackOutputSynchronizer, st *stats.LocalMediaStatsGatherer, writePLI func()) *SDKMediaSink {
+	var path string
+	switch track.Kind() {
+	case webrtc.RTPCodecTypeAudio:
+		path = stats.OutputAudio
+	case webrtc.RTPCodecTypeVideo:
+		path = stats.OutputVideo
+	default:
+		path = "output.unknown"
+	}
+
 	s := &SDKMediaSink{
-		logger:       l,
-		params:       p,
-		writePLI:     writePLI,
-		track:        track,
-		outputSync:   outputSync,
-		sdkOutput:    sdkOutput,
-		readySamples: make(chan *sample, 15),
-		fuse:         core.NewFuse(),
+		logger:             l,
+		params:             p,
+		writePLI:           writePLI,
+		track:              track,
+		outputSync:         outputSync,
+		trackStatsGatherer: st.RegisterTrackStats(path),
+		sdkOutput:          sdkOutput,
+		readySamples:       make(chan *sample, 15),
+		fuse:               core.NewFuse(),
 	}
 
 	return s

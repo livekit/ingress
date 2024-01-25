@@ -146,5 +146,13 @@ func (a *LocalStatsUpdater) UpdateMediaStats(ctx context.Context, s *ipc.MediaSt
 		a.Params.SetInputVideoStats(videoStats)
 	}
 
+	LogMediaStats(s, a.Params.GetLogger())
+
 	return nil
+}
+
+func LogMediaStats(s *ipc.MediaStats, logger logger.Logger) {
+	for k, v := range s.TrackStats {
+		logger.Infow("track stats update", "name", k, "currentBitrate", v.CurrentBitrate, "averageBitrate", v.AverageBitrate, "jitter", v.Jitter)
+	}
 }

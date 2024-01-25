@@ -43,6 +43,7 @@ const (
 type MediaSink interface {
 	PushSample(s *media.Sample, ts time.Duration) error
 	Close() error
+	SetStatsGatherer(g *stats.LocalMediaStatsGatherer)
 }
 
 type whipTrackHandler struct {
@@ -111,9 +112,24 @@ func (t *whipTrackHandler) Start(onDone func(err error)) (err error) {
 
 func (t *whipTrackHandler) SetMediaTrackStatsGatherer(stats *stats.MediaTrackStatGatherer) {
 	t.statsLock.Lock()
-	defer t.statsLock.Unlock()
 
-	t.trackStats = stats
+	var t string
+
+	switch t.remoteTrack.Kind() {
+	case webrtc.RTPCodecTypeAudio:
+		t = stats.InputAudio
+	case webrtc.RTPCodecTypeVideo:
+		t = stats.InputVideo
+	default:
+		t = "input.unknown"
+	}
+
+	g := st.RegisterTrackStats(t)
+	t.trackStats = g
+
+	t.statsLock.Unlock()
+
+	t.mediaSink.SetStatsGatherer(g)
 }
 
 func (t *whipTrackHandler) Close() {

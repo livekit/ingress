@@ -10,6 +10,10 @@ import (
 	morestats "github.com/aclements/go-moremath/stats"
 )
 
+const (
+	maxJitterStatsLen = 100_000
+)
+
 type MediaTrackStatGatherer struct {
 	lock sync.Mutex
 
@@ -24,8 +28,6 @@ type MediaTrackStatGatherer struct {
 	lastPacketTime     time.Time
 	lastPacketInterval time.Duration
 	jitter             morestats.Sample
-
-	stats *ipc.TrackStats
 }
 
 func NewMediaTrackStatGatherer(path string) *MediaTrackStatGatherer {
@@ -55,7 +57,9 @@ func (g *MediaTrackStatGatherer) MediaReceived(size int64) {
 	if g.lastPacketInterval != 0 {
 		jitter := packetInterval - g.lastPacketInterval
 
-		g.jitter.Xs = append(g.jitter.Xs, math.Abs(float64(jitter)/float64(time.Millisecond)))
+		if len(g.jitter.Xs) < maxJitterStatsLen {
+			g.jitter.Xs = append(g.jitter.Xs, math.Abs(float64(jitter)/float64(time.Millisecond)))
+		}
 	}
 
 	g.lastPacketInterval = packetInterval
