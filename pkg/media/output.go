@@ -27,6 +27,7 @@ import (
 	"github.com/pion/webrtc/v3/pkg/media/h264reader"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -44,10 +45,11 @@ type Output struct {
 	bin    *gst.Bin
 	logger logger.Logger
 
-	elements   []*gst.Element
-	enc        *gst.Element
-	sink       *app.Sink
-	outputSync *utils.TrackOutputSynchronizer
+	elements           []*gst.Element
+	enc                *gst.Element
+	sink               *app.Sink
+	outputSync         *utils.TrackOutputSynchronizer
+	trackStatsGatherer *stats.MediaTrackStatGatherer
 
 	samples chan *sample
 	closed  core.Fuse
@@ -72,13 +74,15 @@ type AudioOutput struct {
 	codec livekit.AudioCodec
 }
 
-func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *utils.TrackOutputSynchronizer) (*VideoOutput, error) {
+func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *utils.TrackOutputSynchronizer, statsGatherer *stats.LocalMediaStatsGatherer) (*VideoOutput, error) {
 	e, err := newVideoOutput(codec, outputSync)
 	if err != nil {
 		return nil, err
 	}
 
 	e.logger = logger.GetLogger().WithValues("kind", "video", "layer", layer.Quality.String())
+
+	e.trackStatsGatherer = statsGatherer.RegisterTrackStats(fmt.Sprintf("%s.%s", stats.OutputVideo, layer.Quality.String()))
 
 	threadCount := getVideoEncoderThreadCount(layer)
 
@@ -217,13 +221,15 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 	return e, nil
 }
 
-func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *utils.TrackOutputSynchronizer) (*AudioOutput, error) {
+func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *utils.TrackOutputSynchronizer, statsGatherer *stats.LocalMediaStatsGatherer) (*AudioOutput, error) {
 	e, err := newAudioOutput(options.AudioCodec, outputSync)
 	if err != nil {
 		return nil, err
 	}
 
 	e.logger = logger.GetLogger().WithValues("kind", "audio")
+
+	e.trackStatsGatherer = statsGatherer.RegisterTrackStats(stats.OutputAudio)
 
 	audioConvert, err := gst.NewElement("audioconvert")
 	if err != nil {
@@ -440,6 +446,7 @@ func (e *Output) NextSample(ctx context.Context) (media.Sample, error) {
 	for {
 		select {
 		case s = <-e.samples:
+			e.trackStatsGatherer.MediaReceived(int64(len(s.s.Data)))
 		case <-e.closed.Watch():
 		case <-ctx.Done():
 		}

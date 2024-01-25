@@ -14,8 +14,10 @@ import (
 )
 
 const (
-	InputAudio = "input.audio"
-	InputVideo = "input.video"
+	InputAudio  = "input.audio"
+	InputVideo  = "input.video"
+	OutputAudio = "output.audio"
+	OutputVideo = "output.video"
 )
 
 type MediaStatsReporter struct {
