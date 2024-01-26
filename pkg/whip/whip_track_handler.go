@@ -57,8 +57,10 @@ type whipTrackHandler struct {
 	writePLI     func(ssrc webrtc.SSRC)
 	onRTCP       func(packet rtcp.Packet)
 
-	statsLock  sync.Mutex
-	trackStats *stats.MediaTrackStatGatherer
+	statsLock   sync.Mutex
+	trackStats  *stats.MediaTrackStatGatherer
+	lastSn      uint16
+	lastSnValid bool
 
 	firstPacket sync.Once
 	fuse        core.Fuse
@@ -212,6 +214,17 @@ func (t *whipTrackHandler) processRTPPacket() error {
 			default:
 				return err
 			}
+
+			if t.lastSnValid && t.lastSn+1 != pkt.SequenceNumber {
+				gap := pkt.SequenceNumber - t.lastSn
+				if t.lastSn-pkt.SequenceNumber < gap {
+					gap = t.lastSn - pkt.SequenceNumber
+				}
+				t.trackStats.PacketLost(int64(gap - 1))
+			}
+
+			t.lastSnValid = true
+			t.lastSn = pkt.SequenceNumber
 
 			if len(pkt.Payload) <= 2 {
 				// Padding

@@ -435,6 +435,7 @@ func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 	case <-e.closed.Watch():
 		return io.EOF
 	default:
+		e.trackStatsGatherer.PacketLost(1)
 		// drop the sample if the output queue is full. This is needed if we are reconnecting.
 		return nil
 	}
