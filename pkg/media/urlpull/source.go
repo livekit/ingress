@@ -70,7 +70,7 @@ func NewURLSource(ctx context.Context, p *params.Params) (*URLSource, error) {
 			return nil, err
 		}
 	} else {
-		return nil, errors.ErrUnsupportedEncodeFormat
+		return nil, errors.ErrUnsupportedURLFormat
 	}
 
 	queue, err := gst.NewElement("queue2")
