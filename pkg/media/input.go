@@ -232,25 +232,29 @@ func (i *Input) addBitrateProbe(kind types.StreamKind) {
 
 	for _, pad := range pads {
 		caps := pad.GetCurrentCaps()
-		gstStruct := caps.GetStructureAt(0)
-		padKind := getKindFromGstMimeType(gstStruct)
+		if caps != nil && caps.GetSize() > 0 {
+			gstStruct := caps.GetStructureAt(0)
+			padKind := getKindFromGstMimeType(gstStruct)
 
-		if padKind == kind {
-			g := i.trackStatsGatherer[kind]
+			if padKind == kind {
+				g := i.trackStatsGatherer[kind]
 
-			pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
-				buffer := info.GetBuffer()
-				if buffer == nil {
+				pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+					buffer := info.GetBuffer()
+					if buffer == nil {
+						return gst.PadProbeOK
+					}
+
+					size := buffer.GetSize()
+					g.MediaReceived(size)
+
 					return gst.PadProbeOK
-				}
+				})
 
-				size := buffer.GetSize()
-				g.MediaReceived(size)
-
-				return gst.PadProbeOK
-			})
-
-			return
+				return
+			}
+		} else {
+			logger.Debugw("could not retrieve multiqueue pad caps", "error", err)
 		}
 	}
 
