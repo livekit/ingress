@@ -16,6 +16,7 @@ package urlpull
 
 import (
 	"context"
+	"strings"
 
 	"github.com/go-gst/go-gst/gst"
 
@@ -46,14 +47,30 @@ type URLSource struct {
 func NewURLSource(ctx context.Context, p *params.Params) (*URLSource, error) {
 	bin := gst.NewBin("input")
 
-	elem, err := gst.NewElement("souphttpsrc")
-	if err != nil {
-		return nil, err
-	}
+	var elem *gst.Element
+	var err error
+	if strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://") {
+		elem, err = gst.NewElement("souphttpsrc")
+		if err != nil {
+			return nil, err
+		}
 
-	err = elem.SetProperty("location", p.Url)
-	if err != nil {
-		return nil, err
+		err = elem.SetProperty("location", p.Url)
+		if err != nil {
+			return nil, err
+		}
+
+	} else if strings.HasPrefix(p.Url, "srt://") {
+		elem, err = gst.NewElement("srtclientsrc")
+		if err != nil {
+			return nil, err
+		}
+		err = elem.SetProperty("uri", p.Url)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		return nil, errors.ErrUnsupportedEncodeFormat
 	}
 
 	queue, err := gst.NewElement("queue2")
@@ -61,9 +78,11 @@ func NewURLSource(ctx context.Context, p *params.Params) (*URLSource, error) {
 		return nil, err
 	}
 
-	err = queue.SetProperty("use-buffering", true)
-	if err != nil {
-		return nil, err
+	if strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://") {
+		err = queue.SetProperty("use-buffering", true)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	err = bin.AddMany(elem, queue)
