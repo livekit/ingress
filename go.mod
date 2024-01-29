@@ -5,7 +5,7 @@ go 1.21
 toolchain go1.21.4
 
 require (
-	github.com/Eyevinn/mp4ff v0.41.0
+	github.com/Eyevinn/mp4ff v0.42.0
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
 	github.com/frostbyte73/core v0.0.9
 	github.com/go-gst/go-glib v0.0.0-20231207075824-6d6aaf082c65
@@ -29,7 +29,7 @@ require (
 	github.com/yutopp/go-flv v0.3.1
 	go.uber.org/atomic v1.11.0
 	golang.org/x/image v0.15.0
-	google.golang.org/grpc v1.60.1
+	google.golang.org/grpc v1.61.0
 	google.golang.org/protobuf v1.32.0
 	gopkg.in/yaml.v3 v3.0.1
 )
