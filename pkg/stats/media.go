@@ -136,12 +136,12 @@ func (l *LocalMediaStatsGatherer) GatherStats(ctx context.Context) (*ipc.MediaSt
 func (a *LocalStatsUpdater) UpdateMediaStats(ctx context.Context, s *ipc.MediaStats) error {
 	audioStats, ok := s.TrackStats[InputAudio]
 	if ok {
-		a.Params.SetInputAudioBitrate(audioStats.AverageBitrate, audioStats.CurrentBitrate)
+		a.Params.SetInputAudioStats(audioStats)
 	}
 
 	videoStats, ok := s.TrackStats[InputVideo]
 	if ok {
-		a.Params.SetInputVideoBitrate(videoStats.AverageBitrate, videoStats.CurrentBitrate)
+		a.Params.SetInputVideoStats(videoStats)
 	}
 
 	return nil
