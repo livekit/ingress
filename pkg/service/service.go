@@ -81,7 +81,7 @@ type Service struct {
 	shutdown core.Fuse
 }
 
-func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, whipSrv *whip.WHIPServer) *Service {
+func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, whipSrv *whip.WHIPServer, cf CmdFactory) *Service {
 	monitor := stats.NewMonitor()
 	sm := NewSessionManager(monitor)
 
@@ -89,7 +89,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		conf:            conf,
 		monitor:         monitor,
 		sm:              sm,
-		manager:         NewProcessManager(sm),
+		manager:         NewProcessManager(sm, cf),
 		whipSrv:         whipSrv,
 		psrpcClient:     psrpcClient,
 		bus:             bus,
