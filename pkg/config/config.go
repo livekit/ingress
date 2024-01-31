@@ -160,7 +160,7 @@ func (c *Config) InitLogger(values ...interface{}) error {
 		return err
 	}
 
-	values = append(c.GetLoggerValues(), values...)
+	values = append(c.getLoggerValues(), values...)
 	l := zl.WithValues(values...)
 	logger.SetLogger(l, c.ServiceName)
 	lksdk.SetLogger(l)
