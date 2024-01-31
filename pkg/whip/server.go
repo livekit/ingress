@@ -213,7 +213,7 @@ func (s *WHIPServer) handleError(err error, w http.ResponseWriter) {
 	switch {
 	case errors.As(err, &psrpcErr):
 		w.WriteHeader(psrpcErr.ToHttp())
-		w.Write([]byte(psrpcErr.Error()))
+		_, _ = w.Write([]byte(psrpcErr.Error()))
 	case err == nil:
 		// Nothing, we already responded
 	default:
@@ -235,9 +235,9 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 		return err
 	}
 
-	logger.Debugw("new whip request", "streamKey", streamKey, "sdpOffer", string(sdpOffer.Bytes()))
+	logger.Debugw("new whip request", "streamKey", streamKey, "sdpOffer", sdpOffer.String())
 
-	resourceId, sdp, err := s.createStream(streamKey, string(sdpOffer.Bytes()))
+	resourceId, sdp, err := s.createStream(streamKey, sdpOffer.String())
 	if err != nil {
 		return err
 	}
@@ -246,7 +246,7 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Content-Type", "application/sdp")
 	w.Header().Set("Location", fmt.Sprintf("/%s/%s/%s", app, streamKey, resourceId))
 	w.WriteHeader(http.StatusCreated)
-	w.Write([]byte(sdp))
+	_, _ = w.Write([]byte(sdp))
 
 	return nil
 }

@@ -152,14 +152,12 @@ func (t *whipTrackHandler) startRTPReceiver(onDone func(err error)) {
 			select {
 			case <-t.fuse.Watch():
 				t.logger.Debugw("stopping rtp receiver")
-				err = nil
 				return
 			default:
 				err = t.processRTPPacket()
 				switch err {
 				case nil:
 				case io.EOF:
-					err = nil
 					return
 				default:
 					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
@@ -285,7 +283,7 @@ func (t *whipTrackHandler) mediaWriterWorker(onDone func(err error)) {
 			case nil, errors.ErrPrerollBufferReset:
 				// continue
 			case io.EOF:
-				err = nil
+				err = nil //nolint
 				return
 			default:
 				t.logger.Warnw("error writing media", err)
@@ -316,7 +314,6 @@ func (t *whipTrackHandler) startRTCPReceiver() {
 				case err == nil:
 					// continue
 				case err == io.EOF:
-					err = nil
 					return
 				default:
 					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
