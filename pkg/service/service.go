@@ -47,13 +47,14 @@ import (
 const shutdownTimer = time.Second * 5
 
 type publishRequest struct {
-	streamKey  string
-	resourceId string
-	inputType  livekit.IngressInput
-	info       *livekit.IngressInfo
-	wsUrl      string
-	token      string
-	result     chan<- publishResponse
+	streamKey     string
+	resourceId    string
+	inputType     livekit.IngressInput
+	info          *livekit.IngressInfo
+	wsUrl         string
+	token         string
+	loggingFields map[string]string
+	result        chan<- publishResponse
 }
 
 type publishResponse struct {
@@ -252,12 +253,13 @@ func (s *Service) HandleURLPublishRequest(resourceId string, req *rpc.StartIngre
 
 	res := make(chan publishResponse)
 	r := publishRequest{
-		resourceId: resourceId,
-		inputType:  livekit.IngressInput_URL_INPUT,
-		info:       req.Info,
-		wsUrl:      req.WsUrl,
-		token:      req.Token,
-		result:     res,
+		resourceId:    resourceId,
+		inputType:     livekit.IngressInput_URL_INPUT,
+		info:          req.Info,
+		wsUrl:         req.WsUrl,
+		token:         req.Token,
+		loggingFields: req.LoggingFields,
+		result:        res,
 	}
 
 	var pRes publishResponse
@@ -279,7 +281,7 @@ func (s *Service) HandleURLPublishRequest(resourceId string, req *rpc.StartIngre
 	return pRes.params.IngressInfo, nil
 }
 
-func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string) (*params.Params, error) {
+func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string, loggingFields map[string]string) (*params.Params, error) {
 	info.State = &livekit.IngressState{
 		Status:     livekit.IngressState_ENDPOINT_BUFFERING,
 		StartedAt:  time.Now().UnixNano(),
@@ -295,7 +297,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inp
 	}
 
 	// This validates the ingress info
-	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, "", nil)
+	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, "", loggingFields, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -384,6 +386,7 @@ func (s *Service) Run() error {
 				info := req.info
 				wsUrl := req.wsUrl
 				token := req.token
+				loggingFields := req.loggingFields
 
 				if info == nil {
 					var resp *rpc.GetIngressInfoResponse
@@ -398,9 +401,10 @@ func (s *Service) Run() error {
 					info = resp.Info
 					wsUrl = resp.WsUrl
 					token = resp.Token
+					loggingFields = resp.LoggingFields
 				}
 
-				p, err = s.handleNewPublisher(ctx, req.resourceId, req.inputType, info, wsUrl, token)
+				p, err = s.handleNewPublisher(ctx, req.resourceId, req.inputType, info, wsUrl, token, loggingFields)
 				if p != nil {
 					info = p.IngressInfo
 				}

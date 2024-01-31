@@ -160,7 +160,7 @@ func (c *Config) InitLogger(values ...interface{}) error {
 		return err
 	}
 
-	values = append(c.GetLoggerValues(), values...)
+	values = append(c.getLoggerValues(), values...)
 	l := zl.WithValues(values...)
 	logger.SetLogger(l, c.ServiceName)
 	lksdk.SetLogger(l)
@@ -169,7 +169,7 @@ func (c *Config) InitLogger(values ...interface{}) error {
 }
 
 // To use with zap logger
-func (c *Config) GetLoggerValues() []interface{} {
+func (c *Config) getLoggerValues() []interface{} {
 	return []interface{}{"nodeID", c.NodeID}
 }
 
@@ -178,7 +178,7 @@ func (c *Config) GetLoggerFields() logrus.Fields {
 	fields := logrus.Fields{
 		"logger": c.ServiceName,
 	}
-	v := c.GetLoggerValues()
+	v := c.getLoggerValues()
 	for i := 0; i < len(v); i += 2 {
 		fields[v[i].(string)] = v[i+1]
 	}
