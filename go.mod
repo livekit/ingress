@@ -4,6 +4,8 @@ go 1.21
 
 toolchain go1.21.4
 
+replace github.com/livekit/protocol => ../protocol
+
 require (
 	github.com/Eyevinn/mp4ff v0.42.0
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794

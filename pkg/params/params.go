@@ -52,6 +52,9 @@ type Params struct {
 	WsUrl string
 	Token string
 
+	// extra logging fields
+	LoggingFields map[string]string
+
 	// relay info
 	RelayUrl   string
 	RelayToken string
@@ -65,8 +68,8 @@ type WhipExtraParams struct {
 	MimeTypes map[types.StreamKind]string `json:"mime_types"`
 }
 
-func InitLogger(conf *config.Config, info *livekit.IngressInfo) error {
-	fields := getLoggerFields(info)
+func InitLogger(conf *config.Config, info *livekit.IngressInfo, loggingFields map[string]string) error {
+	fields := getLoggerFields(info, loggingFields)
 
 	err := conf.InitLogger(fields...)
 	if err != nil {
@@ -75,7 +78,7 @@ func InitLogger(conf *config.Config, info *livekit.IngressInfo) error {
 
 	return nil
 }
-func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, relayToken string, ep any) (*Params, error) {
+func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, relayToken string, loggingFields map[string]string, ep any) (*Params, error) {
 	var err error
 
 	// The state should have been created by the service, before launching the hander, but be defensive here.
@@ -95,7 +98,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		relayToken = utils.NewGuid("")
 	}
 
-	l := logger.GetLogger().WithValues(getLoggerFields(info)...)
+	l := logger.GetLogger().WithValues(getLoggerFields(info, loggingFields)...)
 
 	tmpDir := path.Join(os.TempDir(), info.State.ResourceId)
 
@@ -154,8 +157,13 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	return p, nil
 }
 
-func getLoggerFields(info *livekit.IngressInfo) []interface{} {
-	return []interface{}{"ingressID", info.IngressId, "resourceID", info.State.ResourceId, "roomName", info.RoomName, "participantIdentity", info.ParticipantIdentity}
+func getLoggerFields(info *livekit.IngressInfo, loggingFields map[string]string) []interface{} {
+	fields := []interface{}{"ingressID", info.IngressId, "resourceID", info.State.ResourceId, "roomName", info.RoomName, "participantIdentity", info.ParticipantIdentity}
+	for k, v := range loggingFields {
+		fields = append(fields, k, v)
+	}
+
+	return fields
 }
 
 func getRTMPRelayUrl(conf *config.Config, resourceId string) string {

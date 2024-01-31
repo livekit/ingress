@@ -38,7 +38,7 @@ func RunRTMPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPs
 	rtmpsrv := rtmp.NewRTMPServer()
 	relay := service.NewRelay(rtmpsrv, nil)
 
-	svc := service.NewService(conf.Config, psrpcClient, bus, nil, service.NewCmdFactory())
+	svc := service.NewService(conf.Config, psrpcClient, bus, nil)
 	go func() {
 		err := svc.Run()
 		require.NoError(t, err)

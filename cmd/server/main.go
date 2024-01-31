@@ -135,7 +135,7 @@ func runService(c *cli.Context) error {
 		whipsrv = whip.NewWHIPServer(psrpcWHIPClient)
 	}
 
-	svc := service.NewService(conf, psrpcClient, bus, whipsrv, service.NewCmdFactory())
+	svc := service.NewService(conf, psrpcClient, bus, whipsrv)
 
 	_, err = rpc.NewIngressInternalServer(svc, bus)
 	if err != nil {
@@ -251,7 +251,7 @@ func runHandler(c *cli.Context) error {
 
 	var handler interface {
 		Kill()
-		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, extraParams any)
+		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, loggingFields map[string]string, extraParams any)
 	}
 
 	bus := psrpc.NewRedisMessageBus(rc)
@@ -281,7 +281,15 @@ func runHandler(c *cli.Context) error {
 		wsUrl = c.String("ws-url")
 	}
 
-	handler.HandleIngress(ctx, info, wsUrl, token, c.String("relay-token"), ep)
+	var loggingFields map[string]string
+	if c.String("logging-fields") != "" {
+		err = json.Unmarshal([]byte(c.String("logging-fields")), &loggingFields)
+		if err != nil {
+			return err
+		}
+	}
+
+	handler.HandleIngress(ctx, info, wsUrl, token, c.String("relay-token"), loggingFields, ep)
 	return nil
 }
 

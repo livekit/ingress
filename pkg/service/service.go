@@ -81,7 +81,7 @@ type Service struct {
 	shutdown core.Fuse
 }
 
-func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, whipSrv *whip.WHIPServer, cf CmdFactory) *Service {
+func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, whipSrv *whip.WHIPServer) *Service {
 	monitor := stats.NewMonitor()
 	sm := NewSessionManager(monitor)
 
@@ -89,7 +89,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		conf:            conf,
 		monitor:         monitor,
 		sm:              sm,
-		manager:         NewProcessManager(sm, cf),
+		manager:         NewProcessManager(sm),
 		whipSrv:         whipSrv,
 		psrpcClient:     psrpcClient,
 		bus:             bus,
@@ -295,7 +295,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inp
 	}
 
 	// This validates the ingress info
-	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, "", nil)
+	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, "", nil, nil)
 	if err != nil {
 		return nil, err
 	}

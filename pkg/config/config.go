@@ -68,9 +68,8 @@ type ServiceConfig struct {
 
 type InternalConfig struct {
 	// internal
-	ServiceName   string   `yaml:"service_name"`
-	NodeID        string   `yaml:"node_id"` // Do not provide, will be overwritten
-	LoggingFields []string `yaml:"logging_fields"`
+	ServiceName string `yaml:"service_name"`
+	NodeID      string `yaml:"node_id"` // Do not provide, will be overwritten
 }
 
 type CPUCostConfig struct {
@@ -148,8 +147,6 @@ func (conf *Config) Init() error {
 		return err
 	}
 
-	conf.LoggingFields = conf.getLoggerValues()
-
 	if err := conf.InitLogger(); err != nil {
 		return err
 	}
@@ -163,9 +160,7 @@ func (c *Config) InitLogger(values ...interface{}) error {
 		return err
 	}
 
-	for _, f := range c.LoggingFields {
-		values = append(values, f)
-	}
+	values = append(c.GetLoggerValues(), values...)
 	l := zl.WithValues(values...)
 	logger.SetLogger(l, c.ServiceName)
 	lksdk.SetLogger(l)
@@ -174,8 +169,8 @@ func (c *Config) InitLogger(values ...interface{}) error {
 }
 
 // To use with zap logger
-func (c *Config) getLoggerValues() []string {
-	return []string{"nodeID", c.NodeID}
+func (c *Config) getLoggerValues() []interface{} {
+	return []interface{}{"nodeID", c.NodeID}
 }
 
 // To use with logrus
@@ -183,9 +178,9 @@ func (c *Config) GetLoggerFields() logrus.Fields {
 	fields := logrus.Fields{
 		"logger": c.ServiceName,
 	}
-	v := c.LoggingFields
+	v := c.getLoggerValues()
 	for i := 0; i < len(v); i += 2 {
-		fields[v[i]] = v[i+1]
+		fields[v[i].(string)] = v[i+1]
 	}
 
 	return fields
