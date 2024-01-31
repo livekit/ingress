@@ -70,6 +70,9 @@ func main() {
 						Name: "ws-url",
 					},
 					&cli.StringFlag{
+						Name: "logging-fields",
+					},
+					&cli.StringFlag{
 						Name: "extra-params",
 					},
 				},
