@@ -214,13 +214,13 @@ func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStats
 		return &google_protobuf2.Empty{}, nil
 	}
 
-	ste := in.Stats.TrackStats[stats.InputAudio]
-	if ste != nil {
-		h.pipeline.SetInputAudioStats(ste)
+	lsu := &stats.LocalStatsUpdater{
+		Params: h.pipeline.Params,
 	}
-	ste = in.Stats.TrackStats[stats.InputVideo]
-	if ste != nil {
-		h.pipeline.SetInputVideoStats(ste)
+
+	err := lsu.UpdateMediaStats(ctx, in.Stats)
+	if err != nil {
+		return nil, err
 	}
 
 	return &google_protobuf2.Empty{}, nil

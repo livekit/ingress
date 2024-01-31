@@ -75,7 +75,7 @@ func New(ctx context.Context, conf *config.Config, params *params.Params, g *sta
 		return nil, err
 	}
 
-	sink, err := NewWebRTCSink(ctx, params)
+	sink, err := NewWebRTCSink(ctx, params, g)
 	if err != nil {
 		return nil, err
 	}

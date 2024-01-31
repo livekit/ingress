@@ -279,7 +279,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 			defer func() {
 				stats := ready(mimeTypes, err)
 				if stats != nil {
-					h.SetMediaStatsHandler(stats)
+					h.SetMediaStatsGatherer(stats)
 				}
 
 				if err != nil {

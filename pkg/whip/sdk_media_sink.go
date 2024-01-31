@@ -19,6 +19,7 @@ import (
 	"context"
 	"io"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Eyevinn/mp4ff/avc"
@@ -30,6 +31,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
@@ -42,12 +44,13 @@ var (
 )
 
 type SDKMediaSink struct {
-	logger     logger.Logger
-	params     *params.Params
-	writePLI   func()
-	track      *webrtc.TrackRemote
-	outputSync *utils.TrackOutputSynchronizer
-	sdkOutput  *lksdk_output.LKSDKOutput
+	logger             logger.Logger
+	params             *params.Params
+	writePLI           func()
+	track              *webrtc.TrackRemote
+	outputSync         *utils.TrackOutputSynchronizer
+	trackStatsGatherer atomic.Pointer[stats.MediaTrackStatGatherer]
+	sdkOutput          *lksdk_output.LKSDKOutput
 
 	readySamples     chan *sample
 	fuse             core.Fuse
@@ -117,9 +120,30 @@ func (sp *SDKMediaSink) NextSample(ctx context.Context) (media.Sample, error) {
 		case <-ctx.Done():
 			return media.Sample{}, io.EOF
 		case s := <-sp.readySamples:
+			g := sp.trackStatsGatherer.Load()
+			if g != nil {
+				g.MediaReceived(int64(len(s.s.Data)))
+			}
+
 			return *s.s, nil
 		}
 	}
+}
+
+func (sp *SDKMediaSink) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) {
+	var path string
+	switch sp.track.Kind() {
+	case webrtc.RTPCodecTypeAudio:
+		path = stats.OutputAudio
+	case webrtc.RTPCodecTypeVideo:
+		path = stats.OutputVideo
+	default:
+		path = "output.unknown"
+	}
+
+	g := st.RegisterTrackStats(path)
+
+	sp.trackStatsGatherer.Store(g)
 }
 
 func (sp *SDKMediaSink) OnBind() error {

@@ -60,7 +60,11 @@ message MediaStats {
 message TrackStats {
   uint32 average_bitrate = 1;
   uint32 current_bitrate = 2;
-  JitterStats jitter = 3;
+  uint64 total_packets = 4;
+  uint64 current_packets = 5;
+  double total_loss_rate = 6;
+  double current_loss_rate = 7;
+  JitterStats jitter = 8;
 }
 
 message JitterStats {

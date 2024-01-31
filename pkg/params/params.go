@@ -348,8 +348,6 @@ func (p *Params) SetInputAudioStats(st *ipc.TrackStats) {
 	p.State.Audio.AverageBitrate = st.AverageBitrate
 
 	p.stateLock.Unlock()
-
-	p.logger.Infow("audio input stats update", "averageBitrate", st.AverageBitrate, "currentBitrate", st.CurrentBitrate, "jitter", st.Jitter)
 }
 
 func (p *Params) SetInputVideoStats(st *ipc.TrackStats) {
@@ -362,8 +360,6 @@ func (p *Params) SetInputVideoStats(st *ipc.TrackStats) {
 	p.State.Video.AverageBitrate = st.AverageBitrate
 
 	p.stateLock.Unlock()
-
-	p.logger.Infow("video input stats update", "averageBitrate", st.AverageBitrate, "currentBitrate", st.CurrentBitrate, "jitter", st.Jitter)
 }
 
 func (p *Params) SendStateUpdate(ctx context.Context) {

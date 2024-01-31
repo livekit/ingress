@@ -14,8 +14,10 @@ import (
 )
 
 const (
-	InputAudio = "input.audio"
-	InputVideo = "input.video"
+	InputAudio  = "input.audio"
+	InputVideo  = "input.video"
+	OutputAudio = "output.audio"
+	OutputVideo = "output.video"
 )
 
 type MediaStatsReporter struct {
@@ -144,5 +146,13 @@ func (a *LocalStatsUpdater) UpdateMediaStats(ctx context.Context, s *ipc.MediaSt
 		a.Params.SetInputVideoStats(videoStats)
 	}
 
+	LogMediaStats(s, a.Params.GetLogger())
+
 	return nil
+}
+
+func LogMediaStats(s *ipc.MediaStats, logger logger.Logger) {
+	for k, v := range s.TrackStats {
+		logger.Infow("track stats update", "name", k, "currentBitrate", v.CurrentBitrate, "averageBitrate", v.AverageBitrate, "currentPackets", v.CurrentPackets, "totalPacket", v.TotalPackets, "currentLossRate", v.CurrentLossRate, "totalLossRate", v.TotalLossRate, "jitter", v.Jitter)
+	}
 }
