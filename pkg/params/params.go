@@ -149,6 +149,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		Token:                token,
 		WsUrl:                wsUrl,
 		RelayToken:           relayToken,
+		LoggingFields:        loggingFields,
 		RelayUrl:             relayUrl,
 		TmpDir:               tmpDir,
 		ExtraParams:          ep,
