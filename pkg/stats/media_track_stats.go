@@ -108,6 +108,17 @@ func (g *MediaTrackStatGatherer) UpdateStats() *ipc.TrackStats {
 	g.jitter.Xs = nil
 	g.jitter.Sorted = false
 
+	jitter := g.jitter.Sort() // To make quantile computation faster
+
+	jitterStats := &ipc.JitterStats{
+		P50: jitter.Quantile(0.5),
+		P90: jitter.Quantile(0.9),
+		P99: jitter.Quantile(0.99),
+	}
+
+	g.jitter.Xs = nil
+	g.jitter.Sorted = false
+
 	return &ipc.TrackStats{
 		AverageBitrate:  averageBps,
 		CurrentBitrate:  currentBps,
