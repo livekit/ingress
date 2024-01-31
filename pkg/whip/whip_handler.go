@@ -180,21 +180,13 @@ loop:
 	return mimeTypes, nil
 }
 
-func (h *whipHandler) SetMediaStatsHandler(st *stats.LocalMediaStatsGatherer) {
+func (h *whipHandler) SetMediaStatsGatherer(st *stats.LocalMediaStatsGatherer) {
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
 	h.stats = st
 
-	for k, th := range h.trackHandlers {
-		var t string
-		if k == types.Audio {
-			t = stats.InputAudio
-		} else {
-			t = stats.InputVideo
-		}
-
-		g := st.RegisterTrackStats(t)
-		th.SetMediaTrackStatsGatherer(g)
+	for _, th := range h.trackHandlers {
+		th.SetMediaTrackStatsGatherer(st)
 	}
 }
 

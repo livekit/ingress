@@ -43,6 +43,7 @@ const (
 type MediaSink interface {
 	PushSample(s *media.Sample, ts time.Duration) error
 	Close() error
+	SetStatsGatherer(g *stats.LocalMediaStatsGatherer)
 }
 
 type whipTrackHandler struct {
@@ -56,8 +57,10 @@ type whipTrackHandler struct {
 	writePLI     func(ssrc webrtc.SSRC)
 	onRTCP       func(packet rtcp.Packet)
 
-	statsLock  sync.Mutex
-	trackStats *stats.MediaTrackStatGatherer
+	statsLock   sync.Mutex
+	trackStats  *stats.MediaTrackStatGatherer
+	lastSn      uint16
+	lastSnValid bool
 
 	firstPacket sync.Once
 	fuse        core.Fuse
@@ -109,11 +112,26 @@ func (t *whipTrackHandler) Start(onDone func(err error)) (err error) {
 	return nil
 }
 
-func (t *whipTrackHandler) SetMediaTrackStatsGatherer(stats *stats.MediaTrackStatGatherer) {
+func (t *whipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaStatsGatherer) {
 	t.statsLock.Lock()
-	defer t.statsLock.Unlock()
 
-	t.trackStats = stats
+	var path string
+
+	switch t.remoteTrack.Kind() {
+	case webrtc.RTPCodecTypeAudio:
+		path = stats.InputAudio
+	case webrtc.RTPCodecTypeVideo:
+		path = stats.InputVideo
+	default:
+		path = "input.unknown"
+	}
+
+	g := st.RegisterTrackStats(path)
+	t.trackStats = g
+
+	t.statsLock.Unlock()
+
+	t.mediaSink.SetStatsGatherer(st)
 }
 
 func (t *whipTrackHandler) Close() {
@@ -196,6 +214,17 @@ func (t *whipTrackHandler) processRTPPacket() error {
 			default:
 				return err
 			}
+
+			if t.lastSnValid && t.lastSn+1 != pkt.SequenceNumber {
+				gap := pkt.SequenceNumber - t.lastSn
+				if t.lastSn-pkt.SequenceNumber < gap {
+					gap = t.lastSn - pkt.SequenceNumber
+				}
+				t.trackStats.PacketLost(int64(gap - 1))
+			}
+
+			t.lastSnValid = true
+			t.lastSn = pkt.SequenceNumber
 
 			if len(pkt.Payload) <= 2 {
 				// Padding
