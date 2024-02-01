@@ -416,12 +416,11 @@ func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 		return nil
 	}
 
+	// WriteSample seems to return successfully even if the Peer Connection disconnected.
+	// We need to return success to the caller even if the PC is disconnected to allow for reconnections
 	err = e.localTrack.WriteSample(*s, nil)
 	if err != nil {
-		fmt.Println("WRITE ERROR")
-		e.trackStatsGatherer.PacketLost(1)
-
-		return nil
+		return err
 	}
 
 	e.trackStatsGatherer.MediaReceived(int64(len(s.Data)))

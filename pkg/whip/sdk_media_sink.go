@@ -275,13 +275,11 @@ func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error 
 		return nil
 	}
 
+	// WriteSample seems to return successfully even if the Peer Connection disconnected.
+	// We need to return success to the caller even if the PC is disconnected to allow for reconnections
 	err = localTrack.WriteSample(*s, nil)
 	if err != nil {
-		if g != nil {
-			g.PacketLost(1)
-		}
-
-		return nil
+		return err
 	}
 
 	if g != nil {
