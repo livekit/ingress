@@ -100,9 +100,8 @@ func (sp *SDKMediaSink) AddTrack(quality livekit.VideoQuality) {
 	defer sp.tracksLock.Unlock()
 
 	sp.tracks = append(sp.tracks, &SDKMediaSinkTrack{
-		readySamples: make(chan *sample, 15),
-		sink:         sp,
-		quality:      quality,
+		sink:    sp,
+		quality: quality,
 	})
 }
 
@@ -133,7 +132,7 @@ func (t *SDKMediaSinkTrack) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) 
 
 	g := st.RegisterTrackStats(path)
 
-	t.sink.trackStatsGatherer.Store(g)
+	t.trackStatsGatherer.Store(g)
 }
 
 func (sp *SDKMediaSink) Close() error {
@@ -150,7 +149,7 @@ func (sp *SDKMediaSink) ensureAudioTracksInitialized(s *media.Sample, t *SDKMedi
 
 	sp.logger.Infow("adding audio track", "stereo", stereo, "codec", sp.codecParameters.MimeType)
 	var err error
-	err, t.localTrack = sp.sdkOutput.AddAudioTrack(sp.codecParameters.MimeType, false, stereo)
+	t.localTrack, err = sp.sdkOutput.AddAudioTrack(sp.codecParameters.MimeType, false, stereo)
 	if err != nil {
 		return false, err
 	}
@@ -200,13 +199,13 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 		sp.params.SetInputVideoState(context.Background(), videoState, true)
 	}
 
-	tracks, pliHandlers, err := sp.sdkOutput.AddVideoTrack(sampleProviders, layers, sp.codecParameters.MimeType)
+	tracks, pliHandlers, err := sp.sdkOutput.AddVideoTrack(layers, sp.codecParameters.MimeType)
 	if err != nil {
 		return false, err
 	}
 
 	for i, t := range sp.tracks {
-		t.localTrack = t
+		t.localTrack = tracks[i]
 		pliHandlers[i].SetKeyFrameEmitter(t)
 	}
 
