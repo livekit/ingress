@@ -154,6 +154,9 @@ func (sp *SDKMediaSink) ensureAudioTracksInitialized(s *media.Sample, t *SDKMedi
 	if err != nil {
 		return false, err
 	}
+
+	sp.sdkOutput.AddOutputs(t)
+
 	sp.sinkInitialized = true
 	return sp.sinkInitialized, nil
 }
@@ -171,6 +174,7 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 	}
 
 	layers := []*livekit.VideoLayer{}
+	sbArray := []lksdk_output.SampleProvider{}
 
 	for _, track := range sp.tracks {
 		if track.width != 0 && track.height != 0 {
@@ -180,6 +184,7 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 				Quality: track.quality,
 			})
 		}
+		sbArray = append(sbArray, track)
 	}
 
 	// Simulcast
@@ -204,6 +209,8 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 	if err != nil {
 		return false, err
 	}
+
+	sp.sdkOutput.AddOutputs(sbArray...)
 
 	for i, t := range sp.tracks {
 		t.localTrack = tracks[i]
