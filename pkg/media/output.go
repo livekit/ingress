@@ -15,9 +15,9 @@
 package media
 
 import (
-	"context"
 	"fmt"
 	"io"
+	"sync/atomic"
 	"time"
 
 	"github.com/frostbyte73/core"
@@ -31,6 +31,7 @@ import (
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	lksdk "github.com/livekit/server-sdk-go"
 )
 
 const (
@@ -51,9 +52,9 @@ type Output struct {
 	outputSync         *utils.TrackOutputSynchronizer
 	trackStatsGatherer *stats.MediaTrackStatGatherer
 
-	samples chan *sample
-	closed  core.Fuse
-	flushed core.Fuse
+	localTrack atomic.Pointer[*lksdk.LocalTrack]
+
+	closed core.Fuse
 }
 
 type sample struct {
@@ -74,8 +75,8 @@ type AudioOutput struct {
 	codec livekit.AudioCodec
 }
 
-func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *utils.TrackOutputSynchronizer, statsGatherer *stats.LocalMediaStatsGatherer) (*VideoOutput, error) {
-	e, err := newVideoOutput(codec, outputSync)
+func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *utils.TrackOutputSynchronizer, localTrack *lksdk.LocalTrack, statsGatherer *stats.LocalMediaStatsGatherer) (*VideoOutput, error) {
+	e, err := newVideoOutput(codec, outputSync, localTrack)
 	if err != nil {
 		return nil, err
 	}
@@ -221,8 +222,8 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 	return e, nil
 }
 
-func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *utils.TrackOutputSynchronizer, statsGatherer *stats.LocalMediaStatsGatherer) (*AudioOutput, error) {
-	e, err := newAudioOutput(options.AudioCodec, outputSync)
+func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *utils.TrackOutputSynchronizer, track *lksdk.LocalTrack, statsGatherer *stats.LocalMediaStatsGatherer) (*AudioOutput, error) {
+	e, err := newAudioOutput(options.AudioCodec, outputSync, track)
 	if err != nil {
 		return nil, err
 	}
@@ -310,8 +311,8 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 	return e, nil
 }
 
-func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynchronizer) (*VideoOutput, error) {
-	e, err := newOutput(outputSync)
+func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynchronizer, localTrack *lksdk.LocalTrack) (*VideoOutput, error) {
+	e, err := newOutput(outputSync, localTrack)
 	if err != nil {
 		return nil, err
 	}
@@ -329,8 +330,8 @@ func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynch
 	return o, nil
 }
 
-func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynchronizer) (*AudioOutput, error) {
-	e, err := newOutput(outputSync)
+func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynchronizer, localTrack *lksdk.LocalTrack) (*AudioOutput, error) {
+	e, err := newOutput(outputSync, localTrack)
 	if err != nil {
 		return nil, err
 	}
@@ -348,7 +349,7 @@ func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynch
 	return o, nil
 }
 
-func newOutput(outputSync *utils.TrackOutputSynchronizer) (*Output, error) {
+func newOutput(outputSync *utils.TrackOutputSynchronizer, localTrack *lksdk.LocalTrack) (*Output, error) {
 	sink, err := app.NewAppSink()
 	if err != nil {
 		return nil, err
@@ -357,10 +358,10 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer) (*Output, error) {
 	e := &Output{
 		sink:       sink,
 		outputSync: outputSync,
-		samples:    make(chan *sample, 15),
 		closed:     core.NewFuse(),
-		flushed:    core.NewFuse(),
 	}
+
+	e.localTrack.Store(localTrack)
 
 	return e, nil
 }
@@ -396,27 +397,14 @@ func (e *Output) ForceKeyFrame() error {
 func (e *Output) handleEOS(_ *app.Sink) {
 	e.logger.Infow("app sink EOS")
 
-	e.Flush()
 	e.Close()
 }
 
-func (e *Output) Flush() {
-	select {
-	case e.samples <- nil:
-	case <-e.closed.Watch():
-	case <-time.After(time.Second):
-		e.logger.Errorw("output pipeline flush timed out", errors.New("could not enqueue EOS marker"))
-	}
-
-	select {
-	case <-e.flushed.Watch():
-	case <-e.closed.Watch():
-	case <-time.After(5 * time.Second):
-		e.logger.Errorw("output pipeline flush timed out", errors.New("flush timed out"))
-	}
-}
-
 func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
+
+	if e.closed.IsBroken() {
+		return io.EOF
+	}
 
 	// Synchronize the outputs before the network jitter buffer to avoid old samples stuck
 	// in the channel from increasing the whole pipeline delay.
@@ -426,52 +414,25 @@ func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 	}
 	if drop {
 		e.logger.Debugw("Dropping sample", "timestamp", pts)
-		return nil
-	}
-
-	select {
-	case e.samples <- &sample{s, pts}:
-		return nil
-	case <-e.closed.Watch():
-		return io.EOF
-	default:
 		e.trackStatsGatherer.PacketLost(1)
-		// drop the sample if the output queue is full. This is needed if we are reconnecting.
 		return nil
 	}
-}
 
-func (e *Output) NextSample(ctx context.Context) (media.Sample, error) {
-	var s *sample
+	err = e.localTrack.WriteSample(*s, nil)
+	if err != nil {
+		fmt.Println("WRITE ERROR")
+		e.trackStatsGatherer.PacketLost(1)
 
-	for {
-		select {
-		case s = <-e.samples:
-		case <-e.closed.Watch():
-		case <-ctx.Done():
-		}
-
-		if s == nil {
-			e.flushed.Break()
-			return media.Sample{}, io.EOF
-		}
-
-		e.trackStatsGatherer.MediaReceived(int64(len(s.s.Data)))
-
-		return *s.s, nil
+		return nil
 	}
-}
 
-func (e *Output) OnBind() error {
-	e.logger.Infow("sample provider bound")
+	e.trackStatsGatherer.MediaReceived(int64(len(s.Data)))
 
 	return nil
 }
 
-func (e *Output) OnUnbind() error {
-	e.logger.Infow("sample provider unbound")
-
-	return nil
+func (e *Output) SetLocalTrack(track *lksdk.LocalTrack) {
+	e.localTrack.Store(track)
 }
 
 func (e *Output) Close() error {

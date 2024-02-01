@@ -57,16 +57,20 @@ func NewWebRTCSink(ctx context.Context, p *params.Params, statsGatherer *stats.L
 }
 
 func (s *WebRTCSink) addAudioTrack() (*Output, error) {
-	output, err := NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync.AddTrack(), s.statsGatherer)
+	err, track := s.sdkOut.AddAudioTrack(output, putils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec), s.params.AudioEncodingOptions.DisableDtx, s.params.AudioEncodingOptions.Channels > 1)
+	if err != nil {
+		return nil, err
+	}
+
+	output, err = NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync.AddTrack(), track, s.statsGatherer)
 	if err != nil {
 		logger.Errorw("could not create output", err)
 		return nil, err
 	}
 
-	err = s.sdkOut.AddAudioTrack(output, putils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec), s.params.AudioEncodingOptions.DisableDtx, s.params.AudioEncodingOptions.Channels > 1)
-	if err != nil {
-		return nil, err
-	}
+	s.lock.Lock()
+	s.outputs = append(s.outputs, output)
+	s.lock.Unlock()
 
 	return output.Output, nil
 }
@@ -77,21 +81,26 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 
 	sortedLayers := filterAndSortLayersByQuality(s.params.VideoEncodingOptions.Layers, w, h)
 
-	var outLayers []*livekit.VideoLayer
-	for _, layer := range sortedLayers {
-		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, s.outputSync.AddTrack(), s.statsGatherer)
-		if err != nil {
-			return nil, err
-		}
-		outputs = append(outputs, output.Output)
-		sbArray = append(sbArray, output)
-		outLayers = append(outLayers, layer)
-	}
-
-	err := s.sdkOut.AddVideoTrack(sbArray, outLayers, putils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
+	tracks, pliHandlers, err := s.sdkOut.AddVideoTrack(sortedLayers, putils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
 	if err != nil {
 		return nil, err
 	}
+
+	for i, layer := range sortedLayers {
+		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, s.outputSync.AddTrack(), tracks[i], s.statsGatherer)
+		if err != nil {
+			return nil, err
+		}
+
+		pliHandlers[i].SetSampleProvider(output)
+
+		outputs = append(outputs, output.Output)
+		sbArray = append(sbArray, output)
+	}
+
+	s.lock.Lock()
+	s.outputs = append(s.outputs, outputs...)
+	s.lock.Unlock()
 
 	return outputs, nil
 }

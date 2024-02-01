@@ -215,7 +215,7 @@ func (sp *SDKMediaSink) ensureTrackInitialized(s *media.Sample) error {
 		sp.params.SetInputVideoState(context.Background(), videoState, true)
 
 		sp.logger.Infow("adding video track", "width", w, "height", h, "codec", mimeType)
-		sp.sdkOutput.AddVideoTrack(s, layers, mimeType)
+		tracks, err := sp.sdkOutput.AddVideoTrack(s, layers, mimeType)
 	}
 
 	sp.trackInitialized = true
