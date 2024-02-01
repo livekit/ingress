@@ -399,7 +399,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 		return
 	}
 
-	th, err := newWHIPTrackHandler(logger, track, receiver, sync, mediaSink, h.writePLI, h.sync.OnRTCP)
+	th, err := newWHIPTrackHandler(logger, trackQuality, track, receiver, sync, mediaSink, h.writePLI, h.sync.OnRTCP)
 	if err != nil {
 		logger.Warnw("failed creating whip track handler", err)
 		return
