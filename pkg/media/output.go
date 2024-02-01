@@ -17,7 +17,6 @@ package media
 import (
 	"fmt"
 	"io"
-	"sync/atomic"
 	"time"
 
 	"github.com/frostbyte73/core"
@@ -52,7 +51,7 @@ type Output struct {
 	outputSync         *utils.TrackOutputSynchronizer
 	trackStatsGatherer *stats.MediaTrackStatGatherer
 
-	localTrack atomic.Pointer[*lksdk.LocalTrack]
+	localTrack *lksdk.LocalTrack
 
 	closed core.Fuse
 }
@@ -359,9 +358,8 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer, localTrack *lksdk.Loca
 		sink:       sink,
 		outputSync: outputSync,
 		closed:     core.NewFuse(),
+		localTrack: localTrack,
 	}
-
-	e.localTrack.Store(localTrack)
 
 	return e, nil
 }
@@ -429,10 +427,6 @@ func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 	e.trackStatsGatherer.MediaReceived(int64(len(s.Data)))
 
 	return nil
-}
-
-func (e *Output) SetLocalTrack(track *lksdk.LocalTrack) {
-	e.localTrack.Store(track)
 }
 
 func (e *Output) Close() error {

@@ -30,18 +30,15 @@ import (
 )
 
 type SampleProvider interface {
-	SetLocalTrack(track *lksdk.LocalTrack)
 	Close() error
 }
 
-type VideoSampleProvider interface {
-	SampleProvider
-
+type KeyFrameEmitter interface {
 	ForceKeyFrame() error
 }
 
 type PLIHandler struct {
-	p atomic.Pointer[VideoSampleProvider]
+	p atomic.Pointer[KeyFrameEmitter]
 }
 
 func (h *PLIHandler) HandlePLI() error {
@@ -54,7 +51,7 @@ func (h *PLIHandler) HandlePLI() error {
 	return nil
 }
 
-func (h *PLIHandler) SetSampleProvider(p VideoSampleProvider) {
+func (h *PLIHandler) SetKeyFrameEmitter(p KeyFrameEmitter) {
 	h.p.Store(&p)
 }
 
@@ -185,6 +182,12 @@ func (s *LKSDKOutput) AddVideoTrack(layers []*livekit.VideoLayer, mimeType strin
 	s.logger.Debugw("published video track")
 
 	return tracks, pliHandlers, nil
+}
+
+func (s *LKSDKOutput) AddOutputs(o ...SampleProvider) {
+	s.lock.Lock()
+	s.outputs = append(s.outputs, o...)
+	s.lock.Unlock()
 }
 
 func (s *LKSDKOutput) Close() {

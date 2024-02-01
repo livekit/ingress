@@ -37,6 +37,7 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/psrpc"
+	lksdk "github.com/livekit/server-sdk-go"
 )
 
 var (
@@ -52,7 +53,8 @@ type SDKMediaSink struct {
 	trackStatsGatherer atomic.Pointer[stats.MediaTrackStatGatherer]
 	sdkOutput          *lksdk_output.LKSDKOutput
 
-	readySamples     chan *sample
+	localTrack *lksdk.LocalTrack
+
 	fuse             core.Fuse
 	trackInitialized bool
 }
@@ -64,14 +66,13 @@ type sample struct {
 
 func NewSDKMediaSink(l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, outputSync *utils.TrackOutputSynchronizer, writePLI func()) *SDKMediaSink {
 	s := &SDKMediaSink{
-		logger:       l,
-		params:       p,
-		writePLI:     writePLI,
-		track:        track,
-		outputSync:   outputSync,
-		sdkOutput:    sdkOutput,
-		readySamples: make(chan *sample, 15),
-		fuse:         core.NewFuse(),
+		logger:     l,
+		params:     p,
+		writePLI:   writePLI,
+		track:      track,
+		outputSync: outputSync,
+		sdkOutput:  sdkOutput,
+		fuse:       core.NewFuse(),
 	}
 
 	return s
@@ -91,6 +92,8 @@ func (sp *SDKMediaSink) PushSample(s *media.Sample, ts time.Duration) error {
 		return nil
 	}
 
+	g := sp.trackStatsGatherer.Load()
+
 	// Synchronize the outputs before the network jitter buffer to avoid old samples stuck
 	// in the channel from increasing the whole pipeline delay.
 	drop, err := sp.outputSync.WaitForMediaTime(ts)
@@ -99,35 +102,28 @@ func (sp *SDKMediaSink) PushSample(s *media.Sample, ts time.Duration) error {
 	}
 	if drop {
 		sp.logger.Debugw("dropping sample", "timestamp", ts)
+
+		if g != nil {
+			g.PacketLost(1)
+		}
+
 		return nil
 	}
 
-	select {
-	case <-sp.fuse.Watch():
-		return io.EOF
-	case sp.readySamples <- &sample{s, ts}:
-	default:
-		// drop the sample if the output queue is full. This is needed if we are reconnecting.
+	err = sp.localTrack.WriteSample(*s, nil)
+	if err != nil {
+		if g != nil {
+			g.PacketLost(1)
+		}
+
+		return nil
+	}
+
+	if g != nil {
+		g.MediaReceived(int64(len(s.Data)))
 	}
 
 	return nil
-}
-
-func (sp *SDKMediaSink) NextSample(ctx context.Context) (media.Sample, error) {
-	for {
-		select {
-		case <-sp.fuse.Watch():
-		case <-ctx.Done():
-			return media.Sample{}, io.EOF
-		case s := <-sp.readySamples:
-			g := sp.trackStatsGatherer.Load()
-			if g != nil {
-				g.MediaReceived(int64(len(s.s.Data)))
-			}
-
-			return *s.s, nil
-		}
-	}
 }
 
 func (sp *SDKMediaSink) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) {
@@ -192,7 +188,12 @@ func (sp *SDKMediaSink) ensureTrackInitialized(s *media.Sample) error {
 		sp.params.SetInputAudioState(context.Background(), audioState, true)
 
 		sp.logger.Infow("adding audio track", "stereo", stereo, "codec", mimeType)
-		sp.sdkOutput.AddAudioTrack(sp, mimeType, false, stereo)
+		track, err := sp.sdkOutput.AddAudioTrack(mimeType, false, stereo)
+		if err != nil {
+			return err
+		}
+		sp.localTrack = track
+
 	case types.Video:
 		w, h, err := getVideoParams(mimeType, s)
 		switch err {
@@ -207,16 +208,18 @@ func (sp *SDKMediaSink) ensureTrackInitialized(s *media.Sample) error {
 		layers := []*livekit.VideoLayer{
 			&livekit.VideoLayer{Width: uint32(w), Height: uint32(h), Quality: livekit.VideoQuality_HIGH},
 		}
-		s := []lksdk_output.VideoSampleProvider{
-			sp,
-		}
 
 		videoState := getVideoState(sp.track.Codec().MimeType, w, h)
 		sp.params.SetInputVideoState(context.Background(), videoState, true)
 
 		sp.logger.Infow("adding video track", "width", w, "height", h, "codec", mimeType)
-		tracks, err := sp.sdkOutput.AddVideoTrack(s, layers, mimeType)
+		tracks, pliHandlers, err := sp.sdkOutput.AddVideoTrack(layers, mimeType)
+
+		pliHandlers[0].SetKeyFrameEmitter(sp)
+		sp.localTrack = tracks[0]
 	}
+
+	sp.sdkOutput.AddOutputs(sp)
 
 	sp.trackInitialized = true
 

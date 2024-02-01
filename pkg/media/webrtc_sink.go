@@ -57,27 +57,25 @@ func NewWebRTCSink(ctx context.Context, p *params.Params, statsGatherer *stats.L
 }
 
 func (s *WebRTCSink) addAudioTrack() (*Output, error) {
-	err, track := s.sdkOut.AddAudioTrack(output, putils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec), s.params.AudioEncodingOptions.DisableDtx, s.params.AudioEncodingOptions.Channels > 1)
+	track, err := s.sdkOut.AddAudioTrack(putils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec), s.params.AudioEncodingOptions.DisableDtx, s.params.AudioEncodingOptions.Channels > 1)
 	if err != nil {
 		return nil, err
 	}
 
-	output, err = NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync.AddTrack(), track, s.statsGatherer)
+	output, err := NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync.AddTrack(), track, s.statsGatherer)
 	if err != nil {
 		logger.Errorw("could not create output", err)
 		return nil, err
 	}
 
-	s.lock.Lock()
-	s.outputs = append(s.outputs, output)
-	s.lock.Unlock()
+	s.sdkOut.AddOutputs(output)
 
 	return output.Output, nil
 }
 
 func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 	outputs := make([]*Output, 0)
-	sbArray := make([]lksdk_output.VideoSampleProvider, 0)
+	sbArray := make([]lksdk_output.SampleProvider, 0)
 
 	sortedLayers := filterAndSortLayersByQuality(s.params.VideoEncodingOptions.Layers, w, h)
 
@@ -92,15 +90,13 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 			return nil, err
 		}
 
-		pliHandlers[i].SetSampleProvider(output)
+		pliHandlers[i].SetKeyFrameEmitter(output)
 
 		outputs = append(outputs, output.Output)
 		sbArray = append(sbArray, output)
 	}
 
-	s.lock.Lock()
-	s.outputs = append(s.outputs, outputs...)
-	s.lock.Unlock()
+	s.sdkOut.AddOutputs(sbArray...)
 
 	return outputs, nil
 }
