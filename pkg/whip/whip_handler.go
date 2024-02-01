@@ -17,12 +17,14 @@ package whip
 import (
 	"context"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/pion/dtls/v2/pkg/crypto/elliptic"
 	"github.com/pion/interceptor"
 	"github.com/pion/rtcp"
+	"github.com/pion/sdp/v3"
 	"github.com/pion/webrtc/v3"
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
@@ -64,11 +66,16 @@ type whipHandler struct {
 	result             chan error
 	closeOnce          sync.Once
 
-	trackLock           sync.Mutex
-	tracks              map[string]*webrtc.TrackRemote
-	trackHandlers       map[types.StreamKind]*whipTrackHandler
+	trackLock       sync.Mutex
+	simulcastLayers []string
+	tracks          map[string]*webrtc.TrackRemote
+	trackHandlers   []*whipTrackHandler
+	trackAddedChan  chan *webrtc.TrackRemote
+
+	trackSDKMediaSinkLock sync.Mutex
+	trackSDKMediaSink     map[types.StreamKind]*SDKMediaSink
+
 	trackRelayMediaSink map[types.StreamKind]*RelayMediaSink // only for transcoding mode
-	trackAddedChan      chan *webrtc.TrackRemote
 }
 
 func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
@@ -81,8 +88,9 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 		outputSync:          utils.NewOutputSynchronizer(),
 		result:              make(chan error, 1),
 		tracks:              make(map[string]*webrtc.TrackRemote),
-		trackHandlers:       make(map[types.StreamKind]*whipTrackHandler),
+		trackHandlers:       []*whipTrackHandler{},
 		trackRelayMediaSink: make(map[types.StreamKind]*RelayMediaSink),
+		trackSDKMediaSink:   make(map[types.StreamKind]*SDKMediaSink),
 	}
 }
 
@@ -94,22 +102,25 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 
 	h.updateSettings()
 
+	offer := &webrtc.SessionDescription{
+		Type: webrtc.SDPTypeOffer,
+		SDP:  sdpOffer,
+	}
+	h.expectedTrackCount, err = h.validateOfferAndGetExpectedTrackCount(offer)
+	if err != nil {
+		return "", err
+	}
+
 	if p.BypassTranscoding {
 		h.sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, p)
 		if err != nil {
 			return "", err
 		}
+	} else if len(h.simulcastLayers) != 0 {
+		return "", errors.ErrSimulcastTranscode
 	}
 
-	offer := &webrtc.SessionDescription{
-		Type: webrtc.SDPTypeOffer,
-		SDP:  sdpOffer,
-	}
-	h.expectedTrackCount, err = validateOfferAndGetExpectedTrackCount(offer)
 	h.trackAddedChan = make(chan *webrtc.TrackRemote, h.expectedTrackCount)
-	if err != nil {
-		return "", err
-	}
 
 	m, err := newMediaEngine()
 	if err != nil {
@@ -343,9 +354,6 @@ func (h *whipHandler) getSDPAnswer(ctx context.Context, offer *webrtc.SessionDes
 	if err != nil {
 		return "", err
 	}
-	if len(parsedAnswer.MediaDescriptions) != h.expectedTrackCount {
-		return "", errors.ErrUnsupportedDecodeFormat
-	}
 	for _, m := range parsedAnswer.MediaDescriptions {
 		// Pion puts a media description with fmt = 0 and no attributes for unsupported codecs
 		if len(m.Attributes) == 0 {
@@ -371,7 +379,21 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 
 	sync := h.sync.AddTrack(track, whipIdentity)
 
-	mediaSink, err := h.newMediaSink(track)
+	trackQuality := livekit.VideoQuality_HIGH
+	if track.RID() != "" {
+		for i, expectedRid := range h.simulcastLayers {
+			if expectedRid == track.RID() {
+				switch i {
+				case 1:
+					trackQuality = livekit.VideoQuality_MEDIUM
+				case 2:
+					trackQuality = livekit.VideoQuality_LOW
+				}
+			}
+		}
+	}
+
+	mediaSink, err := h.getMediaSink(track, trackQuality)
 	if err != nil {
 		logger.Warnw("failed creating whip  media handler", err)
 		return
@@ -382,7 +404,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 		logger.Warnw("failed creating whip track handler", err)
 		return
 	}
-	h.trackHandlers[kind] = th
+	h.trackHandlers = append(h.trackHandlers, th)
 
 	select {
 	case h.trackAddedChan <- track:
@@ -391,12 +413,29 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 	}
 }
 
-func (h *whipHandler) newMediaSink(track *webrtc.TrackRemote) (MediaSink, error) {
+func (h *whipHandler) getMediaSink(track *webrtc.TrackRemote, trackQuality livekit.VideoQuality) (MediaSink, error) {
 	kind := streamKindFromCodecType(track.Kind())
 
 	if h.sdkOutput != nil {
-		// pasthrough
-		return NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track, h.outputSync.AddTrack(), func() {
+		h.trackSDKMediaSinkLock.Lock()
+		defer h.trackSDKMediaSinkLock.Unlock()
+
+		if _, ok := h.trackSDKMediaSink[kind]; !ok {
+			h.trackSDKMediaSink[kind] = NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track.Codec(), streamKindFromCodecType(track.Kind()), h.outputSync.AddTrack())
+
+			layers := []livekit.VideoQuality{livekit.VideoQuality_HIGH}
+			if kind == types.Video && len(h.simulcastLayers) == 3 {
+				layers = []livekit.VideoQuality{livekit.VideoQuality_HIGH, livekit.VideoQuality_MEDIUM, livekit.VideoQuality_LOW}
+			} else if kind == types.Video && len(h.simulcastLayers) == 2 {
+				layers = []livekit.VideoQuality{livekit.VideoQuality_HIGH, livekit.VideoQuality_MEDIUM}
+			}
+
+			for _, layer := range layers {
+				h.trackSDKMediaSink[kind].AddTrack(layer)
+			}
+		}
+
+		return h.trackSDKMediaSink[kind].SetWritePLI(trackQuality, func() {
 			h.writePLI(track.SSRC())
 		}), nil
 	} else {
@@ -429,22 +468,54 @@ func streamKindFromCodecType(typ webrtc.RTPCodecType) types.StreamKind {
 	}
 }
 
-func validateOfferAndGetExpectedTrackCount(offer *webrtc.SessionDescription) (int, error) {
+func (h *whipHandler) validateOfferAndGetExpectedTrackCount(offer *webrtc.SessionDescription) (int, error) {
 	parsed, err := offer.Unmarshal()
 	if err != nil {
 		return 0, err
 	}
 
-	mediaTypes := make(map[string]struct{})
+	audioCount, videoCount := 0, 0
+
 	for _, m := range parsed.MediaDescriptions {
-		if _, ok := mediaTypes[m.MediaName.Media]; ok {
+		if types.StreamKind(m.MediaName.Media) == types.Audio {
 			// Duplicate track for a given type. Forbidden by the RFC
-			return 0, errors.ErrDuplicateTrack
+			if audioCount != 0 {
+				return 0, errors.ErrDuplicateTrack
+			}
+
+			audioCount++
+
+		} else if types.StreamKind(m.MediaName.Media) == types.Video {
+			// Duplicate track for a given type. Forbidden by the RFC
+			if videoCount != 0 {
+				return 0, errors.ErrDuplicateTrack
+			}
+
+			for _, a := range m.Attributes {
+				if a.Key == "simulcast" {
+					spaceSplit := strings.Split(a.Value, " ")
+					if len(spaceSplit) != 2 || spaceSplit[0] != "send" {
+						return 0, errors.ErrInvalidSimulcast
+					}
+
+					layersSplit := strings.Split(spaceSplit[1], ";")
+					if len(layersSplit) != 2 && len(layersSplit) != 3 {
+						return 0, errors.ErrInvalidSimulcast
+					}
+
+					h.simulcastLayers = layersSplit
+					videoCount += len(h.simulcastLayers)
+				}
+			}
+
+			// No Simulcast
+			if videoCount == 0 {
+				videoCount++
+			}
 		}
-		mediaTypes[m.MediaName.Media] = struct{}{}
 	}
 
-	return len(parsed.MediaDescriptions), nil
+	return audioCount + videoCount, nil
 }
 
 func newMediaEngine() (*webrtc.MediaEngine, error) {
@@ -465,7 +536,7 @@ func newMediaEngine() (*webrtc.MediaEngine, error) {
 		}
 	}
 
-	videoRTCPFeedback := []webrtc.RTCPFeedback{{"goog-remb", ""}, {"ccm", "fir"}, {"nack", ""}, {"nack", "pli"}}
+	videoRTCPFeedback := []webrtc.RTCPFeedback{{Type: "goog-remb", Parameter: ""}, {Type: "ccm", Parameter: "fir"}, {Type: "nack", Parameter: ""}, {Type: "nack", Parameter: "pli"}}
 
 	for _, codec := range []webrtc.RTPCodecParameters{
 		{
@@ -480,6 +551,14 @@ func newMediaEngine() (*webrtc.MediaEngine, error) {
 		if err := m.RegisterCodec(codec, webrtc.RTPCodecTypeVideo); err != nil {
 			return nil, err
 		}
+	}
+
+	if err := m.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESMidURI}, webrtc.RTPCodecTypeVideo); err != nil {
+		return nil, err
+	}
+
+	if err := m.RegisterHeaderExtension(webrtc.RTPHeaderExtensionCapability{URI: sdp.SDESRTPStreamIDURI}, webrtc.RTPCodecTypeVideo); err != nil {
+		return nil, err
 	}
 
 	return m, nil
