@@ -16,7 +16,6 @@ package service
 
 import (
 	"context"
-	"encoding/json"
 	"net"
 	"os"
 	"os/exec"
@@ -26,8 +25,6 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/encoding/protojson"
-	"gopkg.in/yaml.v3"
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/ipc"
@@ -70,54 +67,11 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) er
 	_, span := tracer.Start(ctx, "Service.launchHandler")
 	defer span.End()
 
-	confString, err := yaml.Marshal(p.Config)
+	cmd, err := NewCmd(ctx, p)
 	if err != nil {
 		span.RecordError(err)
-		logger.Errorw("could not marshal config", err)
 		return err
 	}
-
-	infoString, err := protojson.Marshal(p.IngressInfo)
-	if err != nil {
-		span.RecordError(err)
-		logger.Errorw("could not marshal request", err)
-		return err
-	}
-
-	extraParamsString := ""
-	if p.ExtraParams != nil {
-		p, err := json.Marshal(p.ExtraParams)
-		if err != nil {
-			span.RecordError(err)
-			logger.Errorw("could not marshall extra parameters", err)
-		}
-		extraParamsString = string(p)
-	}
-
-	args := []string{
-		"run-handler",
-		"--config-body", string(confString),
-		"--info", string(infoString),
-		"--relay-token", p.RelayToken,
-	}
-
-	if p.WsUrl != "" {
-		args = append(args, "--ws-url", p.WsUrl)
-	}
-	if p.Token != "" {
-		args = append(args, "--token", p.Token)
-	}
-	if extraParamsString != "" {
-		args = append(args, "--extra-params", extraParamsString)
-	}
-
-	cmd := exec.Command("ingress",
-		args...,
-	)
-
-	cmd.Dir = "/"
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
 	h := &process{
 		info:   p.IngressInfo,

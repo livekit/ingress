@@ -43,6 +43,8 @@ var (
 	ErrIngressClosing          = psrpc.NewErrorf(psrpc.Unavailable, "ingress closing")
 	ErrMissingStreamKey        = psrpc.NewErrorf(psrpc.InvalidArgument, "missing stream key")
 	ErrPrerollBufferReset      = psrpc.NewErrorf(psrpc.Internal, "preroll buffer reset")
+	ErrInvalidSimulcast        = psrpc.NewErrorf(psrpc.NotAcceptable, "invalid simulcast configuration")
+	ErrSimulcastTranscode      = psrpc.NewErrorf(psrpc.NotAcceptable, "simulcast is not supported when transcoding")
 )
 
 func New(err string) error {

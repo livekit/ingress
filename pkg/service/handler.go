@@ -63,13 +63,13 @@ func NewHandler(conf *config.Config, rpcClient rpc.IOInfoClient) *Handler {
 	}
 }
 
-func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, extraParams any) {
+func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, loggingFields map[string]string, extraParams any) {
 	ctx, span := tracer.Start(ctx, "Handler.HandleRequest")
 	defer span.End()
 
-	params.InitLogger(h.conf, info)
+	params.InitLogger(h.conf, info, loggingFields)
 
-	p, err := h.buildPipeline(ctx, info, wsUrl, token, relayToken, extraParams)
+	p, err := h.buildPipeline(ctx, info, wsUrl, token, relayToken, loggingFields, extraParams)
 	if err != nil {
 		span.RecordError(err)
 		return
@@ -226,13 +226,13 @@ func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStats
 	return &google_protobuf2.Empty{}, nil
 }
 
-func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, extraParams any) (*media.Pipeline, error) {
+func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, loggingFields map[string]string, extraParams any) (*media.Pipeline, error) {
 	ctx, span := tracer.Start(ctx, "Handler.buildPipeline")
 	defer span.End()
 
 	// build/verify params
 	var p *media.Pipeline
-	params, err := params.GetParams(ctx, h.rpcClient, h.conf, info, wsUrl, token, relayToken, extraParams)
+	params, err := params.GetParams(ctx, h.rpcClient, h.conf, info, wsUrl, token, relayToken, loggingFields, extraParams)
 	if err == nil {
 		// create the pipeline
 		p, err = media.New(ctx, h.conf, params, h.statsGatherer)
