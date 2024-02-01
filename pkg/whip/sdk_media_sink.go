@@ -20,7 +20,6 @@ import (
 	"io"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/Eyevinn/mp4ff/avc"
@@ -51,7 +50,7 @@ type SDKMediaSinkTrack struct {
 	quality       livekit.VideoQuality
 	width, height uint
 
-	trackStatsGatherer atomic.Pointer[stats.MediaTrackStatGatherer]
+	trackStatsGatherer *stats.MediaTrackStatGatherer
 	localTrack         *lksdk.LocalTrack
 
 	sink *SDKMediaSink
@@ -132,7 +131,9 @@ func (t *SDKMediaSinkTrack) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) 
 
 	g := st.RegisterTrackStats(path)
 
-	t.trackStatsGatherer.Store(g)
+	t.sink.tracksLock.Lock()
+	t.trackStatsGatherer = g
+	t.sink.tracksLock.Unlock()
 }
 
 func (sp *SDKMediaSink) Close() error {
@@ -219,9 +220,6 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 }
 
 func (sp *SDKMediaSink) ensureTracksInitialized(s *media.Sample, t *SDKMediaSinkTrack) (bool, error) {
-	sp.tracksLock.Lock()
-	defer sp.tracksLock.Unlock()
-
 	if sp.sinkInitialized {
 		return sp.sinkInitialized, nil
 	}
@@ -238,15 +236,28 @@ func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error 
 		return io.EOF
 	}
 
+	t.sink.tracksLock.Lock()
+
 	tracksInitialized, err := t.sink.ensureTracksInitialized(s, t)
 	if err != nil {
+		t.sink.tracksLock.Unlock()
 		return err
 	} else if !tracksInitialized {
 		// Drop the sample
+		t.sink.tracksLock.Unlock()
 		return nil
 	}
+	g := t.trackStatsGatherer
+	localTrack := t.localTrack
+	t.sink.tracksLock.Unlock()
 
-	g := t.trackStatsGatherer.Load()
+	if localTrack == nil {
+		if g != nil {
+			g.PacketLost(1)
+		}
+
+		return nil
+	}
 
 	// Synchronize the outputs before the network jitter buffer to avoid old samples stuck
 	// in the channel from increasing the whole pipeline delay.
@@ -264,7 +275,7 @@ func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error 
 		return nil
 	}
 
-	err = t.localTrack.WriteSample(*s, nil)
+	err = localTrack.WriteSample(*s, nil)
 	if err != nil {
 		if g != nil {
 			g.PacketLost(1)
@@ -295,8 +306,12 @@ func (t *SDKMediaSinkTrack) OnUnbind() error {
 }
 
 func (t *SDKMediaSinkTrack) ForceKeyFrame() error {
-	if t.writePLI != nil {
-		t.writePLI()
+	t.sink.tracksLock.Lock()
+	writePLI := t.writePLI
+	t.sink.tracksLock.Unlock()
+
+	if writePLI != nil {
+		writePLI()
 	}
 
 	return nil
