@@ -17,7 +17,7 @@ require (
 	github.com/livekit/protocol v1.9.9-0.20240205221758-7394a1c07b58
 	github.com/livekit/psrpc v0.5.3-0.20240129223932-473b29cda289
 	github.com/livekit/server-sdk-go v1.1.7
-	github.com/pion/dtls/v2 v2.2.9
+	github.com/pion/dtls/v2 v2.2.10
 	github.com/pion/interceptor v0.1.25
 	github.com/pion/rtcp v1.2.13
 	github.com/pion/rtp v1.8.3
