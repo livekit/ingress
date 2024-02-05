@@ -140,12 +140,16 @@ func runService(c *cli.Context) error {
 
 	svc := service.NewService(conf, psrpcClient, bus, whipsrv)
 
-	_, err = rpc.NewIngressInternalServer(svc, bus)
+	srv, err := rpc.NewIngressInternalServer(svc, bus)
 	if err != nil {
 		return err
 	}
 
 	svc.StartDebugHandlers()
+
+	if err = service.RegisterListIngress("", srv); err != nil {
+		return err
+	}
 
 	err = setupHealthHandlers(conf, svc)
 	if err != nil {

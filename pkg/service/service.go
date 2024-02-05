@@ -556,3 +556,7 @@ func DeregisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit
 		server.RegisterDeleteWHIPResourceTopic(info.State.ResourceId)
 	}
 }
+
+func RegisterListIngress(topic string, srv rpc.IngressInternalServer) error {
+	return srv.RegisterListActiveIngressTopic(topic)
+}
