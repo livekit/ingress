@@ -41,7 +41,7 @@ import (
 	"github.com/livekit/protocol/tracer"
 	putils "github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
-	"github.com/livekit/server-sdk-go/pkg/synchronizer"
+	"github.com/livekit/server-sdk-go/v2/pkg/synchronizer"
 )
 
 const (
