@@ -16,7 +16,7 @@ require (
 	github.com/livekit/mediatransportutil v0.0.0-20231213075826-cccbf2b93d3f
 	github.com/livekit/protocol v1.9.9-0.20240205221758-7394a1c07b58
 	github.com/livekit/psrpc v0.5.3-0.20240129223932-473b29cda289
-	github.com/livekit/server-sdk-go v1.1.8
+	github.com/livekit/server-sdk-go/v2 v2.0.1
 	github.com/pion/dtls/v2 v2.2.10
 	github.com/pion/interceptor v0.1.25
 	github.com/pion/rtcp v1.2.13
@@ -82,7 +82,6 @@ require (
 	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/redis/go-redis/v9 v9.4.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
-	github.com/thoas/go-funk v0.9.3 // indirect
 	github.com/twitchtv/twirp v8.1.3+incompatible // indirect
 	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
 	github.com/yutopp/go-amf0 v0.1.0 // indirect
