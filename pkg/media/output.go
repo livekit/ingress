@@ -384,6 +384,8 @@ func (e *Output) Bin() *gst.Bin {
 }
 
 func (e *Output) ForceKeyFrame() error {
+	e.trackStatsGatherer.PLI()
+
 	keyFrame := gst.NewStructure("GstForceKeyUnit")
 	if err := keyFrame.SetValue("all-headers", true); err != nil {
 		return err
