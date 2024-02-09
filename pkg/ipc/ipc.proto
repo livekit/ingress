@@ -64,7 +64,10 @@ message TrackStats {
   uint64 current_packets = 5;
   double total_loss_rate = 6;
   double current_loss_rate = 7;
-  JitterStats jitter = 8;
+  uint64 total_pli = 8;
+  uint64 current_pli = 9;
+
+  JitterStats jitter = 10;
 }
 
 message JitterStats {

@@ -36,11 +36,13 @@ type MediaTrackStatGatherer struct {
 	totalBytes   int64
 	totalPackets int64
 	totalLost    int64
+	totalPLI     int64
 	startTime    time.Time
 
 	currentBytes   int64
 	currentPackets int64
 	currentLost    int64
+	currentPLI     int64
 	lastQueryTime  time.Time
 
 	lastPacketTime     time.Time
@@ -95,6 +97,14 @@ func (g *MediaTrackStatGatherer) PacketLost(count int64) {
 	g.totalLost += count
 }
 
+func (g *MediaTrackStatGatherer) PLI() {
+	g.lock.Lock()
+	defer g.lock.Unlock()
+
+	g.currentPLI++
+	g.totalPLI++
+}
+
 func (g *MediaTrackStatGatherer) UpdateStats() *ipc.TrackStats {
 	g.lock.Lock()
 	defer g.lock.Unlock()
@@ -105,11 +115,6 @@ func (g *MediaTrackStatGatherer) UpdateStats() *ipc.TrackStats {
 	currentBps := uint32(float64(g.currentBytes) * 8 * float64(time.Second) / float64(now.Sub(g.lastQueryTime)))
 
 	currentLossRate := float64(g.currentLost) / float64(g.currentPackets)
-
-	g.lastQueryTime = now
-	g.currentBytes = 0
-	g.currentPackets = 0
-	g.currentLost = 0
 
 	jitter := g.jitter.Sort() // To make quantile computation faster
 
@@ -122,15 +127,25 @@ func (g *MediaTrackStatGatherer) UpdateStats() *ipc.TrackStats {
 	g.jitter.Xs = nil
 	g.jitter.Sorted = false
 
-	return &ipc.TrackStats{
+	st := &ipc.TrackStats{
 		AverageBitrate:  averageBps,
 		CurrentBitrate:  currentBps,
 		TotalPackets:    uint64(g.totalPackets),
 		CurrentPackets:  uint64(g.currentPackets),
 		TotalLossRate:   float64(g.totalLost) / float64(g.totalPackets),
 		CurrentLossRate: currentLossRate,
+		TotalPli:        uint64(g.totalPLI),
+		CurrentPli:      uint64(g.currentPLI),
 		Jitter:          jitterStats,
 	}
+
+	g.lastQueryTime = now
+	g.currentBytes = 0
+	g.currentPackets = 0
+	g.currentLost = 0
+	g.currentPLI = 0
+
+	return st
 }
 
 func (g *MediaTrackStatGatherer) Path() string {

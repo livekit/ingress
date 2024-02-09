@@ -147,7 +147,6 @@ func (s *LKSDKOutput) AddVideoTrack(layers []*livekit.VideoLayer, mimeType strin
 		onRTCP := func(pkt rtcp.Packet) {
 			switch pkt.(type) {
 			case *rtcp.PictureLossIndication:
-				s.logger.Debugw("PLI received")
 				if err := pliHandler.HandlePLI(); err != nil {
 					s.logger.Errorw("could not force key frame", err)
 				}
