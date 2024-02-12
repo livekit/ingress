@@ -2,6 +2,8 @@ module github.com/livekit/ingress
 
 go 1.21
 
+replace github.com/livekit/protocol => ../protocol
+
 toolchain go1.21.4
 
 require (

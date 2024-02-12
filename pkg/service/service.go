@@ -366,6 +366,9 @@ func (s *Service) Run() error {
 			return nil
 		case req := <-s.publishRequests:
 			go func() {
+				// TODO pass context in request
+				// TODO publishRequests doesn't make sense anymore
+
 				ctx, span := tracer.Start(context.Background(), "Service.HandleRequest")
 				defer span.End()
 
@@ -408,6 +411,16 @@ func (s *Service) Run() error {
 				if p != nil {
 					info = p.IngressInfo
 				}
+
+				// Create the ingress if it came through the request (URL Pull)
+				if req.info != nil {
+					_, err := s.psrpcClient.CreateIngress(ctx, info)
+					if err != nil {
+						logger.Errorw("failed creating ingress", err)
+						return
+					}
+				}
+
 				s.sendUpdate(ctx, info, err)
 
 				if info != nil {
