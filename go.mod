@@ -9,7 +9,7 @@ require (
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
 	github.com/frostbyte73/core v0.0.9
 	github.com/go-gst/go-glib v0.0.0-20231207075824-6d6aaf082c65
-	github.com/go-gst/go-gst v0.0.0-20231207080415-7f6bb5a2d4c5
+	github.com/go-gst/go-gst v0.0.0-20240207190302-04ec17f96d71
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
@@ -22,7 +22,7 @@ require (
 	github.com/pion/rtcp v1.2.13
 	github.com/pion/rtp v1.8.3
 	github.com/pion/sdp/v3 v3.0.6
-	github.com/pion/webrtc/v3 v3.2.25
+	github.com/pion/webrtc/v3 v3.2.28
 	github.com/prometheus/client_golang v1.18.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.8.4
@@ -66,11 +66,11 @@ require (
 	github.com/nats-io/nkeys v0.4.7 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pion/datachannel v1.5.5 // indirect
-	github.com/pion/ice/v2 v2.3.11 // indirect
+	github.com/pion/ice/v2 v2.3.13 // indirect
 	github.com/pion/logging v0.2.2 // indirect
-	github.com/pion/mdns v0.0.9 // indirect
+	github.com/pion/mdns v0.0.12 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
-	github.com/pion/sctp v1.8.9 // indirect
+	github.com/pion/sctp v1.8.12 // indirect
 	github.com/pion/srtp/v2 v2.0.18 // indirect
 	github.com/pion/stun v0.6.1 // indirect
 	github.com/pion/transport/v2 v2.2.4 // indirect
