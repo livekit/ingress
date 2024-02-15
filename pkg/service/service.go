@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"os/exec"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -69,7 +70,7 @@ type Service struct {
 	shutdown core.Fuse
 }
 
-func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, whipSrv *whip.WHIPServer) *Service {
+func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, whipSrv *whip.WHIPServer, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) *Service {
 	monitor := stats.NewMonitor()
 	sm := NewSessionManager(monitor)
 
@@ -77,7 +78,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		conf:        conf,
 		monitor:     monitor,
 		sm:          sm,
-		manager:     NewProcessManager(sm),
+		manager:     NewProcessManager(sm, newCmd),
 		whipSrv:     whipSrv,
 		psrpcClient: psrpcClient,
 		bus:         bus,
@@ -208,8 +209,8 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 	return p, ready, ended, nil
 }
 
-func (s *Service) HandleURLPublishRequest(resourceId string, req *rpc.StartIngressRequest) (*livekit.IngressInfo, error) {
-	ctx, span := tracer.Start(context.Background(), "Service.HandleURLPublishRequest")
+func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string, req *rpc.StartIngressRequest) (*livekit.IngressInfo, error) {
+	ctx, span := tracer.Start(ctx, "Service.HandleURLPublishRequest")
 	defer span.End()
 
 	p, err := s.handleRequest(ctx, "", resourceId, livekit.IngressInput_URL_INPUT, req.Info, req.WsUrl, req.Token, req.LoggingFields)
@@ -275,7 +276,7 @@ func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceI
 
 		// Create the ingress if it came through the request (URL Pull)
 		if inputType == livekit.IngressInput_URL_INPUT {
-			_, err := s.psrpcClient.CreateIngress(ctx, info)
+			_, err = s.psrpcClient.CreateIngress(ctx, info)
 			if err != nil {
 				logger.Errorw("failed creating ingress", err)
 				return
@@ -443,7 +444,7 @@ func (s *Service) ListActiveIngress(ctx context.Context, _ *rpc.ListActiveIngres
 }
 
 func (s *Service) StartIngress(ctx context.Context, req *rpc.StartIngressRequest) (*livekit.IngressInfo, error) {
-	return s.HandleURLPublishRequest(utils.NewGuid(utils.URLResourcePrefix), req)
+	return s.HandleURLPublishRequest(ctx, utils.NewGuid(utils.URLResourcePrefix), req)
 }
 
 func (s *Service) StartIngressAffinity(ctx context.Context, req *rpc.StartIngressRequest) float32 {
