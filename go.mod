@@ -9,7 +9,7 @@ require (
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
 	github.com/frostbyte73/core v0.0.9
 	github.com/go-gst/go-glib v0.0.0-20231207075824-6d6aaf082c65
-	github.com/go-gst/go-gst v0.0.0-20231207080415-7f6bb5a2d4c5
+	github.com/go-gst/go-gst v0.0.0-20240207190302-04ec17f96d71
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1

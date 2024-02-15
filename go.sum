@@ -33,8 +33,8 @@ github.com/gammazero/deque v0.2.1 h1:qSdsbG6pgp6nL7A0+K/B7s12mcCY/5l5SIUpMOl+dC0
 github.com/gammazero/deque v0.2.1/go.mod h1:LFroj8x4cMYCukHJDbxFCkT+r9AndaJnFMuZDV34tuU=
 github.com/go-gst/go-glib v0.0.0-20231207075824-6d6aaf082c65 h1:G9LRxbnTdpkJAfa6vOwldiWmrtAj2L/7gZlsRZYOITA=
 github.com/go-gst/go-glib v0.0.0-20231207075824-6d6aaf082c65/go.mod h1:rXuKU+tCN7pN+b/7oIyWv6MpnlGy+QWd7jRhWUNstjU=
-github.com/go-gst/go-gst v0.0.0-20231207080415-7f6bb5a2d4c5 h1:2Fp5lVbX27XyGsjBcpa54YC4S36QSxLi4sQ5NdkIvUE=
-github.com/go-gst/go-gst v0.0.0-20231207080415-7f6bb5a2d4c5/go.mod h1:dJg7DgrGB016HckNjcGTA82Cb4OACGw8VOsg79CxRV0=
+github.com/go-gst/go-gst v0.0.0-20240207190302-04ec17f96d71 h1:A562e6S4kSK6lq1X3KDOYWugfHsPvMhwEoZsLNzrbMk=
+github.com/go-gst/go-gst v0.0.0-20240207190302-04ec17f96d71/go.mod h1:dJg7DgrGB016HckNjcGTA82Cb4OACGw8VOsg79CxRV0=
 github.com/go-jose/go-jose/v3 v3.0.1 h1:pWmKFVtt+Jl0vBZTIpz/eAKwsm6LkIxDVVbFHKkchhA=
 github.com/go-jose/go-jose/v3 v3.0.1/go.mod h1:RNkWWRld676jZEYoV3+XK8L2ZnNSvIsxFMht0mSX+u8=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
