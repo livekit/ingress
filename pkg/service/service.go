@@ -275,15 +275,16 @@ func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceI
 		}
 
 		// Create the ingress if it came through the request (URL Pull)
-		if inputType == livekit.IngressInput_URL_INPUT {
+		if inputType == livekit.IngressInput_URL_INPUT && err != nil {
 			_, err = s.psrpcClient.CreateIngress(ctx, info)
 			if err != nil {
 				logger.Errorw("failed creating ingress", err)
 				return
 			}
+		} else {
+			// TODO send update even for URL ingress. We cannot do this now for backward compatibility with older livekit-server
+			s.sendUpdate(ctx, info, err)
 		}
-
-		s.sendUpdate(ctx, info, err)
 
 		if info != nil {
 			logger.Infow("received ingress info", "ingressID", info.IngressId, "streamKey", info.StreamKey, "resourceID", info.State.ResourceId, "ingressInfo", params.CopyRedactedIngressInfo(info))
