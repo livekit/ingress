@@ -44,16 +44,18 @@ type process struct {
 }
 
 type ProcessManager struct {
-	sm *SessionManager
+	sm     *SessionManager
+	newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)
 
 	mu             sync.RWMutex
 	activeHandlers map[string]*process
 	onFatal        func(info *livekit.IngressInfo, err error)
 }
 
-func NewProcessManager(sm *SessionManager) *ProcessManager {
+func NewProcessManager(sm *SessionManager, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) *ProcessManager {
 	return &ProcessManager{
 		sm:             sm,
+		newCmd:         newCmd,
 		activeHandlers: make(map[string]*process),
 	}
 }
@@ -67,7 +69,7 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) er
 	_, span := tracer.Start(ctx, "Service.launchHandler")
 	defer span.End()
 
-	cmd, err := NewCmd(ctx, p)
+	cmd, err := s.newCmd(ctx, p)
 	if err != nil {
 		span.RecordError(err)
 		return err
