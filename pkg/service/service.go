@@ -275,10 +275,15 @@ func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceI
 		}
 
 		// Create the ingress if it came through the request (URL Pull)
-		if inputType == livekit.IngressInput_URL_INPUT && err != nil {
+		if inputType == livekit.IngressInput_URL_INPUT && err == nil {
 			_, err = s.psrpcClient.CreateIngress(ctx, info)
 			if err != nil {
-				logger.Errorw("failed creating ingress", err)
+				logger.Warnw("failed creating ingress", err)
+				// TODO remove this workaround once updated IOInfoService that handles CreateIngress is deployed widely
+				var psrpcErr psrpc.Error
+				if errors.As(err, &psrpcErr) && psrpcErr.Code() == psrpc.Unavailable {
+					err = nil
+				}
 				return
 			}
 		} else {

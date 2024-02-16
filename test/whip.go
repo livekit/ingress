@@ -27,6 +27,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/service"
 	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/protocol/livekit"
@@ -39,11 +40,11 @@ const (
 	whipClientPath = "livekit-whip-bot/cmd/whip-client/whip-client"
 )
 
-func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient) {
+func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
 	whipsrv := whip.NewWHIPServer(commandPsrpcClient)
 	relay := service.NewRelay(nil, whipsrv)
 
-	svc := service.NewService(conf.Config, psrpcClient, bus, whipsrv)
+	svc := service.NewService(conf.Config, psrpcClient, bus, whipsrv, newCmd)
 	go func() {
 		err := svc.Run()
 		require.NoError(t, err)
