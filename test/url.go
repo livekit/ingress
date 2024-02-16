@@ -18,11 +18,13 @@ package test
 
 import (
 	"context"
+	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/service"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -30,8 +32,8 @@ import (
 	"github.com/livekit/psrpc"
 )
 
-func RunURLTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient) {
-	svc := service.NewService(conf.Config, psrpcClient, bus, nil)
+func RunURLTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
+	svc := service.NewService(conf.Config, psrpcClient, bus, nil, newCmd)
 	svc.StartDebugHandlers()
 
 	go func() {

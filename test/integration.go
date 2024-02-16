@@ -25,7 +25,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/emptypb"
-	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 	"gopkg.in/yaml.v3"
 
 	"github.com/livekit/protocol/livekit"
@@ -33,6 +32,7 @@ import (
 	"github.com/livekit/psrpc"
 
 	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/service"
 )
 
 type TestConfig struct {
@@ -49,7 +49,7 @@ type ioServer struct {
 }
 
 func (s *ioServer) CreateEgress(ctx context.Context, info *livekit.EgressInfo) (*emptypb.Empty, error) {
-	return &google_protobuf2.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
 func (s *ioServer) GetEgress(ctx context.Context, req *rpc.GetEgressRequest) (*livekit.EgressInfo, error) {
@@ -61,19 +61,23 @@ func (s *ioServer) ListEgress(ctx context.Context, req *livekit.ListEgressReques
 }
 
 func (s *ioServer) UpdateEgress(ctx context.Context, info *livekit.EgressInfo) (*emptypb.Empty, error) {
-	return &google_protobuf2.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
 func (s *ioServer) UpdateMetrics(ctx context.Context, req *rpc.UpdateMetricsRequest) (*emptypb.Empty, error) {
-	return &google_protobuf2.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
 func (s *ioServer) GetIngressInfo(ctx context.Context, req *rpc.GetIngressInfoRequest) (*rpc.GetIngressInfoResponse, error) {
 	return s.getIngressInfo(req)
 }
 
-func (s *ioServer) UpdateIngressState(ctx context.Context, req *rpc.UpdateIngressStateRequest) (*google_protobuf2.Empty, error) {
-	return &google_protobuf2.Empty{}, s.updateIngressState(req)
+func (s *ioServer) CreateIngress(ctx context.Context, req *livekit.IngressInfo) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
+}
+
+func (s *ioServer) UpdateIngressState(ctx context.Context, req *rpc.UpdateIngressStateRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, s.updateIngressState(req)
 }
 
 func (s *ioServer) EvaluateSIPDispatchRules(context.Context, *rpc.EvaluateSIPDispatchRulesRequest) (*rpc.EvaluateSIPDispatchRulesResponse, error) {
@@ -131,17 +135,17 @@ func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 
 	if !conf.WhipOnly && !conf.URLOnly {
 		t.Run("RTMP", func(t *testing.T) {
-			RunRTMPTest(t, conf, bus, commandPsrpcClient, psrpcClient)
+			RunRTMPTest(t, conf, bus, commandPsrpcClient, psrpcClient, service.NewCmd)
 		})
 	}
 	if !conf.RtmpOnly && !conf.URLOnly {
 		t.Run("WHIP", func(t *testing.T) {
-			RunWHIPTest(t, conf, bus, commandPsrpcClient, psrpcClient)
+			RunWHIPTest(t, conf, bus, commandPsrpcClient, psrpcClient, service.NewCmd)
 		})
 	}
 	if !conf.RtmpOnly && !conf.WhipOnly {
 		t.Run("URL pul", func(t *testing.T) {
-			RunURLTest(t, conf, bus, commandPsrpcClient, psrpcClient)
+			RunURLTest(t, conf, bus, commandPsrpcClient, psrpcClient, service.NewCmd)
 		})
 	}
 
