@@ -20,6 +20,7 @@ import (
 	"context"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ import (
 	"github.com/livekit/psrpc"
 
 	"github.com/livekit/ingress/pkg/config"
-	"github.com/livekit/ingress/pkg/service"
+	"github.com/livekit/ingress/pkg/params"
 )
 
 type TestConfig struct {
@@ -123,7 +124,7 @@ func getConfig(t *testing.T) *TestConfig {
 	return tc
 }
 
-func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
+func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
 	psrpcClient, err := rpc.NewIOInfoClient(bus)
 	require.NoError(t, err)
 
@@ -135,17 +136,17 @@ func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus) {
 
 	if !conf.WhipOnly && !conf.URLOnly {
 		t.Run("RTMP", func(t *testing.T) {
-			RunRTMPTest(t, conf, bus, commandPsrpcClient, psrpcClient, service.NewCmd)
+			RunRTMPTest(t, conf, bus, commandPsrpcClient, psrpcClient, newCmd)
 		})
 	}
 	if !conf.RtmpOnly && !conf.URLOnly {
 		t.Run("WHIP", func(t *testing.T) {
-			RunWHIPTest(t, conf, bus, commandPsrpcClient, psrpcClient, service.NewCmd)
+			RunWHIPTest(t, conf, bus, commandPsrpcClient, psrpcClient, newCmd)
 		})
 	}
 	if !conf.RtmpOnly && !conf.WhipOnly {
 		t.Run("URL pul", func(t *testing.T) {
-			RunURLTest(t, conf, bus, commandPsrpcClient, psrpcClient, service.NewCmd)
+			RunURLTest(t, conf, bus, commandPsrpcClient, psrpcClient, newCmd)
 		})
 	}
 

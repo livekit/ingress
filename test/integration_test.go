@@ -19,6 +19,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/livekit/ingress/pkg/service"
 	"github.com/livekit/protocol/redis"
 	"github.com/livekit/psrpc"
 )
@@ -32,5 +33,5 @@ func TestIngress(t *testing.T) {
 
 	bus := psrpc.NewRedisMessageBus(rc)
 
-	RunTestSuite(t, conf, bus)
+	RunTestSuite(t, conf, bus, service.NewCmd)
 }
