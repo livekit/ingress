@@ -18,11 +18,13 @@ import (
 	"context"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
 
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/mediatransportutil/pkg/pacer"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
@@ -77,11 +79,42 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 		s.Close()
 	}
 
+	opts := []lksdk.ConnectOption{
+		lksdk.WithAutoSubscribe(false),
+	}
+
+	if !p.BypassTranscoding {
+		var br uint32
+		if p.VideoEncodingOptions != nil {
+			for _, l := range p.VideoEncodingOptions.Layers {
+				br += l.Bitrate
+			}
+		}
+		if p.AudioEncodingOptions != nil {
+			br += p.AudioEncodingOptions.Bitrate
+		}
+
+		if br > 0 {
+			// Use 2x the nominal bitrate
+			br *= 2
+
+			pf := pacer.NewPacerFactory(
+				pacer.LeakyBucketPacer,
+				pacer.WithBitrate(int(br)),
+				pacer.WithMaxLatency(time.Second),
+			)
+
+			opts = append(opts, lksdk.WithPacer(pf))
+
+			p.GetLogger().Infow("enabling pacer", "bitrate", br)
+		}
+	}
+
 	room, err := lksdk.ConnectToRoomWithToken(
 		p.WsUrl,
 		p.Token,
 		cb,
-		lksdk.WithAutoSubscribe(false),
+		opts...,
 	)
 	if err != nil {
 		return nil, err
