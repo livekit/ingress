@@ -218,12 +218,18 @@ func (t *whipTrackHandler) processRTPPacket() error {
 				return err
 			}
 
+			t.statsLock.Lock()
+			stats := t.trackStats
+			t.statsLock.Unlock()
+
 			if t.lastSnValid && t.lastSn+1 != pkt.SequenceNumber {
 				gap := pkt.SequenceNumber - t.lastSn
 				if t.lastSn-pkt.SequenceNumber < gap {
 					gap = t.lastSn - pkt.SequenceNumber
 				}
-				t.trackStats.PacketLost(int64(gap - 1))
+				if stats != nil {
+					stats.PacketLost(int64(gap - 1))
+				}
 			}
 
 			t.lastSnValid = true
@@ -239,9 +245,6 @@ func (t *whipTrackHandler) processRTPPacket() error {
 				return err
 			}
 
-			t.statsLock.Lock()
-			stats := t.trackStats
-			t.statsLock.Unlock()
 			if stats != nil {
 				stats.MediaReceived(int64(len(buf)))
 			}
