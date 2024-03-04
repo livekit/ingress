@@ -32,7 +32,7 @@ import (
 )
 
 const (
-	minIdle float64 = 0.3 // Target at least 30% idle CPU
+	defaultMinIdle float64 = 0.3 // Target at least 30% idle CPU
 )
 
 type Monitor struct {
@@ -137,6 +137,10 @@ func (m *Monitor) Stop() {
 }
 
 func (m *Monitor) checkCPUConfig() error {
+	if m.cpuCostConfig.MinIdleRatio <= 0 {
+		m.cpuCostConfig.MinIdleRatio = defaultMinIdle
+	}
+
 	if m.cpuCostConfig.RTMPCpuCost < 1 {
 		logger.Warnw("rtmp input requirement too low", nil,
 			"config value", m.cpuCostConfig.RTMPCpuCost,
@@ -217,20 +221,26 @@ func (m *Monitor) CanAccept() bool {
 	m.costConfigLock.Lock()
 	defer m.costConfigLock.Unlock()
 
-	return m.getAvailable() > m.maxCost
+	return m.getAvailable(m.cpuCostConfig.MinIdleRatio) > m.maxCost
 }
 
-func (m *Monitor) canAcceptIngress(info *livekit.IngressInfo) (bool, float64, float64) {
+func (m *Monitor) canAcceptIngress(info *livekit.IngressInfo, alreadyCommitted bool) (bool, float64, float64) {
 	if !m.started.IsBroken() || m.shutdown.IsBroken() {
 		return false, 0, 0
 	}
 
 	var cpuHold float64
 	var accept bool
-	available := m.getAvailable()
 
 	m.costConfigLock.Lock()
 	defer m.costConfigLock.Unlock()
+
+	minIdle := m.cpuCostConfig.MinIdleRatio
+	if alreadyCommitted {
+		minIdle /= 2
+	}
+
+	available := m.getAvailable(minIdle)
 
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
@@ -258,13 +268,13 @@ func (m *Monitor) canAcceptIngress(info *livekit.IngressInfo) (bool, float64, fl
 }
 
 func (m *Monitor) CanAcceptIngress(info *livekit.IngressInfo) bool {
-	accept, _, _ := m.canAcceptIngress(info)
+	accept, _, _ := m.canAcceptIngress(info, false)
 
 	return accept
 }
 
 func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
-	accept, cpuHold, available := m.canAcceptIngress(info)
+	accept, cpuHold, available := m.canAcceptIngress(info, true)
 
 	if accept {
 		m.pendingCPUs.Add(cpuHold)
@@ -298,6 +308,6 @@ func (m *Monitor) IngressEnded(info *livekit.IngressInfo) {
 	}
 }
 
-func (m *Monitor) getAvailable() float64 {
-	return m.cpuStats.GetCPUIdle() - m.pendingCPUs.Load() - minIdle*m.cpuStats.NumCPU()
+func (m *Monitor) getAvailable(minIdleRatio float64) float64 {
+	return m.cpuStats.GetCPUIdle() - m.pendingCPUs.Load() - minIdleRatio*m.cpuStats.NumCPU()
 }

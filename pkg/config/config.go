@@ -77,6 +77,7 @@ type CPUCostConfig struct {
 	WHIPCpuCost                  float64 `yaml:"whip_cpu_cost"`
 	WHIPBypassTranscodingCpuCost float64 `yaml:"whip_bypass_transcoding_cpu_cost"`
 	URLCpuCost                   float64 `yaml:"url_cpu_cost"`
+	MinIdleRatio                 float64 `yaml:"min_idle_ratio"` // Target idle cpu ratio when deciding availability for new requests
 }
 
 func NewConfig(confString string) (*Config, error) {
