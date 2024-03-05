@@ -50,8 +50,6 @@ const (
 	dtlsRetransmissionInterval = 100 * time.Millisecond
 )
 
-// TODO log ingress id / resource ID
-
 type whipHandler struct {
 	logger logger.Logger
 	params *params.Params
@@ -305,7 +303,6 @@ func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnect
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		h.logger.Infow("Peer Connection State changed", "state", state.String())
 
-		// TODO support ICE Restart
 		if state >= webrtc.PeerConnectionStateDisconnected {
 			h.closeOnce.Do(func() {
 				h.sync.End()

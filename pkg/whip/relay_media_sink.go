@@ -41,10 +41,6 @@ func NewRelayMediaSink(logger logger.Logger) *RelayMediaSink {
 	}
 }
 
-func (rs *RelayMediaSink) PushSample(s *media.Sample, ts time.Duration) error {
-	return utils.SerializeMediaForRelay(rs.mediaBuffer, s.Data, ts)
-}
-
 func (sp *RelayMediaSink) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) {
 	// noop
 }
@@ -57,4 +53,8 @@ func (rs *RelayMediaSink) Close() error {
 	rs.mediaBuffer.Close()
 
 	return nil
+}
+
+func (rs *RelayMediaSink) pushSample(s *media.Sample, ts time.Duration) error {
+	return utils.SerializeMediaForRelay(rs.mediaBuffer, s.Data, ts)
 }

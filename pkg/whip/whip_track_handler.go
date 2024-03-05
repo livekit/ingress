@@ -15,7 +15,6 @@
 package whip
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -65,7 +64,6 @@ type whipTrackHandler struct {
 	lastSn      uint16
 	lastSnValid bool
 
-	firstPacket sync.Once
 	fuse        core.Fuse
 	samplesChan chan sample
 }
@@ -193,84 +191,7 @@ func (t *whipTrackHandler) processRTPPacket() error {
 		return err
 	}
 
-	t.firstPacket.Do(func() {
-		t.logger.Debugw("first packet received")
-		t.sync.Initialize(pkt)
-	})
-
-	t.jb.Push(pkt)
-
-	samples := t.jb.PopSamples(false)
-	for _, pkts := range samples {
-		if len(pkts) == 0 {
-			continue
-		}
-
-		var ts time.Duration
-		var err error
-		var buffer bytes.Buffer // TODO reuse the same buffer across calls, after resetting it if buffer allocation is a performane bottleneck
-		for _, pkt := range pkts {
-			ts, err = t.sync.GetPTS(pkt)
-			switch err {
-			case nil, synchronizer.ErrBackwardsPTS:
-				err = nil
-			default:
-				return err
-			}
-
-			t.statsLock.Lock()
-			stats := t.trackStats
-			t.statsLock.Unlock()
-
-			if t.lastSnValid && t.lastSn+1 != pkt.SequenceNumber {
-				gap := pkt.SequenceNumber - t.lastSn
-				if t.lastSn-pkt.SequenceNumber < gap {
-					gap = t.lastSn - pkt.SequenceNumber
-				}
-				if stats != nil {
-					stats.PacketLost(int64(gap - 1))
-				}
-			}
-
-			t.lastSnValid = true
-			t.lastSn = pkt.SequenceNumber
-
-			if len(pkt.Payload) <= 2 {
-				// Padding
-				continue
-			}
-
-			buf, err := t.depacketizer.Unmarshal(pkt.Payload)
-			if err != nil {
-				return err
-			}
-
-			if stats != nil {
-				stats.MediaReceived(int64(len(buf)))
-			}
-
-			_, err = buffer.Write(buf)
-			if err != nil {
-				return err
-			}
-		}
-
-		// This returns the average duration, not the actual duration of the specific sample
-		// SampleBuilder is using the duration of the previous sample, which is inaccurate as well
-		sampleDuration := t.sync.GetFrameDuration()
-
-		s := &media.Sample{
-			Data:     buffer.Bytes(),
-			Duration: sampleDuration,
-		}
-
-		select {
-		case t.samplesChan <- sample{s, ts}:
-		case <-t.fuse.Watch():
-		}
-	}
-
-	return nil
+	return t.mediaSink.PushRTP(ptk)
 }
 
 func (t *whipTrackHandler) mediaWriterWorker(onDone func(err error)) {
