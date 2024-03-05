@@ -72,6 +72,7 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 
 	s := &LKSDKOutput{
 		params: p,
+		logger: p.GetLogger(),
 	}
 
 	cb := lksdk.NewRoomCallback()
