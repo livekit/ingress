@@ -102,7 +102,7 @@ func (t *RelayWhipTrackHandler) Start(onDone func(err error)) (err error) {
 	return nil
 }
 
-func (t *whipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaStatsGatherer) {
+func (t *RelayWhipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaStatsGatherer) {
 	t.statsLock.Lock()
 
 	var path string
@@ -122,7 +122,7 @@ func (t *whipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaStatsG
 	t.statsLock.Unlock()
 }
 
-func (t *whipTrackHandler) Close() {
+func (t *RelayWhipTrackHandler) Close() {
 	t.fuse.Break()
 }
 
@@ -168,7 +168,7 @@ func (t *RelayWhipTrackHandler) startRTPReceiver(onDone func(err error)) {
 	}()
 }
 
-func (t *whipTrackHandler) startRTCPReceiver() {
+func (t *RelayWhipTrackHandler) startRTCPReceiver() {
 	go func() {
 		t.logger.Infow("starting app source rtcp receiver")
 
@@ -212,7 +212,7 @@ func (t *RelayWhipTrackHandler) processRTPPacket() error {
 		return err
 	}
 
-	return t.mediaSink.PushRTP(ptk)
+	return t.pushRTP(ptk)
 }
 
 func (rs *RelayWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
