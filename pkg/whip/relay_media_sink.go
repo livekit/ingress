@@ -20,7 +20,6 @@ import (
 
 	"github.com/pion/webrtc/v3/pkg/media"
 
-	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/logger"
 )
@@ -39,10 +38,6 @@ func NewRelayMediaSink(logger logger.Logger) *RelayMediaSink {
 	return &RelayMediaSink{
 		mediaBuffer: mediaBuffer,
 	}
-}
-
-func (sp *RelayMediaSink) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) {
-	// noop
 }
 
 func (rs *RelayMediaSink) SetWriter(w io.WriteCloser) error {
