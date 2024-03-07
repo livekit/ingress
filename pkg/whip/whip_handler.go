@@ -50,6 +50,12 @@ const (
 	dtlsRetransmissionInterval = 100 * time.Millisecond
 )
 
+type WhipTrackHandler interface {
+	Start(onDone func(err error)) (err error)
+	Close() error
+	SetMediaTrackStatsGatherer(g *stats.LocalMediaStatsGatherer)
+}
+
 type whipHandler struct {
 	logger logger.Logger
 	params *params.Params
@@ -57,7 +63,6 @@ type whipHandler struct {
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
-	outputSync         *utils.OutputSynchronizer
 	stats              *stats.LocalMediaStatsGatherer
 	sdkOutput          *lksdk_output.LKSDKOutput // only for passthrough
 	expectedTrackCount int
@@ -69,11 +74,6 @@ type whipHandler struct {
 	tracks          map[string]*webrtc.TrackRemote
 	trackHandlers   []*whipTrackHandler
 	trackAddedChan  chan *webrtc.TrackRemote
-
-	trackSDKMediaSinkLock sync.Mutex
-	trackSDKMediaSink     map[types.StreamKind]*SDKMediaSink
-
-	trackRelayMediaSink map[types.StreamKind]*RelayMediaSink // only for transcoding mode
 }
 
 func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {

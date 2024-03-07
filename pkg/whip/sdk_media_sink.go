@@ -58,6 +58,7 @@ type SDKMediaSinkTrack struct {
 type SDKMediaSink struct {
 	logger          logger.Logger
 	params          *params.Params
+	outputSync      *utils.TrackOutputSynchronizer
 	sdkOutput       *lksdk_output.LKSDKOutput
 	sinkInitialized bool
 
@@ -81,10 +82,12 @@ func NewSDKMediaSink(
 	sdkOutput *lksdk_output.LKSDKOutput,
 	codecParameters webrtc.RTPCodecParameters,
 	streamKind types.StreamKind,
+	outputSync *utils.TrackOutputSynchronizer,
 ) *SDKMediaSink {
 	return &SDKMediaSink{
 		logger:          l,
 		params:          p,
+		outputSync:      outputSync,
 		sdkOutput:       sdkOutput,
 		tracks:          []*SDKMediaSinkTrack{},
 		streamKind:      streamKind,
@@ -136,6 +139,7 @@ func (t *SDKMediaSinkTrack) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) 
 
 func (sp *SDKMediaSink) Close() error {
 	sp.fuse.Break()
+	sp.outputSync.Close()
 
 	return nil
 }
@@ -256,6 +260,22 @@ func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error 
 	t.sink.tracksLock.Unlock()
 
 	if localTrack == nil {
+		if g != nil {
+			g.PacketLost(1)
+		}
+
+		return nil
+	}
+
+	// Synchronize the outputs before the network jitter buffer to avoid old samples stuck
+	// in the channel from increasing the whole pipeline delay.
+	drop, err := t.sink.outputSync.WaitForMediaTime(ts)
+	if err != nil {
+		return err
+	}
+	if drop {
+		t.sink.logger.Debugw("dropping sample", "timestamp", ts)
+
 		if g != nil {
 			g.PacketLost(1)
 		}
