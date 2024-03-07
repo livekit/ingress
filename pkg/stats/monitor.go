@@ -53,10 +53,7 @@ type Monitor struct {
 }
 
 func NewMonitor() *Monitor {
-	return &Monitor{
-		started:  core.NewFuse(),
-		shutdown: core.NewFuse(),
-	}
+	return &Monitor{}
 }
 
 func (m *Monitor) Start(conf *config.Config) error {

@@ -27,8 +27,8 @@ import (
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/server-sdk-go/pkg/synchronizer"
 	"github.com/livekit/server-sdk-go/v2/pkg/jitter"
+	"github.com/livekit/server-sdk-go/v2/pkg/synchronizer"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v3"
@@ -70,7 +70,7 @@ func NewRelayWhipTrackHandler(
 	receiver *webrtc.RTPReceiver,
 	writePLI func(ssrc webrtc.SSRC),
 	onRTCP func(packet rtcp.Packet),
-) *RelayWhipTrackHandler {
+) (*RelayWhipTrackHandler, error) {
 	jb, err := createJitterBuffer(track, logger, writePLI)
 	if err != nil {
 		return nil, err
@@ -90,7 +90,7 @@ func NewRelayWhipTrackHandler(
 		sync:         sync,
 		jb:           jb,
 		depacketizer: depacketizer,
-	}
+	}, nil
 }
 
 func (t *RelayWhipTrackHandler) Start(onDone func(err error)) (err error) {
@@ -132,14 +132,13 @@ func (t *RelayWhipTrackHandler) Close() {
 
 func (t *RelayWhipTrackHandler) startRTPReceiver(onDone func(err error)) {
 	go func() {
+		var err error
 		defer func() {
 			t.relaySink.Close()
 			if onDone != nil {
 				onDone(err)
 			}
 		}()
-
-		var err error
 
 		t.logger.Infow("starting rtp receiver")
 
@@ -216,10 +215,10 @@ func (t *RelayWhipTrackHandler) processRTPPacket() error {
 		return err
 	}
 
-	return t.pushRTP(ptk)
+	return t.pushRTP(pkt)
 }
 
-func (rs *RelayWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
+func (t *RelayWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
 	t.firstPacket.Do(func() {
 		t.logger.Debugw("first packet received")
 		t.sync.Initialize(pkt)
@@ -291,9 +290,11 @@ func (rs *RelayWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
 			Duration: sampleDuration,
 		}
 
-		err = rs.relaySink.PushSample(s, ts)
+		err = t.relaySink.PushSample(s, ts)
 		if err != nil {
 			return err
 		}
 	}
+
+	return nil
 }

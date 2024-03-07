@@ -66,8 +66,7 @@ func (os *OutputSynchronizer) getWaitDuration(pts time.Duration, firstSampleSent
 
 func newTrackOutputSynchronizer(os *OutputSynchronizer) *TrackOutputSynchronizer {
 	return &TrackOutputSynchronizer{
-		os:     os,
-		closed: core.NewFuse(),
+		os: os,
 	}
 }
 

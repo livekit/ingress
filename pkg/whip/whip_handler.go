@@ -52,7 +52,7 @@ const (
 
 type WhipTrackHandler interface {
 	Start(onDone func(err error)) (err error)
-	Close() error
+	Close()
 	SetMediaTrackStatsGatherer(g *stats.LocalMediaStatsGatherer)
 }
 
@@ -73,7 +73,7 @@ type whipHandler struct {
 	trackLock       sync.Mutex
 	simulcastLayers []string
 	tracks          map[string]*webrtc.TrackRemote
-	trackHandlers   []*WhipTrackHandler
+	trackHandlers   map[types.StreamKind]WhipTrackHandler
 	trackAddedChan  chan *webrtc.TrackRemote
 
 	trackSDKMediaSinkLock sync.Mutex
@@ -90,7 +90,7 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 		outputSync:        utils.NewOutputSynchronizer(),
 		result:            make(chan error, 1),
 		tracks:            make(map[string]*webrtc.TrackRemote),
-		trackHandlers:     []*WhipTrackHandler{},
+		trackHandlers:     make(map[types.StreamKind]WhipTrackHandler),
 		trackSDKMediaSink: make(map[types.StreamKind]*SDKMediaSink),
 	}
 }
@@ -246,13 +246,13 @@ func (h *whipHandler) AssociateRelay(kind types.StreamKind, token string, w io.W
 	}
 
 	t := h.trackHandlers[kind]
-	if th == nil {
+	if t == nil {
 		return errors.ErrIngressNotFound
 	}
 
 	th, ok := t.(*RelayWhipTrackHandler)
 	if !ok {
-		fmt.Errorw("failed type assertion on track handler", err)
+		h.logger.Errorw("failed type assertion on track handler", nil)
 		return errors.ErrIngressNotFound
 	}
 
@@ -401,6 +401,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 	}
 
 	var th WhipTrackHandler
+	var err error
 	if h.params.BypassTranscoding {
 		mediaSink, err := h.getSDKTrackMediaSink(track, trackQuality)
 		if err != nil {
@@ -408,19 +409,19 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 			return
 		}
 
-		th, err := NewSDKWhipTrackHandler(logger, track, trackQuality, sync, mediaSink, receiver, h.writePLI, h.sync.OnRTCP)
+		th, err = NewSDKWhipTrackHandler(logger, track, trackQuality, sync, mediaSink, receiver, h.writePLI, h.sync.OnRTCP)
 		if err != nil {
 			logger.Warnw("failed creating SDK whip track handler", err)
 			return
 		}
 	} else {
-		th, err := NewRelayWhipTrackHandler(logger, track, trackQuality, sync, receiver, h.writePLI, h.sync.OnRTCP)
+		th, err = NewRelayWhipTrackHandler(logger, track, trackQuality, sync, receiver, h.writePLI, h.sync.OnRTCP)
 		if err != nil {
 			logger.Warnw("failed creating relay whip track handler", err)
 			return
 		}
 	}
-	h.trackHandlers = append(h.trackHandlers, th)
+	h.trackHandlers[kind] = th
 
 	select {
 	case h.trackAddedChan <- track:
@@ -429,15 +430,13 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 	}
 }
 
-func (h *whipHandler) getSDKTrackMediaSink(track *webrtc.TrackRemote, trackQuality livekit.VideoQuality) (MediaSink, error) {
+func (h *whipHandler) getSDKTrackMediaSink(track *webrtc.TrackRemote, trackQuality livekit.VideoQuality) (*SDKMediaSinkTrack, error) {
 	kind := streamKindFromCodecType(track.Kind())
 
 	h.trackSDKMediaSinkLock.Lock()
 	defer h.trackSDKMediaSinkLock.Unlock()
 
 	if _, ok := h.trackSDKMediaSink[kind]; !ok {
-		h.trackSDKMediaSink[kind] = NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track.Codec(), streamKindFromCodecType(track.Kind()), h.outputSync.AddTrack())
-
 		layers := []livekit.VideoQuality{livekit.VideoQuality_HIGH}
 		if kind == types.Video && len(h.simulcastLayers) == 3 {
 			layers = []livekit.VideoQuality{livekit.VideoQuality_HIGH, livekit.VideoQuality_MEDIUM, livekit.VideoQuality_LOW}
@@ -445,15 +444,13 @@ func (h *whipHandler) getSDKTrackMediaSink(track *webrtc.TrackRemote, trackQuali
 			layers = []livekit.VideoQuality{livekit.VideoQuality_HIGH, livekit.VideoQuality_MEDIUM}
 		}
 
-		for _, layer := range layers {
-			h.trackSDKMediaSink[kind].AddTrack(layer)
-		}
+		h.trackSDKMediaSink[kind] = NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track.Codec(), streamKindFromCodecType(track.Kind()), h.outputSync, layers)
 	}
 
 	sdkTrack := h.trackSDKMediaSink[kind].GetTrack(trackQuality)
 	if sdkTrack == nil {
 		err := errors.ErrIngressNotFound
-		logger.Warnw("no SDK track for the current quality", err)
+		h.logger.Warnw("no SDK track for the current quality", err)
 		return nil, err
 	}
 

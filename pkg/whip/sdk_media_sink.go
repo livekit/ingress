@@ -45,7 +45,8 @@ var (
 )
 
 type SDKMediaSinkTrack struct {
-	writePLI func()
+	stateLock sync.Mutex
+	writePLI  func()
 
 	quality       livekit.VideoQuality
 	width, height uint
@@ -104,7 +105,7 @@ func NewSDKMediaSink(
 
 func (sp *SDKMediaSink) GetTrack(quality livekit.VideoQuality) *SDKMediaSinkTrack {
 	sp.tracksLock.Lock()
-	defer sp.tracksLock.Unock()
+	defer sp.tracksLock.Unlock()
 
 	return sp.tracks[quality]
 }
@@ -129,13 +130,12 @@ func (t *SDKMediaSinkTrack) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) 
 
 func (sp *SDKMediaSink) Close() error {
 	sp.fuse.Break()
-	sp.outputSync.Close()
 
 	return nil
 }
 
 func (sp *SDKMediaSink) addTrack(quality livekit.VideoQuality, outputSync *utils.TrackOutputSynchronizer) {
-	sp.tracks[quality] = sp.tracks, &SDKMediaSinkTrack{
+	sp.tracks[quality] = &SDKMediaSinkTrack{
 		sink:       sp,
 		quality:    quality,
 		outputSync: outputSync,
@@ -212,7 +212,7 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 	sp.sdkOutput.AddOutputs(sbArray...)
 
 	for i, q := range layers {
-		t = sp.tracks[q]
+		t = sp.tracks[q.Quality]
 		t.localTrack = tracks[i]
 		pliHandlers[i].SetKeyFrameEmitter(t)
 	}
@@ -266,7 +266,7 @@ func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error 
 		return nil
 	}
 
-	drop, err := t.sink.outputSync.WaitForMediaTime(ts)
+	drop, err := t.outputSync.WaitForMediaTime(ts)
 	if err != nil {
 		return err
 	}
@@ -295,6 +295,7 @@ func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error 
 }
 
 func (t *SDKMediaSinkTrack) Close() error {
+	t.outputSync.Close()
 	return t.sink.Close()
 }
 
@@ -309,16 +310,16 @@ func (t *SDKMediaSinkTrack) OnUnbind() error {
 }
 
 func (t *SDKMediaSinkTrack) SetWritePLI(writePLI func()) {
-	sp.tracksLock.Lock()
-	defer sp.tracksLock.Unlock()
+	t.stateLock.Lock()
+	defer t.stateLock.Unlock()
 
 	t.writePLI = writePLI
 }
 
 func (t *SDKMediaSinkTrack) ForceKeyFrame() error {
-	t.sink.tracksLock.Lock()
+	t.stateLock.Lock()
 	writePLI := t.writePLI
-	t.sink.tracksLock.Unlock()
+	t.stateLock.Unlock()
 
 	if writePLI != nil {
 		writePLI()

@@ -55,7 +55,6 @@ type LocalMediaStatsGatherer struct {
 func NewMediaStats(statsUpdater types.MediaStatsUpdater) *MediaStatsReporter {
 	m := &MediaStatsReporter{
 		statsUpdater: statsUpdater,
-		done:         core.NewFuse(),
 	}
 
 	go func() {

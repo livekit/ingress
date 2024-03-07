@@ -27,8 +27,8 @@ import (
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/server-sdk-go/pkg/synchronizer"
 	"github.com/livekit/server-sdk-go/v2/pkg/jitter"
+	"github.com/livekit/server-sdk-go/v2/pkg/synchronizer"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v3"
@@ -62,11 +62,11 @@ func NewSDKWhipTrackHandler(
 	track *webrtc.TrackRemote,
 	quality livekit.VideoQuality,
 	sync *synchronizer.TrackSynchronizer,
-	sdkMediaSink *SDKMediaSink,
+	sdkMediaSinkTrack *SDKMediaSinkTrack,
 	receiver *webrtc.RTPReceiver,
 	writePLI func(ssrc webrtc.SSRC),
 	onRTCP func(packet rtcp.Packet),
-) (*RelayWhipTrackHandler, error) {
+) (*SDKWhipTrackHandler, error) {
 	jb, err := createJitterBuffer(track, logger, writePLI)
 	if err != nil {
 		return nil, err
@@ -76,15 +76,13 @@ func NewSDKWhipTrackHandler(
 		return nil, err
 	}
 
-	trackMediaSink := sdkMediaSink.AddTrack(quality)
-
-	return &RelayWhipTrackHandler{
+	return &SDKWhipTrackHandler{
 		logger:         logger,
 		remoteTrack:    track,
 		quality:        quality,
 		receiver:       receiver,
 		sync:           sync,
-		trackMediaSink: trackMediaSink,
+		trackMediaSink: sdkMediaSinkTrack,
 		jb:             jb,
 		depacketizer:   depacketizer,
 	}, nil
@@ -125,14 +123,14 @@ func (t *SDKWhipTrackHandler) Close() {
 
 func (t *SDKWhipTrackHandler) startRTPReceiver(onDone func(err error)) {
 	go func() {
+		var err error
+
 		defer func() {
 			t.trackMediaSink.Close()
 			if onDone != nil {
 				onDone(err)
 			}
 		}()
-
-		var err error
 
 		t.logger.Infow("starting rtp receiver")
 
@@ -209,10 +207,10 @@ func (t *SDKWhipTrackHandler) processRTPPacket() error {
 		return err
 	}
 
-	return t.pushRTP(ptk)
+	return t.pushRTP(pkt)
 }
 
-func (rs *SDKWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
+func (t *SDKWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
 	t.firstPacket.Do(func() {
 		t.logger.Debugw("first packet received")
 		t.sync.Initialize(pkt)
@@ -284,9 +282,11 @@ func (rs *SDKWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
 			Duration: sampleDuration,
 		}
 
-		err = rs.trackMediaSink.PushSample(s, ts)
+		err = t.trackMediaSink.PushSample(s, ts)
 		if err != nil {
 			return err
 		}
 	}
+
+	return nil
 }
