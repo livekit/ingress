@@ -122,6 +122,10 @@ func (t *RelayWhipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaS
 	t.statsLock.Unlock()
 }
 
+func (t *RelayWhipTrackHandler) SetWriter(w io.WriteCloser) error {
+	return t.relaySink.SetWriter(w)
+}
+
 func (t *RelayWhipTrackHandler) Close() {
 	t.fuse.Break()
 }
@@ -287,7 +291,7 @@ func (rs *RelayWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
 			Duration: sampleDuration,
 		}
 
-		err = rs.relaySink.pushSample(s, ts)
+		err = rs.relaySink.PushSample(s, ts)
 		if err != nil {
 			return err
 		}

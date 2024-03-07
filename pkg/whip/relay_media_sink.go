@@ -50,6 +50,6 @@ func (rs *RelayMediaSink) Close() error {
 	return nil
 }
 
-func (rs *RelayMediaSink) pushSample(s *media.Sample, ts time.Duration) error {
+func (rs *RelayMediaSink) PushSample(s *media.Sample, ts time.Duration) error {
 	return utils.SerializeMediaForRelay(rs.mediaBuffer, s.Data, ts)
 }

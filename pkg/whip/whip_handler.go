@@ -63,6 +63,7 @@ type whipHandler struct {
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
+	outputSync         *utils.OutputSynchronizer
 	stats              *stats.LocalMediaStatsGatherer
 	sdkOutput          *lksdk_output.LKSDKOutput // only for passthrough
 	expectedTrackCount int
@@ -72,7 +73,7 @@ type whipHandler struct {
 	trackLock       sync.Mutex
 	simulcastLayers []string
 	tracks          map[string]*webrtc.TrackRemote
-	trackHandlers   []*whipTrackHandler
+	trackHandlers   []*WhipTrackHandler
 	trackAddedChan  chan *webrtc.TrackRemote
 }
 
@@ -81,14 +82,12 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 	rtcConfCopy := *webRTCConfig
 
 	return &whipHandler{
-		rtcConfig:           &rtcConfCopy,
-		sync:                synchronizer.NewSynchronizer(nil),
-		outputSync:          utils.NewOutputSynchronizer(),
-		result:              make(chan error, 1),
-		tracks:              make(map[string]*webrtc.TrackRemote),
-		trackHandlers:       []*whipTrackHandler{},
-		trackRelayMediaSink: make(map[types.StreamKind]*RelayMediaSink),
-		trackSDKMediaSink:   make(map[types.StreamKind]*SDKMediaSink),
+		rtcConfig:     &rtcConfCopy,
+		sync:          synchronizer.NewSynchronizer(nil),
+		outputSync:    utils.NewOutputSynchronizer(),
+		result:        make(chan error, 1),
+		tracks:        make(map[string]*webrtc.TrackRemote),
+		trackHandlers: []*WhipTrackHandler{},
 	}
 }
 
@@ -240,6 +239,8 @@ func (h *whipHandler) AssociateRelay(kind types.StreamKind, token string, w io.W
 	if token != h.params.RelayToken {
 		return errors.ErrInvalidRelayToken
 	}
+
+	th := h.trackHandlers[kind]
 
 	th := h.trackRelayMediaSink[kind]
 	if th == nil {
