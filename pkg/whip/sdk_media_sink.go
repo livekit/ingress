@@ -90,10 +90,9 @@ func NewSDKMediaSink(
 		logger:          l,
 		params:          p,
 		sdkOutput:       sdkOutput,
-		tracks:          []*SDKMediaSinkTrack{},
+		tracks:          make(map[livekit.VideoQuality]*SDKMediaSinkTrack),
 		streamKind:      streamKind,
 		codecParameters: codecParameters,
-		tracks:          make(map[livekit.VideoQuality]*SDKMediaSinkTrack),
 	}
 
 	for _, q := range layers {
@@ -136,11 +135,11 @@ func (sp *SDKMediaSink) Close() error {
 }
 
 func (sp *SDKMediaSink) addTrack(quality livekit.VideoQuality, outputSync *utils.TrackOutputSynchronizer) {
-	sp.tracks = append(sp.tracks, &SDKMediaSinkTrack{
+	sp.tracks[quality] = sp.tracks, &SDKMediaSinkTrack{
 		sink:       sp,
 		quality:    quality,
 		outputSync: outputSync,
-	})
+	}
 }
 
 func (sp *SDKMediaSink) ensureAudioTracksInitialized(s *media.Sample, t *SDKMediaSinkTrack) (bool, error) {
@@ -212,7 +211,8 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 
 	sp.sdkOutput.AddOutputs(sbArray...)
 
-	for i, t := range sp.tracks {
+	for i, q := range layers {
+		t = sp.tracks[q]
 		t.localTrack = tracks[i]
 		pliHandlers[i].SetKeyFrameEmitter(t)
 	}
@@ -308,15 +308,11 @@ func (t *SDKMediaSinkTrack) OnUnbind() error {
 	return nil
 }
 
-func (sp *SDKMediaSinkTrack) SetWritePLI(writePLI func()) {
+func (t *SDKMediaSinkTrack) SetWritePLI(writePLI func()) {
 	sp.tracksLock.Lock()
 	defer sp.tracksLock.Unlock()
 
-	for i := range sp.tracks {
-		if sp.tracks[i].quality == quality {
-			sp.tracks[i].writePLI = writePLI
-		}
-	}
+	t.writePLI = writePLI
 }
 
 func (t *SDKMediaSinkTrack) ForceKeyFrame() error {

@@ -66,7 +66,7 @@ func NewSDKWhipTrackHandler(
 	receiver *webrtc.RTPReceiver,
 	writePLI func(ssrc webrtc.SSRC),
 	onRTCP func(packet rtcp.Packet),
-) *RelayWhipTrackHandler {
+) (*RelayWhipTrackHandler, error) {
 	jb, err := createJitterBuffer(track, logger, writePLI)
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func NewSDKWhipTrackHandler(
 		trackMediaSink: trackMediaSink,
 		jb:             jb,
 		depacketizer:   depacketizer,
-	}
+	}, nil
 }
 
 func (t *SDKWhipTrackHandler) Start(onDone func(err error)) (err error) {
