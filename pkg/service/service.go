@@ -82,7 +82,6 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		whipSrv:     whipSrv,
 		psrpcClient: psrpcClient,
 		bus:         bus,
-		shutdown:    core.NewFuse(),
 	}
 
 	s.isActive.Store(true)

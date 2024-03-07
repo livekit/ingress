@@ -357,7 +357,6 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer, localTrack *lksdk.Loca
 	e := &Output{
 		sink:       sink,
 		outputSync: outputSync,
-		closed:     core.NewFuse(),
 		localTrack: localTrack,
 	}
 

@@ -57,7 +57,6 @@ func NewWHIPAppSource(ctx context.Context, resourceId string, trackKind types.St
 		trackKind:  trackKind,
 		relayUrl:   relayUrl,
 		resourceId: resourceId,
-		fuse:       core.NewFuse(),
 		result:     make(chan error, 1),
 	}
 

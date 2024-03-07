@@ -85,7 +85,6 @@ func New(ctx context.Context, conf *config.Config, params *params.Params, g *sta
 		pipeline:    pipeline,
 		sink:        sink,
 		input:       input,
-		closed:      core.NewFuse(),
 		pipelineErr: make(chan error, 1),
 	}
 

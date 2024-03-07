@@ -76,9 +76,8 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) er
 	}
 
 	h := &process{
-		info:   p.IngressInfo,
-		cmd:    cmd,
-		closed: core.NewFuse(),
+		info: p.IngressInfo,
+		cmd:  cmd,
 	}
 	socketAddr := getSocketAddress(p.TmpDir)
 	conn, err := grpc.Dial(socketAddr,
