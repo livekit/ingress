@@ -17,6 +17,7 @@ package whip
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -108,24 +109,6 @@ func (sp *SDKMediaSink) GetTrack(quality livekit.VideoQuality) *SDKMediaSinkTrac
 	defer sp.tracksLock.Unlock()
 
 	return sp.tracks[quality]
-}
-
-func (t *SDKMediaSinkTrack) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) {
-	var path string
-	switch t.sink.streamKind {
-	case types.Audio:
-		path = stats.OutputAudio
-	case types.Video:
-		path = stats.OutputVideo
-	default:
-		path = "output.unknown"
-	}
-
-	g := st.RegisterTrackStats(path)
-
-	t.sink.tracksLock.Lock()
-	t.trackStatsGatherer = g
-	t.sink.tracksLock.Unlock()
 }
 
 func (sp *SDKMediaSink) Close() error {
@@ -307,6 +290,24 @@ func (t *SDKMediaSinkTrack) OnBind() error {
 func (t *SDKMediaSinkTrack) OnUnbind() error {
 	t.sink.logger.Infow("media sink unbound")
 	return nil
+}
+
+func (t *SDKMediaSinkTrack) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) {
+	var path string
+	switch t.sink.streamKind {
+	case types.Audio:
+		path = stats.OutputAudio
+	case types.Video:
+		path = fmt.Sprintf("%s.%s", stats.OutputVideo, t.quality)
+	default:
+		path = "output.unknown"
+	}
+
+	g := st.RegisterTrackStats(path)
+
+	t.sink.tracksLock.Lock()
+	t.trackStatsGatherer = g
+	t.sink.tracksLock.Unlock()
 }
 
 func (t *SDKMediaSinkTrack) SetWritePLI(writePLI func()) {

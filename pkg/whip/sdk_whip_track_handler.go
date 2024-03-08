@@ -115,6 +115,8 @@ func (t *SDKWhipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaSta
 	t.trackStats = g
 
 	t.statsLock.Unlock()
+
+	t.trackMediaSink.SetStatsGatherer(st)
 }
 
 func (t *SDKWhipTrackHandler) Close() {
