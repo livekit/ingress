@@ -45,7 +45,12 @@ var (
 	ErrPrerollBufferReset      = psrpc.NewErrorf(psrpc.Internal, "preroll buffer reset")
 	ErrInvalidSimulcast        = psrpc.NewErrorf(psrpc.NotAcceptable, "invalid simulcast configuration")
 	ErrSimulcastTranscode      = psrpc.NewErrorf(psrpc.NotAcceptable, "simulcast is not supported when transcoding")
+	ErrRoomDisconnected        = RetryableError{psrpc.NewErrorf(psrpc.Unavailable, "room closed unexpectedly")}
 )
+
+type RetryableError struct {
+	psrpc.Error
+}
 
 func New(err string) error {
 	return errors.New(err)
