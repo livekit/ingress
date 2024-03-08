@@ -97,7 +97,7 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 	var err error
 	defer func() {
 		if err != nil {
-			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			p.SendStateUpdate(context.Background())
 		}
 	}()
@@ -118,9 +118,9 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad, para
 
 	defer func() {
 		if err != nil {
-			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 		} else {
-			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
+			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
 		}
 
 		// Is it ok to send this message here? The update handler is not waiting for a response but still doing I/O.
@@ -151,27 +151,11 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad, para
 	})
 }
 
-func (p *Pipeline) Run(ctx context.Context) {
+func (p *Pipeline) Run(ctx context.Context) error {
 	ctx, span := tracer.Start(ctx, "Pipeline.Run")
 	defer span.End()
 
 	var err error
-
-	defer func() {
-		switch err {
-		case nil:
-			if p.Params.Reusable {
-				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
-			} else {
-				p.SetStatus(livekit.IngressState_ENDPOINT_COMPLETE, "")
-			}
-		default:
-			span.RecordError(err)
-			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, strings.TrimSpace(err.Error()))
-		}
-
-		p.SendStateUpdate(ctx)
-	}()
 
 	// add watch
 	p.loop = glib.NewMainLoop(glib.MainContextDefault(), false)
@@ -182,15 +166,15 @@ func (p *Pipeline) Run(ctx context.Context) {
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("failed to set pipeline state", err)
-		return
+		return err
 	}
 
 	err = p.input.Start(ctx)
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("failed to start input", err)
-		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
-		return
+		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
+		return err
 	}
 
 	// run main loop
@@ -207,7 +191,7 @@ func (p *Pipeline) Run(ctx context.Context) {
 	default:
 	}
 
-	return
+	return err
 }
 
 func (p *Pipeline) messageWatch(msg *gst.Message) bool {

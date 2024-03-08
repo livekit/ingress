@@ -271,6 +271,8 @@ func (p *Params) CopyInfo() *livekit.IngressInfo {
 
 	info := proto.Clone(p.IngressInfo).(*livekit.IngressInfo)
 	info.State.Error = p.err.Error()
+
+	return info
 }
 
 // Useful in some paths where the extanded params are not known at creation time

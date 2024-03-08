@@ -61,7 +61,7 @@ func NewHandler(conf *config.Config, rpcClient rpc.IOInfoClient) *Handler {
 	}
 }
 
-func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, loggingFields map[string]string, extraParams any) {
+func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, loggingFields map[string]string, extraParams any) error {
 	ctx, span := tracer.Start(ctx, "Handler.HandleRequest")
 	defer span.End()
 
@@ -70,15 +70,31 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	p, err := h.buildPipeline(ctx, info, wsUrl, token, relayToken, loggingFields, extraParams)
 	if err != nil {
 		span.RecordError(err)
-		return
+		return err
 	}
 	h.pipeline = p
+
+	defer func() {
+		switch err {
+		case nil:
+			if p.Reusable {
+				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, nil)
+			} else {
+				p.SetStatus(livekit.IngressState_ENDPOINT_COMPLETE, nil)
+			}
+		default:
+			span.RecordError(err)
+			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
+		}
+
+		p.SendStateUpdate(ctx)
+	}()
 
 	listener, err := net.Listen(network, getSocketAddress(p.TmpDir))
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("failed starting grpc listener", err)
-		return
+		return err
 	}
 
 	ipc.RegisterIngressHandlerServer(h.grpcServer, h)
@@ -92,10 +108,10 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	}()
 
 	// start ingress
-	result := make(chan struct{}, 1)
+	result := make(chan error, 1)
 	go func() {
-		p.Run(ctx)
-		result <- struct{}{}
+		err := p.Run(ctx)
+		result <- err
 		h.done.Break()
 	}()
 
@@ -108,9 +124,9 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 			p.SendEOS(ctx)
 			kill = nil
 
-		case <-result:
+		case err = <-result:
 			// ingress finished
-			return
+			return err
 		}
 	}
 }

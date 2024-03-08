@@ -154,7 +154,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		if err != nil {
 			// Client failed to finalize session start
 			logger.Warnw("ingress failed", err)
-			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			p.SendStateUpdate(ctx)
 
 			if p.BypassTranscoding {
@@ -165,7 +165,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		}
 
 		if p.BypassTranscoding {
-			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
+			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
 			p.SendStateUpdate(ctx)
 
 			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}})
@@ -193,10 +193,10 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			defer span.End()
 
 			if err == nil {
-				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, nil)
 			} else {
 				logger.Warnw("ingress failed", err)
-				p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+				p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			}
 
 			p.SendStateUpdate(ctx)
