@@ -73,7 +73,7 @@ type whipHandler struct {
 	trackLock       sync.Mutex
 	simulcastLayers []string
 	tracks          map[string]*webrtc.TrackRemote
-	trackHandlers   map[types.StreamKind]WhipTrackHandler
+	trackHandlers   map[WhipTrackHandler]types.StreamKind
 	trackAddedChan  chan *webrtc.TrackRemote
 
 	trackSDKMediaSinkLock sync.Mutex
@@ -90,7 +90,7 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 		outputSync:        utils.NewOutputSynchronizer(),
 		result:            make(chan error, 1),
 		tracks:            make(map[string]*webrtc.TrackRemote),
-		trackHandlers:     make(map[types.StreamKind]WhipTrackHandler),
+		trackHandlers:     make(map[WhipTrackHandler]types.StreamKind),
 		trackSDKMediaSink: make(map[types.StreamKind]*SDKMediaSink),
 	}
 }
@@ -181,7 +181,7 @@ loop:
 
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
-	for _, th := range h.trackHandlers {
+	for th, _ := range h.trackHandlers {
 		err := th.Start(func(err error) {
 			h.result <- err
 		})
@@ -198,7 +198,7 @@ func (h *whipHandler) SetMediaStatsGatherer(st *stats.LocalMediaStatsGatherer) {
 	defer h.trackLock.Unlock()
 	h.stats = st
 
-	for _, th := range h.trackHandlers {
+	for th, _ := range h.trackHandlers {
 		th.SetMediaTrackStatsGatherer(st)
 	}
 }
@@ -245,20 +245,23 @@ func (h *whipHandler) AssociateRelay(kind types.StreamKind, token string, w io.W
 		return errors.ErrInvalidRelayToken
 	}
 
-	t := h.trackHandlers[kind]
-	if t == nil {
-		return errors.ErrIngressNotFound
-	}
+	for t, k := range h.trackHandlers {
+		if k != kind {
+			continue
+		}
 
-	th, ok := t.(*RelayWhipTrackHandler)
-	if !ok {
-		h.logger.Errorw("failed type assertion on track handler", nil)
-		return errors.ErrIngressNotFound
-	}
+		th, ok := t.(*RelayWhipTrackHandler)
+		if !ok {
+			h.logger.Errorw("failed type assertion on track handler", nil)
+			return errors.ErrIngressNotFound
+		}
 
-	err := th.SetWriter(w)
-	if err != nil {
-		return err
+		err := th.SetWriter(w)
+		if err != nil {
+			return err
+		}
+
+		break // No simulcast in the relay case
 	}
 
 	return nil
@@ -318,7 +321,7 @@ func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnect
 				h.sync.End()
 
 				h.trackLock.Lock()
-				for _, v := range h.trackHandlers {
+				for v, _ := range h.trackHandlers {
 					v.Close()
 				}
 				h.trackLock.Unlock()
@@ -421,7 +424,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 			return
 		}
 	}
-	h.trackHandlers[kind] = th
+	h.trackHandlers[th] = kind
 
 	select {
 	case h.trackAddedChan <- track:
