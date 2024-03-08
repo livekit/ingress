@@ -58,8 +58,6 @@ func NewHandler(conf *config.Config, rpcClient rpc.IOInfoClient) *Handler {
 		rpcClient:     rpcClient,
 		statsGatherer: stats.NewLocalMediaStatsGatherer(),
 		grpcServer:    grpc.NewServer(),
-		kill:          core.NewFuse(),
-		done:          core.NewFuse(),
 	}
 }
 

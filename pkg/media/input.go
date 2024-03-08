@@ -70,7 +70,6 @@ func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGat
 		bin:                bin,
 		source:             src,
 		trackStatsGatherer: make(map[types.StreamKind]*stats.MediaTrackStatGatherer),
-		closeFuse:          core.NewFuse(),
 	}
 
 	if p.InputType == livekit.IngressInput_URL_INPUT {

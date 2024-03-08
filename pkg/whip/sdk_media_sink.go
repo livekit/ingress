@@ -17,6 +17,7 @@ package whip
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
@@ -45,12 +46,14 @@ var (
 )
 
 type SDKMediaSinkTrack struct {
-	writePLI func()
+	stateLock sync.Mutex
+	writePLI  func()
 
 	quality       livekit.VideoQuality
 	width, height uint
 
 	trackStatsGatherer *stats.MediaTrackStatGatherer
+	outputSync         *utils.TrackOutputSynchronizer
 	localTrack         *lksdk.LocalTrack
 
 	sink *SDKMediaSink
@@ -59,7 +62,6 @@ type SDKMediaSinkTrack struct {
 type SDKMediaSink struct {
 	logger          logger.Logger
 	params          *params.Params
-	outputSync      *utils.TrackOutputSynchronizer
 	sdkOutput       *lksdk_output.LKSDKOutput
 	sinkInitialized bool
 
@@ -67,7 +69,7 @@ type SDKMediaSink struct {
 	streamKind      types.StreamKind
 
 	tracksLock sync.Mutex
-	tracks     []*SDKMediaSinkTrack
+	tracks     map[livekit.VideoQuality]*SDKMediaSinkTrack
 
 	fuse core.Fuse
 }
@@ -78,69 +80,49 @@ type sample struct {
 }
 
 func NewSDKMediaSink(
-	l logger.Logger, p *params.Params, sdkOutput *lksdk_output.LKSDKOutput,
-	codecParameters webrtc.RTPCodecParameters, streamKind types.StreamKind,
-	outputSync *utils.TrackOutputSynchronizer,
+	l logger.Logger,
+	p *params.Params,
+	sdkOutput *lksdk_output.LKSDKOutput,
+	codecParameters webrtc.RTPCodecParameters,
+	streamKind types.StreamKind,
+	outputSync *utils.OutputSynchronizer,
+	layers []livekit.VideoQuality,
 ) *SDKMediaSink {
-	return &SDKMediaSink{
+	s := &SDKMediaSink{
 		logger:          l,
 		params:          p,
-		outputSync:      outputSync,
 		sdkOutput:       sdkOutput,
-		fuse:            core.NewFuse(),
-		tracks:          []*SDKMediaSinkTrack{},
+		tracks:          make(map[livekit.VideoQuality]*SDKMediaSinkTrack),
 		streamKind:      streamKind,
 		codecParameters: codecParameters,
 	}
+
+	for _, q := range layers {
+		s.addTrack(q, outputSync.AddTrack())
+	}
+
+	return s
 }
 
-func (sp *SDKMediaSink) AddTrack(quality livekit.VideoQuality) {
+func (sp *SDKMediaSink) GetTrack(quality livekit.VideoQuality) *SDKMediaSinkTrack {
 	sp.tracksLock.Lock()
 	defer sp.tracksLock.Unlock()
 
-	sp.tracks = append(sp.tracks, &SDKMediaSinkTrack{
-		sink:    sp,
-		quality: quality,
-	})
-}
-
-func (sp *SDKMediaSink) SetWritePLI(quality livekit.VideoQuality, writePLI func()) *SDKMediaSinkTrack {
-	sp.tracksLock.Lock()
-	defer sp.tracksLock.Unlock()
-
-	for i := range sp.tracks {
-		if sp.tracks[i].quality == quality {
-			sp.tracks[i].writePLI = writePLI
-			return sp.tracks[i]
-		}
-	}
-
-	return nil
-}
-
-func (t *SDKMediaSinkTrack) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) {
-	var path string
-	switch t.sink.streamKind {
-	case types.Audio:
-		path = stats.OutputAudio
-	case types.Video:
-		path = stats.OutputVideo
-	default:
-		path = "output.unknown"
-	}
-
-	g := st.RegisterTrackStats(path)
-
-	t.sink.tracksLock.Lock()
-	t.trackStatsGatherer = g
-	t.sink.tracksLock.Unlock()
+	return sp.tracks[quality]
 }
 
 func (sp *SDKMediaSink) Close() error {
 	sp.fuse.Break()
-	sp.outputSync.Close()
 
 	return nil
+}
+
+func (sp *SDKMediaSink) addTrack(quality livekit.VideoQuality, outputSync *utils.TrackOutputSynchronizer) {
+	sp.tracks[quality] = &SDKMediaSinkTrack{
+		sink:       sp,
+		quality:    quality,
+		outputSync: outputSync,
+	}
 }
 
 func (sp *SDKMediaSink) ensureAudioTracksInitialized(s *media.Sample, t *SDKMediaSinkTrack) (bool, error) {
@@ -212,7 +194,8 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 
 	sp.sdkOutput.AddOutputs(sbArray...)
 
-	for i, t := range sp.tracks {
+	for i, q := range layers {
+		t = sp.tracks[q.Quality]
 		t.localTrack = tracks[i]
 		pliHandlers[i].SetKeyFrameEmitter(t)
 	}
@@ -266,9 +249,7 @@ func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error 
 		return nil
 	}
 
-	// Synchronize the outputs before the network jitter buffer to avoid old samples stuck
-	// in the channel from increasing the whole pipeline delay.
-	drop, err := t.sink.outputSync.WaitForMediaTime(ts)
+	drop, err := t.outputSync.WaitForMediaTime(ts)
 	if err != nil {
 		return err
 	}
@@ -297,6 +278,7 @@ func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error 
 }
 
 func (t *SDKMediaSinkTrack) Close() error {
+	t.outputSync.Close()
 	return t.sink.Close()
 }
 
@@ -310,10 +292,35 @@ func (t *SDKMediaSinkTrack) OnUnbind() error {
 	return nil
 }
 
-func (t *SDKMediaSinkTrack) ForceKeyFrame() error {
+func (t *SDKMediaSinkTrack) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) {
+	var path string
+	switch t.sink.streamKind {
+	case types.Audio:
+		path = stats.OutputAudio
+	case types.Video:
+		path = fmt.Sprintf("%s.%s", stats.OutputVideo, t.quality)
+	default:
+		path = "output.unknown"
+	}
+
+	g := st.RegisterTrackStats(path)
+
 	t.sink.tracksLock.Lock()
-	writePLI := t.writePLI
+	t.trackStatsGatherer = g
 	t.sink.tracksLock.Unlock()
+}
+
+func (t *SDKMediaSinkTrack) SetWritePLI(writePLI func()) {
+	t.stateLock.Lock()
+	defer t.stateLock.Unlock()
+
+	t.writePLI = writePLI
+}
+
+func (t *SDKMediaSinkTrack) ForceKeyFrame() error {
+	t.stateLock.Lock()
+	writePLI := t.writePLI
+	t.stateLock.Unlock()
 
 	if writePLI != nil {
 		writePLI()

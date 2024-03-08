@@ -50,7 +50,11 @@ const (
 	dtlsRetransmissionInterval = 100 * time.Millisecond
 )
 
-// TODO log ingress id / resource ID
+type WhipTrackHandler interface {
+	Start(onDone func(err error)) (err error)
+	Close()
+	SetMediaTrackStatsGatherer(g *stats.LocalMediaStatsGatherer)
+}
 
 type whipHandler struct {
 	logger logger.Logger
@@ -69,13 +73,11 @@ type whipHandler struct {
 	trackLock       sync.Mutex
 	simulcastLayers []string
 	tracks          map[string]*webrtc.TrackRemote
-	trackHandlers   []*whipTrackHandler
+	trackHandlers   map[WhipTrackHandler]types.StreamKind
 	trackAddedChan  chan *webrtc.TrackRemote
 
 	trackSDKMediaSinkLock sync.Mutex
 	trackSDKMediaSink     map[types.StreamKind]*SDKMediaSink
-
-	trackRelayMediaSink map[types.StreamKind]*RelayMediaSink // only for transcoding mode
 }
 
 func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
@@ -83,14 +85,13 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 	rtcConfCopy := *webRTCConfig
 
 	return &whipHandler{
-		rtcConfig:           &rtcConfCopy,
-		sync:                synchronizer.NewSynchronizer(nil),
-		outputSync:          utils.NewOutputSynchronizer(),
-		result:              make(chan error, 1),
-		tracks:              make(map[string]*webrtc.TrackRemote),
-		trackHandlers:       []*whipTrackHandler{},
-		trackRelayMediaSink: make(map[types.StreamKind]*RelayMediaSink),
-		trackSDKMediaSink:   make(map[types.StreamKind]*SDKMediaSink),
+		rtcConfig:         &rtcConfCopy,
+		sync:              synchronizer.NewSynchronizer(nil),
+		outputSync:        utils.NewOutputSynchronizer(),
+		result:            make(chan error, 1),
+		tracks:            make(map[string]*webrtc.TrackRemote),
+		trackHandlers:     make(map[WhipTrackHandler]types.StreamKind),
+		trackSDKMediaSink: make(map[types.StreamKind]*SDKMediaSink),
 	}
 }
 
@@ -106,6 +107,7 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 		Type: webrtc.SDPTypeOffer,
 		SDP:  sdpOffer,
 	}
+
 	h.expectedTrackCount, err = h.validateOfferAndGetExpectedTrackCount(offer)
 	if err != nil {
 		return "", err
@@ -179,7 +181,7 @@ loop:
 
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
-	for _, th := range h.trackHandlers {
+	for th, _ := range h.trackHandlers {
 		err := th.Start(func(err error) {
 			h.result <- err
 		})
@@ -196,7 +198,7 @@ func (h *whipHandler) SetMediaStatsGatherer(st *stats.LocalMediaStatsGatherer) {
 	defer h.trackLock.Unlock()
 	h.stats = st
 
-	for _, th := range h.trackHandlers {
+	for th, _ := range h.trackHandlers {
 		th.SetMediaTrackStatsGatherer(st)
 	}
 }
@@ -243,14 +245,23 @@ func (h *whipHandler) AssociateRelay(kind types.StreamKind, token string, w io.W
 		return errors.ErrInvalidRelayToken
 	}
 
-	th := h.trackRelayMediaSink[kind]
-	if th == nil {
-		return errors.ErrIngressNotFound
-	}
+	for t, k := range h.trackHandlers {
+		if k != kind {
+			continue
+		}
 
-	err := th.SetWriter(w)
-	if err != nil {
-		return err
+		th, ok := t.(*RelayWhipTrackHandler)
+		if !ok {
+			h.logger.Errorw("failed type assertion on track handler", nil)
+			return errors.ErrIngressNotFound
+		}
+
+		err := th.SetWriter(w)
+		if err != nil {
+			return err
+		}
+
+		break // No simulcast in the relay case
 	}
 
 	return nil
@@ -305,13 +316,12 @@ func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnect
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		h.logger.Infow("Peer Connection State changed", "state", state.String())
 
-		// TODO support ICE Restart
 		if state >= webrtc.PeerConnectionStateDisconnected {
 			h.closeOnce.Do(func() {
 				h.sync.End()
 
 				h.trackLock.Lock()
-				for _, v := range h.trackHandlers {
+				for v, _ := range h.trackHandlers {
 					v.Close()
 				}
 				h.trackLock.Unlock()
@@ -393,18 +403,28 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 		}
 	}
 
-	mediaSink, err := h.getMediaSink(track, trackQuality)
-	if err != nil {
-		logger.Warnw("failed creating whip  media handler", err)
-		return
-	}
+	var th WhipTrackHandler
+	var err error
+	if h.params.BypassTranscoding {
+		mediaSink, err := h.getSDKTrackMediaSink(track, trackQuality)
+		if err != nil {
+			logger.Warnw("failed creating whip  media handler", err)
+			return
+		}
 
-	th, err := newWHIPTrackHandler(logger, trackQuality, track, receiver, sync, mediaSink, h.writePLI, h.sync.OnRTCP)
-	if err != nil {
-		logger.Warnw("failed creating whip track handler", err)
-		return
+		th, err = NewSDKWhipTrackHandler(logger, track, trackQuality, sync, mediaSink, receiver, h.writePLI, h.sync.OnRTCP)
+		if err != nil {
+			logger.Warnw("failed creating SDK whip track handler", err)
+			return
+		}
+	} else {
+		th, err = NewRelayWhipTrackHandler(logger, track, trackQuality, sync, receiver, h.writePLI, h.sync.OnRTCP)
+		if err != nil {
+			logger.Warnw("failed creating relay whip track handler", err)
+			return
+		}
 	}
-	h.trackHandlers = append(h.trackHandlers, th)
+	h.trackHandlers[th] = kind
 
 	select {
 	case h.trackAddedChan <- track:
@@ -413,37 +433,35 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 	}
 }
 
-func (h *whipHandler) getMediaSink(track *webrtc.TrackRemote, trackQuality livekit.VideoQuality) (MediaSink, error) {
+func (h *whipHandler) getSDKTrackMediaSink(track *webrtc.TrackRemote, trackQuality livekit.VideoQuality) (*SDKMediaSinkTrack, error) {
 	kind := streamKindFromCodecType(track.Kind())
 
-	if h.sdkOutput != nil {
-		h.trackSDKMediaSinkLock.Lock()
-		defer h.trackSDKMediaSinkLock.Unlock()
+	h.trackSDKMediaSinkLock.Lock()
+	defer h.trackSDKMediaSinkLock.Unlock()
 
-		if _, ok := h.trackSDKMediaSink[kind]; !ok {
-			h.trackSDKMediaSink[kind] = NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track.Codec(), streamKindFromCodecType(track.Kind()), h.outputSync.AddTrack())
-
-			layers := []livekit.VideoQuality{livekit.VideoQuality_HIGH}
-			if kind == types.Video && len(h.simulcastLayers) == 3 {
-				layers = []livekit.VideoQuality{livekit.VideoQuality_HIGH, livekit.VideoQuality_MEDIUM, livekit.VideoQuality_LOW}
-			} else if kind == types.Video && len(h.simulcastLayers) == 2 {
-				layers = []livekit.VideoQuality{livekit.VideoQuality_HIGH, livekit.VideoQuality_MEDIUM}
-			}
-
-			for _, layer := range layers {
-				h.trackSDKMediaSink[kind].AddTrack(layer)
-			}
+	if _, ok := h.trackSDKMediaSink[kind]; !ok {
+		layers := []livekit.VideoQuality{livekit.VideoQuality_HIGH}
+		if kind == types.Video && len(h.simulcastLayers) == 3 {
+			layers = []livekit.VideoQuality{livekit.VideoQuality_HIGH, livekit.VideoQuality_MEDIUM, livekit.VideoQuality_LOW}
+		} else if kind == types.Video && len(h.simulcastLayers) == 2 {
+			layers = []livekit.VideoQuality{livekit.VideoQuality_HIGH, livekit.VideoQuality_MEDIUM}
 		}
 
-		return h.trackSDKMediaSink[kind].SetWritePLI(trackQuality, func() {
-			h.writePLI(track.SSRC())
-		}), nil
-	} else {
-		s := NewRelayMediaSink(h.logger.WithValues("trackID", track.ID(), "kind", kind))
-
-		h.trackRelayMediaSink[kind] = s
-		return s, nil
+		h.trackSDKMediaSink[kind] = NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track.Codec(), streamKindFromCodecType(track.Kind()), h.outputSync, layers)
 	}
+
+	sdkTrack := h.trackSDKMediaSink[kind].GetTrack(trackQuality)
+	if sdkTrack == nil {
+		err := errors.ErrIngressNotFound
+		h.logger.Warnw("no SDK track for the current quality", err)
+		return nil, err
+	}
+
+	sdkTrack.SetWritePLI(func() {
+		h.writePLI(track.SSRC())
+	})
+
+	return sdkTrack, nil
 }
 
 func (h *whipHandler) writePLI(ssrc webrtc.SSRC) {
