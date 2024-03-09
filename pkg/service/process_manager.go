@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/frostbyte73/core"
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/livekit"
@@ -34,10 +35,14 @@ import (
 	"github.com/livekit/protocol/tracer"
 )
 
-const network = "unix"
+const (
+	network    = "unix"
+	maxRetries = 3
+)
 
 type process struct {
 	info       *livekit.IngressInfo
+	retryCount int
 	cmd        *exec.Cmd
 	grpcClient ipc.IngressHandlerClient
 	closed     core.Fuse
@@ -64,20 +69,13 @@ func (s *ProcessManager) onFatalError(f func(info *livekit.IngressInfo, err erro
 	s.onFatal = f
 }
 
-func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) error {
+func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params) error {
 	// TODO send update on failure
-	_, span := tracer.Start(ctx, "Service.launchHandler")
+	_, span := tracer.Start(ctx, "Service.startIngress")
 	defer span.End()
-
-	cmd, err := s.newCmd(ctx, p)
-	if err != nil {
-		span.RecordError(err)
-		return err
-	}
 
 	h := &process{
 		info: p.IngressInfo,
-		cmd:  cmd,
 	}
 	socketAddr := getSocketAddress(p.TmpDir)
 	conn, err := grpc.Dial(socketAddr,
@@ -106,30 +104,58 @@ func (s *ProcessManager) launchHandler(ctx context.Context, p *params.Params) er
 		}
 	}
 
-	go s.awaitCleanup(h, p)
+	go s.runHandler(ctx, h, p)
 
 	return nil
 }
 
-func (s *ProcessManager) awaitCleanup(h *process, p *params.Params) {
-	if err := h.cmd.Run(); err != nil {
-		logger.Errorw("could not launch handler", err)
-		if s.onFatal != nil {
-			s.onFatal(h.info, err)
+func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.Params) {
+	_, span := tracer.Start(ctx, "Service.runHandler")
+	defer span.End()
+
+	defer func() {
+		h.closed.Break()
+		s.sm.IngressEnded(h.info)
+
+		if p.TmpDir != "" {
+			os.RemoveAll(p.TmpDir)
+		}
+
+		s.mu.Lock()
+		delete(s.activeHandlers, h.info.State.ResourceId)
+		s.mu.Unlock()
+	}()
+
+	for h.retryCount = 0; h.retryCount < maxRetries; h.retryCount++ {
+		cmd, err := s.newCmd(ctx, p)
+		if err != nil {
+			span.RecordError(err)
+			return
+		}
+		h.cmd = cmd
+
+		var exitErr *exec.ExitError
+
+		err = h.cmd.Run()
+		switch {
+		case err == nil:
+			// success
+			return
+		case errors.As(err, &exitErr):
+			if exitErr.ProcessState.ExitCode() == 1 {
+				logger.Infow("relaunching handler process after retryable failure")
+			} else {
+				logger.Errorw("unknown handler exit code", err)
+			}
+		default:
+			logger.Errorw("could not launch handler", err)
+			if s.onFatal != nil {
+				s.onFatal(h.info, err)
+			}
+			return
 		}
 	}
 
-	h.closed.Break()
-	s.sm.IngressEnded(h.info)
-
-	if p.TmpDir != "" {
-		os.RemoveAll(p.TmpDir)
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.activeHandlers, h.info.State.ResourceId)
 }
 
 func (s *ProcessManager) killAll() {

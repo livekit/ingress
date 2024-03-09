@@ -111,7 +111,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 		return nil, nil, err
 	}
 
-	err = s.manager.launchHandler(ctx, p)
+	err = s.manager.startIngress(ctx, p)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -174,7 +174,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 				MimeTypes: mimeTypes,
 			})
 
-			err := s.manager.launchHandler(ctx, p)
+			err := s.manager.startIngress(ctx, p)
 			if err != nil {
 				return nil
 			}
@@ -217,7 +217,7 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 		return nil, err
 	}
 
-	err = s.manager.launchHandler(ctx, p)
+	err = s.manager.startIngress(ctx, p)
 	if err != nil {
 		return nil, err
 	}
