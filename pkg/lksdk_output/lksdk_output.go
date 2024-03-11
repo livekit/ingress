@@ -23,6 +23,7 @@ import (
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
 
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/mediatransportutil/pkg/pacer"
 	"github.com/livekit/protocol/livekit"
@@ -62,6 +63,8 @@ type LKSDKOutput struct {
 	room   *lksdk.Room
 	params *params.Params
 
+	errChan chan error
+
 	lock    sync.Mutex
 	outputs []SampleProvider
 }
@@ -71,13 +74,28 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 	defer span.End()
 
 	s := &LKSDKOutput{
-		params: p,
-		logger: p.GetLogger(),
+		params:  p,
+		errChan: make(chan error, 1),
+		logger:  p.GetLogger(),
 	}
 
 	cb := lksdk.NewRoomCallback()
-	cb.OnDisconnected = func() {
-		s.Close()
+	cb.OnDisconnectedWithReason = func(reason lksdk.DisconnectionReason) {
+		var err error
+		switch reason {
+		case lksdk.Failed:
+			err = errors.ErrRoomDisconnectedUnexpectedly
+		default:
+			err = errors.ErrRoomDisconnected
+		}
+
+		// Only store first error
+		select {
+		case s.errChan <- err:
+		default:
+		}
+
+		s.closeOutput()
 	}
 
 	opts := []lksdk.ConnectOption{
@@ -223,7 +241,7 @@ func (s *LKSDKOutput) AddOutputs(o ...SampleProvider) {
 	s.lock.Unlock()
 }
 
-func (s *LKSDKOutput) Close() {
+func (s *LKSDKOutput) closeOutput() {
 	s.logger.Debugw("disconnecting from room")
 
 	s.lock.Lock()
@@ -236,4 +254,16 @@ func (s *LKSDKOutput) Close() {
 	s.outputs = nil
 
 	s.room.Disconnect()
+}
+
+func (s *LKSDKOutput) Close() error {
+	s.closeOutput()
+
+	var err error
+	select {
+	case err = <-s.errChan:
+	default:
+	}
+
+	return err
 }

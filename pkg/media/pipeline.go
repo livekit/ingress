@@ -182,13 +182,19 @@ func (p *Pipeline) Run(ctx context.Context) error {
 
 	logger.Infow("GST pipeline stopped")
 
+	// Return the error from the most upstream part of the pipeline
 	err = p.input.Close()
-	p.sink.Close()
+	sinkErr := p.sink.Close()
+	if err == nil {
+		err = sinkErr
+	}
 
-	// Retrieve any pipeline error
-	select {
-	case err = <-p.pipelineErr:
-	default:
+	if err == nil {
+		// Retrieve any pipeline error
+		select {
+		case err = <-p.pipelineErr:
+		default:
+		}
 	}
 
 	return err
