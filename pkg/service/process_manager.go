@@ -146,6 +146,7 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 				logger.Infow("relaunching handler process after retryable failure")
 			} else {
 				logger.Errorw("unknown handler exit code", err)
+				return
 			}
 		default:
 			logger.Errorw("could not launch handler", err)
