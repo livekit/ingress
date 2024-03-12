@@ -79,18 +79,6 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 		info:         p.IngressInfo,
 		closeSession: closeSession,
 	}
-	socketAddr := getSocketAddress(p.TmpDir)
-	conn, err := grpc.Dial(socketAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
-			return net.Dial(network, addr)
-		}),
-	)
-	if err != nil {
-		span.RecordError(err)
-		logger.Errorw("could not dial grpc handler", err)
-	}
-	h.grpcClient = ipc.NewIngressHandlerClient(conn)
 
 	s.sm.IngressStarted(p.IngressInfo, h)
 
@@ -99,7 +87,7 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 	s.mu.Unlock()
 
 	if p.TmpDir != "" {
-		err = os.MkdirAll(p.TmpDir, 0755)
+		err := os.MkdirAll(p.TmpDir, 0755)
 		if err != nil {
 			logger.Errorw("failed creating halder temp directory", err, "path", p.TmpDir)
 			return err
@@ -129,6 +117,20 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 	}()
 
 	for h.retryCount = 0; h.retryCount < maxRetries; h.retryCount++ {
+		socketAddr := getSocketAddress(p.TmpDir)
+		os.Remove(socketAddr)
+		conn, err := grpc.Dial(socketAddr,
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
+				return net.Dial(network, addr)
+			}),
+		)
+		if err != nil {
+			span.RecordError(err)
+			logger.Errorw("could not dial grpc handler", err)
+		}
+		h.grpcClient = ipc.NewIngressHandlerClient(conn)
+
 		cmd, err := s.newCmd(ctx, p)
 		if err != nil {
 			span.RecordError(err)

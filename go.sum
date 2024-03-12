@@ -35,8 +35,8 @@ github.com/go-gst/go-glib v0.0.0-20231207075824-6d6aaf082c65 h1:G9LRxbnTdpkJAfa6
 github.com/go-gst/go-glib v0.0.0-20231207075824-6d6aaf082c65/go.mod h1:rXuKU+tCN7pN+b/7oIyWv6MpnlGy+QWd7jRhWUNstjU=
 github.com/go-gst/go-gst v0.0.0-20240207190302-04ec17f96d71 h1:A562e6S4kSK6lq1X3KDOYWugfHsPvMhwEoZsLNzrbMk=
 github.com/go-gst/go-gst v0.0.0-20240207190302-04ec17f96d71/go.mod h1:dJg7DgrGB016HckNjcGTA82Cb4OACGw8VOsg79CxRV0=
-github.com/go-jose/go-jose/v3 v3.0.2 h1:2Edjn8Nrb44UvTdp84KU0bBPs1cO7noRCybtS3eJEUQ=
-github.com/go-jose/go-jose/v3 v3.0.2/go.mod h1:5b+7YgP7ZICgJDBdfjZaIt+H/9L9T/YQrVfLAMboGkQ=
+github.com/go-jose/go-jose/v3 v3.0.3 h1:fFKWeig/irsp7XD2zBxvnmA/XaRWp5V3CBsZXJF7G7k=
+github.com/go-jose/go-jose/v3 v3.0.3/go.mod h1:5b+7YgP7ZICgJDBdfjZaIt+H/9L9T/YQrVfLAMboGkQ=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-logr/logr v1.4.1 h1:pKouT5E8xu9zeFC39JXRDukb6JFQPXM5p5I91188VAQ=
 github.com/go-logr/logr v1.4.1/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
