@@ -82,7 +82,12 @@ func (pb *PrerollBuffer) Write(p []byte) (int, error) {
 		return pb.buffer.Write(p)
 	}
 
-	return pb.w.Write(p)
+	n, err := pb.w.Write(p)
+	if err == io.ErrClosedPipe {
+		// Do not return errors caused by a consuming pipe getting closed
+		err = nil
+	}
+	return n, err
 }
 
 func (pb *PrerollBuffer) Close() error {
