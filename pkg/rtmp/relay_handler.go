@@ -69,8 +69,8 @@ func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer func() {
-		pw.Close()
 		h.rtmpServer.DissociateRelay(resourceId)
+		pw.Close()
 	}()
 
 	err = <-done
