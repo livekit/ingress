@@ -270,7 +270,9 @@ func (p *Params) CopyInfo() *livekit.IngressInfo {
 	defer p.stateLock.Unlock()
 
 	info := proto.Clone(p.IngressInfo).(*livekit.IngressInfo)
-	info.State.Error = p.err.Error()
+	if info.State != nil && p.err != nil {
+		info.State.Error = p.err.Error()
+	}
 
 	return info
 }
