@@ -138,7 +138,7 @@ func runService(c *cli.Context) error {
 		whipsrv = whip.NewWHIPServer(psrpcWHIPClient)
 	}
 
-	svc := service.NewService(conf, psrpcClient, bus, whipsrv, service.NewCmd)
+	svc := service.NewService(conf, psrpcClient, bus, rtmpsrv, whipsrv, service.NewCmd)
 
 	srv, err := rpc.NewIngressInternalServer(svc, bus)
 	if err != nil {

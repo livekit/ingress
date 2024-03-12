@@ -31,6 +31,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/ingress/pkg/whip"
@@ -60,6 +61,7 @@ type Service struct {
 	manager *ProcessManager
 	sm      *SessionManager
 	whipSrv *whip.WHIPServer
+	rtmpSrv *rtmp.RTMPServer
 
 	psrpcClient rpc.IOInfoClient
 	bus         psrpc.MessageBus
@@ -70,7 +72,7 @@ type Service struct {
 	shutdown core.Fuse
 }
 
-func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, whipSrv *whip.WHIPServer, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) *Service {
+func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, rtmpSrv *rtmp.RTMPServer, whipSrv *whip.WHIPServer, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) *Service {
 	monitor := stats.NewMonitor()
 	sm := NewSessionManager(monitor)
 
@@ -80,6 +82,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		sm:          sm,
 		manager:     NewProcessManager(sm, newCmd),
 		whipSrv:     whipSrv,
+		rtmpSrv:     rtmpSrv,
 		psrpcClient: psrpcClient,
 		bus:         bus,
 	}
@@ -111,7 +114,9 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 		return nil, nil, err
 	}
 
-	err = s.manager.startIngress(ctx, p)
+	err = s.manager.startIngress(ctx, p, func() {
+		s.rtmpSrv.CloseHandler(resourceId)
+	})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -174,7 +179,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 				MimeTypes: mimeTypes,
 			})
 
-			err := s.manager.startIngress(ctx, p)
+			err := s.manager.startIngress(ctx, p, nil)
 			if err != nil {
 				return nil
 			}
@@ -217,7 +222,7 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 		return nil, err
 	}
 
-	err = s.manager.startIngress(ctx, p)
+	err = s.manager.startIngress(ctx, p, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -497,6 +502,9 @@ func (a *localSessionAPI) GatherStats(ctx context.Context) (*ipc.MediaStats, err
 	// Return a nil stats map. Use the local gatherer in the session manager for local stats
 
 	return nil, nil
+}
+
+func (a *localSessionAPI) CloseSession(ctx context.Context) {
 }
 
 func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) error {

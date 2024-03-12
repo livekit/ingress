@@ -46,7 +46,15 @@ func (pb *PrerollBuffer) SetWriter(w io.WriteCloser) error {
 	defer pb.lock.Unlock()
 
 	pb.w = w
-	if pb.w != nil {
+	if pb.w == nil {
+		// Send preroll buffer reset event
+		pb.buffer.Reset()
+		if pb.onBufferReset != nil {
+			if err := pb.onBufferReset(); err != nil {
+				return err
+			}
+		}
+	} else {
 		_, err := io.Copy(pb.w, pb.buffer)
 		if err != nil {
 			return err
