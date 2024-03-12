@@ -151,7 +151,7 @@ func (s *WHIPServer) Start(
 
 	// Trickle, ICE Restart unimplemented for now
 	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotImplemented)
+		w.WriteHeader(http.StatusNoContent)
 	}).Methods("PATCH")
 
 	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
