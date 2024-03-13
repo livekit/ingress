@@ -223,7 +223,7 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 	case gst.MessageStreamCollection:
 		p.handleStreamCollectionMessage(msg)
 
-	case gst.MessageTag, gst.MessageStateChanged, gst.MessageLatency, gst.MessageAsyncDone, gst.MessageStreamStatus:
+	case gst.MessageTag, gst.MessageStateChanged, gst.MessageLatency, gst.MessageAsyncDone, gst.MessageStreamStatus, gst.MessageElement:
 		// ignore
 
 	default:

@@ -266,6 +266,33 @@ func (h *whipHandler) AssociateRelay(kind types.StreamKind, token string, w io.W
 
 	return nil
 }
+
+func (h *whipHandler) DissociateRelay(kind types.StreamKind) {
+	h.trackLock.Lock()
+	defer h.trackLock.Unlock()
+
+	for t, k := range h.trackHandlers {
+		if k != kind {
+			continue
+		}
+
+		th, ok := t.(*RelayWhipTrackHandler)
+		if !ok {
+			h.logger.Errorw("failed type assertion on track handler", nil)
+			return
+		}
+
+		err := th.SetWriter(nil)
+		if err != nil {
+			return
+		}
+
+		break // No simulcast in the relay case
+	}
+
+	return
+}
+
 func (h *whipHandler) updateSettings() {
 	se := &h.rtcConfig.SettingEngine
 

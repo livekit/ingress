@@ -179,7 +179,9 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 				MimeTypes: mimeTypes,
 			})
 
-			err := s.manager.startIngress(ctx, p, nil)
+			err := s.manager.startIngress(ctx, p, func() {
+				s.whipSrv.CloseHandler(resourceId)
+			})
 			if err != nil {
 				return nil
 			}
