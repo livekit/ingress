@@ -48,6 +48,7 @@ const (
 	whipIdentity = "WHIPIngress"
 
 	dtlsRetransmissionInterval = 100 * time.Millisecond
+	maxRetryCount              = 3
 )
 
 type WhipTrackHandler interface {
@@ -65,7 +66,6 @@ type whipHandler struct {
 	sync               *synchronizer.Synchronizer
 	outputSync         *utils.OutputSynchronizer
 	stats              *stats.LocalMediaStatsGatherer
-	sdkOutput          *lksdk_output.LKSDKOutput // only for passthrough
 	expectedTrackCount int
 	result             chan error
 	closeOnce          sync.Once
@@ -113,12 +113,7 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 		return "", err
 	}
 
-	if p.BypassTranscoding {
-		h.sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, p)
-		if err != nil {
-			return "", err
-		}
-	} else if len(h.simulcastLayers) != 0 {
+	if !p.BypassTranscoding && len(h.simulcastLayers) != 0 {
 		return "", errors.ErrSimulcastTranscode
 	}
 
@@ -213,28 +208,67 @@ func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
 	defer func() {
 		h.logger.Infow("closing peer connection")
 		h.pc.Close()
-		if h.sdkOutput != nil {
-			h.sdkOutput.Close()
-		}
 	}()
+
+	var error err
+	for retryCount := 0; retryCount < maxRetryCount; retryCount++ {
+		err = runSession(ctx)
+
+		var retrError errors.RetryableError
+		if err == nil || !errors.As(err, &retrError) {
+			return err
+		}
+	}
+
+	return err
+}
+
+func (h *whipHandler) runSession(ctx context.Context) error {
+	var sdkOutput *lksdk_output.LKSDKOutput
+	var err error
+
+	if p.BypassTranscoding {
+		sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, p)
+		if err != nil {
+			return err
+		}
+
+		h.trackSDKMediaSinkLock.Lock()
+		for _, s := range h.trackSDKMediaSink {
+			s.SetSDKOutput(sdkOutput)
+		}
+		h.trackSDKMediaSinkLock.Unlock()
+	}
 
 	var trackDoneCount int
 	var errs putils.ErrArray
 
+loop:
 	for {
 		select {
 		case <-ctx.Done():
 			return errors.ErrSourceNotReady
-		case err := <-h.result:
+		case resErr := <-h.result:
 			trackDoneCount++
-			if err != nil {
-				errs.AppendErr(err)
+			if resErr != nil {
+				errs.AppendErr(resErr)
 			}
 			if trackDoneCount == h.expectedTrackCount {
-				return errs.ToError()
+				err = errs.ToError()
+				break loop
 			}
 		}
 	}
+
+	if h.sdkOutput != nil {
+		sdkErr := h.sdkOutput.Close()
+		if sdkErr != nil {
+			// Output error takes precedence
+			err = sdkErr
+		}
+	}
+
+	return err
 }
 
 func (h *whipHandler) AssociateRelay(kind types.StreamKind, token string, w io.WriteCloser) error {
@@ -474,7 +508,7 @@ func (h *whipHandler) getSDKTrackMediaSink(track *webrtc.TrackRemote, trackQuali
 			layers = []livekit.VideoQuality{livekit.VideoQuality_HIGH, livekit.VideoQuality_MEDIUM}
 		}
 
-		h.trackSDKMediaSink[kind] = NewSDKMediaSink(h.logger, h.params, h.sdkOutput, track.Codec(), streamKindFromCodecType(track.Kind()), h.outputSync, layers)
+		h.trackSDKMediaSink[kind] = NewSDKMediaSink(h.logger, h.params, track.Codec(), streamKindFromCodecType(track.Kind()), h.outputSync, layers)
 	}
 
 	sdkTrack := h.trackSDKMediaSink[kind].GetTrack(trackQuality)

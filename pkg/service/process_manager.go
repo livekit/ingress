@@ -41,12 +41,13 @@ const (
 )
 
 type process struct {
-	info         *livekit.IngressInfo
-	retryCount   int
-	cmd          *exec.Cmd
-	grpcClient   ipc.IngressHandlerClient
-	closeSession func()
-	closed       core.Fuse
+	sessionCloser
+
+	info       *livekit.IngressInfo
+	retryCount int
+	cmd        *exec.Cmd
+	grpcClient ipc.IngressHandlerClient
+	closed     core.Fuse
 }
 
 type ProcessManager struct {
@@ -70,14 +71,14 @@ func (s *ProcessManager) onFatalError(f func(info *livekit.IngressInfo, err erro
 	s.onFatal = f
 }
 
-func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, closeSession func()) error {
+func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, closeSession func(ctx context.Context)) error {
 	// TODO send update on failure
 	_, span := tracer.Start(ctx, "Service.startIngress")
 	defer span.End()
 
 	h := &process{
-		info:         p.IngressInfo,
-		closeSession: closeSession,
+		info:          p.IngressInfo,
+		sessionCloser: closeSession,
 	}
 
 	s.sm.IngressStarted(p.IngressInfo, h)
@@ -221,12 +222,6 @@ func (p *process) GatherStats(ctx context.Context) (*ipc.MediaStats, error) {
 	}
 
 	return s.Stats, nil
-}
-
-func (p *process) CloseSession(ctx context.Context) {
-	if p.closeSession != nil {
-		p.closeSession()
-	}
 }
 
 func getSocketAddress(handlerTmpDir string) string {

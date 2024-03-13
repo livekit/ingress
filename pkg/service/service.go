@@ -114,7 +114,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 		return nil, nil, err
 	}
 
-	err = s.manager.startIngress(ctx, p, func() {
+	err = s.manager.startIngress(ctx, p, func(ctx context.Context) {
 		s.rtmpSrv.CloseHandler(resourceId)
 	})
 	if err != nil {
@@ -173,13 +173,15 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
 			p.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}})
+			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(ctx context.Context) {
+				s.whipSrv.CloseHandler(resourceId)
+			}})
 		} else {
 			p.SetExtraParams(&params.WhipExtraParams{
 				MimeTypes: mimeTypes,
 			})
 
-			err := s.manager.startIngress(ctx, p, func() {
+			err := s.manager.startIngress(ctx, p, func(ctx context.Context) {
 				s.whipSrv.CloseHandler(resourceId)
 			})
 			if err != nil {
@@ -487,8 +489,17 @@ func (s *Service) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Healthy"))
 }
 
+type sessionCloser func(ctx context.Context)
+
+func (p sessionCloser) CloseSession(ctx context.Context) {
+	if p != nil {
+		p(ctx)
+	}
+}
+
 type localSessionAPI struct {
 	stats.LocalStatsUpdater
+	sessionCloser
 }
 
 func (a *localSessionAPI) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {
@@ -504,9 +515,6 @@ func (a *localSessionAPI) GatherStats(ctx context.Context) (*ipc.MediaStats, err
 	// Return a nil stats map. Use the local gatherer in the session manager for local stats
 
 	return nil, nil
-}
-
-func (a *localSessionAPI) CloseSession(ctx context.Context) {
 }
 
 func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) error {
