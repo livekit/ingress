@@ -212,6 +212,8 @@ func (h *whipHandler) WaitForSessionEnd(ctx context.Context) error {
 		if err == nil || !errors.As(err, &retrError) {
 			return err
 		}
+
+		h.logger.Infow("whip session failed with retryable error", "error", err)
 	}
 
 	return err
@@ -493,7 +495,7 @@ func (h *whipHandler) runSession(ctx context.Context) error {
 
 			mediaSink, err := h.getSDKTrackMediaSink(sdkOutput, track, trackQuality)
 			if err != nil {
-				logger.Warnw("failed creating whip  media handler", err)
+				h.logger.Warnw("failed creating whip media handler", err)
 				h.trackLock.Unlock()
 				return err
 			}
@@ -501,7 +503,7 @@ func (h *whipHandler) runSession(ctx context.Context) error {
 			t := h.trackHandlers[WhipTrackDescription{streamKindFromCodecType(track.Kind()), trackQuality}]
 			th, ok := t.(*SDKWhipTrackHandler)
 			if !ok {
-				logger.Errorw("wrong type for track handler", errors.ErrIngressNotFound)
+				h.logger.Errorw("wrong type for track handler", errors.ErrIngressNotFound)
 				return errors.ErrIngressNotFound
 			}
 			th.SetMediaSink(mediaSink)

@@ -157,6 +157,7 @@ func (t *RelayWhipTrackHandler) startRTPReceiver(onDone func(err error)) {
 				case nil, errors.ErrPrerollBufferReset:
 					// continue
 				case io.EOF:
+					err = nil // success
 					return
 				default:
 					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
