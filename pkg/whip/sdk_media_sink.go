@@ -60,16 +60,16 @@ type SDKMediaSinkTrack struct {
 }
 
 type SDKMediaSink struct {
-	logger logger.Logger
-	params *params.Params
+	logger          logger.Logger
+	params          *params.Params
+	sdkOutput       *lksdk_output.LKSDKOutput
+	sinkInitialized bool
 
 	codecParameters webrtc.RTPCodecParameters
 	streamKind      types.StreamKind
 
-	tracksLock      sync.Mutex
-	tracks          map[livekit.VideoQuality]*SDKMediaSinkTrack
-	sdkOutput       *lksdk_output.LKSDKOutput
-	sinkInitialized bool
+	tracksLock sync.Mutex
+	tracks     map[livekit.VideoQuality]*SDKMediaSinkTrack
 
 	fuse core.Fuse
 }
@@ -82,6 +82,7 @@ type sample struct {
 func NewSDKMediaSink(
 	l logger.Logger,
 	p *params.Params,
+	sdkOutput *lksdk_output.LKSDKOutput,
 	codecParameters webrtc.RTPCodecParameters,
 	streamKind types.StreamKind,
 	outputSync *utils.OutputSynchronizer,
@@ -90,6 +91,7 @@ func NewSDKMediaSink(
 	s := &SDKMediaSink{
 		logger:          l,
 		params:          p,
+		sdkOutput:       sdkOutput,
 		tracks:          make(map[livekit.VideoQuality]*SDKMediaSinkTrack),
 		streamKind:      streamKind,
 		codecParameters: codecParameters,
@@ -100,13 +102,6 @@ func NewSDKMediaSink(
 	}
 
 	return s
-}
-
-func (sp *SDKMediaSink) SetSDKOutput(sdkOutput *lksdk_output.LKSDKOutput) {
-	sp.tracksLock.Lock()
-	sp.sdkOutput = sdkOutput
-	sp.sinkInitialized = false
-	sp.tracksLock.Unlock()
 }
 
 func (sp *SDKMediaSink) GetTrack(quality livekit.VideoQuality) *SDKMediaSinkTrack {
@@ -217,10 +212,6 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 func (sp *SDKMediaSink) ensureTracksInitialized(s *media.Sample, t *SDKMediaSinkTrack) (bool, error) {
 	if sp.sinkInitialized {
 		return sp.sinkInitialized, nil
-	}
-
-	if sp.sdkOutput == nil {
-		return false, nil
 	}
 
 	if sp.streamKind == types.Audio {

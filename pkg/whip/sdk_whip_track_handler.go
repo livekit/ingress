@@ -45,16 +45,18 @@ type SDKWhipTrackHandler struct {
 	writePLI     func(ssrc webrtc.SSRC)
 	onRTCP       func(packet rtcp.Packet)
 
-	jb             *jitter.Buffer
-	trackMediaSink *SDKMediaSinkTrack
+	jb *jitter.Buffer
 
 	firstPacket sync.Once
+	startRTCP   sync.Once
 	fuse        core.Fuse
 	lastSn      uint16
 	lastSnValid bool
 
-	statsLock  sync.Mutex
-	trackStats *stats.MediaTrackStatGatherer
+	stateLock      sync.Mutex
+	trackMediaSink *SDKMediaSinkTrack
+	trackStats     *stats.MediaTrackStatGatherer
+	stats          *stats.LocalMediaStatsGatherer
 }
 
 func NewSDKWhipTrackHandler(
@@ -62,7 +64,6 @@ func NewSDKWhipTrackHandler(
 	track *webrtc.TrackRemote,
 	quality livekit.VideoQuality,
 	sync *synchronizer.TrackSynchronizer,
-	sdkMediaSinkTrack *SDKMediaSinkTrack,
 	receiver *webrtc.RTPReceiver,
 	writePLI func(ssrc webrtc.SSRC),
 	onRTCP func(packet rtcp.Packet),
@@ -77,28 +78,29 @@ func NewSDKWhipTrackHandler(
 	}
 
 	return &SDKWhipTrackHandler{
-		logger:         logger,
-		remoteTrack:    track,
-		quality:        quality,
-		receiver:       receiver,
-		sync:           sync,
-		trackMediaSink: sdkMediaSinkTrack,
-		jb:             jb,
-		depacketizer:   depacketizer,
+		logger:       logger,
+		remoteTrack:  track,
+		quality:      quality,
+		receiver:     receiver,
+		sync:         sync,
+		jb:           jb,
+		depacketizer: depacketizer,
 	}, nil
 }
 
 func (t *SDKWhipTrackHandler) Start(onDone func(err error)) (err error) {
 	t.startRTPReceiver(onDone)
 	if t.onRTCP != nil {
-		t.startRTCPReceiver()
+		t.startRTCP.Do(t.startRTCPReceiver)
 	}
 
 	return nil
 }
 
 func (t *SDKWhipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaStatsGatherer) {
-	t.statsLock.Lock()
+	t.stateLock.Lock()
+
+	t.stats = st
 
 	var path string
 
@@ -114,9 +116,20 @@ func (t *SDKWhipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaSta
 	g := st.RegisterTrackStats(path)
 	t.trackStats = g
 
-	t.statsLock.Unlock()
+	if t.trackMediaSink != nil {
+		t.trackMediaSink.SetStatsGatherer(st)
+	}
+	t.stateLock.Unlock()
+}
 
-	t.trackMediaSink.SetStatsGatherer(st)
+func (t *SDKWhipTrackHandler) SetMediaSink(s *SDKMediaSinkTrack) {
+	t.stateLock.Lock()
+	t.trackMediaSink = s
+
+	if t.stats != nil {
+		t.trackMediaSink.SetStatsGatherer(t.stats)
+	}
+	t.stateLock.Unlock()
 }
 
 func (t *SDKWhipTrackHandler) Close() {
@@ -124,11 +137,15 @@ func (t *SDKWhipTrackHandler) Close() {
 }
 
 func (t *SDKWhipTrackHandler) startRTPReceiver(onDone func(err error)) {
+	t.stateLock.Lock()
+	trackMediaSink := t.trackMediaSink
+	t.stateLock.Unlock()
+
 	go func() {
 		var err error
 
 		defer func() {
-			t.trackMediaSink.Close()
+			trackMediaSink.Close()
 			if onDone != nil {
 				onDone(err)
 			}
@@ -146,7 +163,7 @@ func (t *SDKWhipTrackHandler) startRTPReceiver(onDone func(err error)) {
 				t.logger.Debugw("stopping rtp receiver")
 				return
 			default:
-				err = t.processRTPPacket()
+				err = t.processRTPPacket(trackMediaSink)
 				switch err {
 				case nil, errors.ErrPrerollBufferReset:
 					// continue
@@ -199,7 +216,7 @@ func (t *SDKWhipTrackHandler) startRTCPReceiver() {
 		}
 	}()
 }
-func (t *SDKWhipTrackHandler) processRTPPacket() error {
+func (t *SDKWhipTrackHandler) processRTPPacket(trackMediaSink *SDKMediaSinkTrack) error {
 	var pkt *rtp.Packet
 
 	_ = t.remoteTrack.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
@@ -209,10 +226,10 @@ func (t *SDKWhipTrackHandler) processRTPPacket() error {
 		return err
 	}
 
-	return t.pushRTP(pkt)
+	return t.pushRTP(pkt, trackMediaSink)
 }
 
-func (t *SDKWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
+func (t *SDKWhipTrackHandler) pushRTP(pkt *rtp.Packet, trackMediaSink *SDKMediaSinkTrack) error {
 	t.firstPacket.Do(func() {
 		t.logger.Debugw("first packet received")
 		t.sync.Initialize(pkt)
@@ -238,9 +255,9 @@ func (t *SDKWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
 				return err
 			}
 
-			t.statsLock.Lock()
+			t.stateLock.Lock()
 			stats := t.trackStats
-			t.statsLock.Unlock()
+			t.stateLock.Unlock()
 
 			if t.lastSnValid && t.lastSn+1 != pkt.SequenceNumber {
 				gap := pkt.SequenceNumber - t.lastSn
@@ -284,7 +301,7 @@ func (t *SDKWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
 			Duration: sampleDuration,
 		}
 
-		err = t.trackMediaSink.PushSample(s, ts)
+		err = trackMediaSink.PushSample(s, ts)
 		if err != nil {
 			return err
 		}
