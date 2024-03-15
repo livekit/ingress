@@ -451,7 +451,7 @@ func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 	}
 
 	segment := s.GetSegment()
-	if buffer == nil {
+	if segment == nil {
 		return gst.FlowError
 	}
 
