@@ -32,6 +32,10 @@ import (
 	lksdk "github.com/livekit/server-sdk-go/v2"
 )
 
+const (
+	watchdogDeadline = time.Minute
+)
+
 type SampleProvider interface {
 	Close() error
 }
@@ -63,7 +67,8 @@ type LKSDKOutput struct {
 	room   *lksdk.Room
 	params *params.Params
 
-	errChan chan error
+	errChan  chan error
+	watchdog *Watchdog
 
 	lock    sync.Mutex
 	outputs []SampleProvider
@@ -78,6 +83,17 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 		errChan: make(chan error, 1),
 		logger:  p.GetLogger(),
 	}
+
+	s.watchdog = NewWatchdog(func() {
+		s.logger.Warnw("disconnection from room triggered by watchdog", errors.ErrRoomDisconnectedUnexpectedly)
+
+		select {
+		case s.errChan <- errors.ErrRoomDisconnectedUnexpectedly:
+		default:
+		}
+
+		s.closeOutput()
+	}, watchdogDeadline)
 
 	cb := lksdk.NewRoomCallback()
 	cb.OnDisconnectedWithReason = func(reason lksdk.DisconnectionReason) {
@@ -164,10 +180,12 @@ func (s *LKSDKOutput) AddAudioTrack(mimeType string, disableDTX bool, stereo boo
 	}
 
 	track.OnBind(func() {
+		s.watchdog.TrackBound()
 		s.logger.Debugw("audio track bound")
 	})
 
 	track.OnUnbind(func() {
+		s.watchdog.TrackUnbound()
 		s.logger.Debugw("audio track unbound")
 	})
 
@@ -176,6 +194,8 @@ func (s *LKSDKOutput) AddAudioTrack(mimeType string, disableDTX bool, stereo boo
 		s.logger.Errorw("could not publish audio track", err)
 		return nil, err
 	}
+
+	s.watchdog.TrackAdded()
 
 	return track, nil
 }
@@ -215,13 +235,17 @@ func (s *LKSDKOutput) AddVideoTrack(layers []*livekit.VideoLayer, mimeType strin
 
 		localLayer := layer
 		track.OnBind(func() {
+			s.watchdog.TrackBound()
 			s.logger.Debugw("video track bound", "layer", localLayer.Quality.String())
 		})
 		track.OnUnbind(func() {
+			s.watchdog.TrackUnbound()
 			s.logger.Debugw("video track unbound", "layer", localLayer.Quality.String())
 		})
 
 		tracks = append(tracks, track)
+
+		s.watchdog.TrackAdded()
 	}
 
 	_, err = s.room.LocalParticipant.PublishSimulcastTrack(tracks, opts)
