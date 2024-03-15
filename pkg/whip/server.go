@@ -156,6 +156,7 @@ func (s *WHIPServer) Start(
 
 	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
 		setCORSHeaders(w, r, true)
+		w.WriteHeader(http.StatusNoContent)
 	}).Methods("OPTIONS")
 
 	// Expose the health endpoints on the WHIP server as well to make
