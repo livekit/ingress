@@ -1,7 +1,5 @@
 module github.com/livekit/ingress
 
-replace github.com/livekit/server-sdk-go/v2 => ../server-sdk-go
-
 go 1.21
 
 toolchain go1.21.4
@@ -16,10 +14,9 @@ require (
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
 	github.com/livekit/mediatransportutil v0.0.0-20240302142739-1c3dd691a1b8
-	github.com/livekit/protocol v1.10.1
-	github.com/livekit/psrpc v0.5.3-0.20240227154351-b7f99eaaf7b3
-	github.com/livekit/server-sdk-go v1.1.8
-	github.com/livekit/server-sdk-go/v2 v2.0.3
+	github.com/livekit/protocol v1.11.0
+	github.com/livekit/psrpc v0.5.3-0.20240228172457-3724cb4adbc4
+	github.com/livekit/server-sdk-go/v2 v2.0.7-0.20240315195514-46474eb45977
 	github.com/pion/dtls/v2 v2.2.10
 	github.com/pion/interceptor v0.1.25
 	github.com/pion/rtcp v1.2.14
@@ -34,7 +31,7 @@ require (
 	go.uber.org/atomic v1.11.0
 	golang.org/x/image v0.15.0
 	google.golang.org/grpc v1.62.0
-	google.golang.org/protobuf v1.32.0
+	google.golang.org/protobuf v1.33.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
