@@ -77,7 +77,7 @@ func DeserializeMediaForRelay(r io.Reader) ([]byte, time.Duration, error) {
 	}
 
 	data := make([]byte, int(size))
-	_, err = r.Read(data)
+	_, err = io.ReadFull(r, data)
 	if err != nil {
 		return nil, 0, err
 	}
