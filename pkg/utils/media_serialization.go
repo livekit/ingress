@@ -49,7 +49,7 @@ func SerializeMediaForRelay(w io.Writer, data []byte, ts time.Duration) error {
 		return err
 	}
 
-	err = binary.Write(b, binary.BigEndian, data)
+	_, err = b.Write(data)
 	if err != nil {
 		return err
 	}
@@ -77,7 +77,7 @@ func DeserializeMediaForRelay(r io.Reader) ([]byte, time.Duration, error) {
 	}
 
 	data := make([]byte, int(size))
-	err = binary.Read(r, binary.BigEndian, data)
+	_, err = r.Read(data)
 	if err != nil {
 		return nil, 0, err
 	}

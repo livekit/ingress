@@ -70,6 +70,8 @@ func (err RetryableError) GRPCStatus() *status.Status {
 	return err.psrpcErr.GRPCStatus()
 }
 
+func (err RetryableError) 
+
 func New(err string) error {
 	return errors.New(err)
 }
