@@ -46,7 +46,15 @@ func (pb *PrerollBuffer) SetWriter(w io.WriteCloser) error {
 	defer pb.lock.Unlock()
 
 	pb.w = w
-	if pb.w != nil {
+	if pb.w == nil {
+		// Send preroll buffer reset event
+		pb.buffer.Reset()
+		if pb.onBufferReset != nil {
+			if err := pb.onBufferReset(); err != nil {
+				return err
+			}
+		}
+	} else {
 		_, err := io.Copy(pb.w, pb.buffer)
 		if err != nil {
 			return err
@@ -74,7 +82,12 @@ func (pb *PrerollBuffer) Write(p []byte) (int, error) {
 		return pb.buffer.Write(p)
 	}
 
-	return pb.w.Write(p)
+	n, err := pb.w.Write(p)
+	if err == io.ErrClosedPipe {
+		// Do not return errors caused by a consuming pipe getting closed
+		err = nil
+	}
+	return n, err
 }
 
 func (pb *PrerollBuffer) Close() error {

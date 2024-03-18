@@ -82,7 +82,7 @@ func NewWHIPAppSource(ctx context.Context, resourceId string, trackKind types.St
 	return w, nil
 }
 
-func (w *whipAppSource) Start(ctx context.Context) error {
+func (w *whipAppSource) Start(ctx context.Context, getCorrectedTs func(time.Duration) time.Duration) error {
 	ctx, span := tracer.Start(ctx, "RTMPRelaySource.Start")
 	defer span.End()
 
@@ -99,7 +99,7 @@ func (w *whipAppSource) Start(ctx context.Context) error {
 	go func() {
 		defer resp.Body.Close()
 
-		err := w.copyRelayedData(resp.Body)
+		err := w.copyRelayedData(resp.Body, getCorrectedTs)
 		logger.Debugw("WHIP app source relay stopped", "error", err, "resourceID", w.resourceId, "kind", w.trackKind)
 
 		w.appSrc.EndStream()
@@ -145,7 +145,7 @@ func (w *whipAppSource) readRelayedData(r io.Reader, dataC chan<- readResult) {
 	}
 }
 
-func (w *whipAppSource) copyRelayedData(r io.Reader) error {
+func (w *whipAppSource) copyRelayedData(r io.Reader, getCorrectedTs func(time.Duration) time.Duration) error {
 	dataC := make(chan readResult, 1)
 	go w.readRelayedData(r, dataC)
 
@@ -172,8 +172,10 @@ func (w *whipAppSource) copyRelayedData(r io.Reader) error {
 			return re.err
 		}
 
+		ts := getCorrectedTs(re.ts)
+
 		b := gst.NewBufferFromBytes(re.data)
-		b.SetPresentationTimestamp(gst.ClockTime(re.ts))
+		b.SetPresentationTimestamp(gst.ClockTime(ts))
 
 		ret := w.appSrc.PushBuffer(b)
 		switch ret {

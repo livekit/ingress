@@ -140,8 +140,8 @@ func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps) (*gst.Bin, 
 	return bin, nil
 }
 
-func (s *WebRTCSink) Close() {
-	s.sdkOut.Close()
+func (s *WebRTCSink) Close() error {
+	return s.sdkOut.Close()
 }
 
 func getResolution(caps *gst.Caps) (w int, h int, err error) {

@@ -19,33 +19,60 @@ import (
 	"io"
 
 	"github.com/go-gst/go-gst/gst"
+	"google.golang.org/grpc/status"
 
 	"github.com/livekit/psrpc"
 )
 
 var (
-	ErrNoConfig                = psrpc.NewErrorf(psrpc.InvalidArgument, "missing config")
-	ErrInvalidAudioOptions     = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid audio options")
-	ErrInvalidVideoOptions     = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid video options")
-	ErrInvalidAudioPreset      = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid audio encoding preset")
-	ErrInvalidVideoPreset      = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid video encoding preset")
-	ErrSourceNotReady          = psrpc.NewErrorf(psrpc.FailedPrecondition, "source encoder not ready")
-	ErrUnsupportedDecodeFormat = psrpc.NewErrorf(psrpc.NotAcceptable, "unsupported format for the source media")
-	ErrUnsupportedEncodeFormat = psrpc.NewErrorf(psrpc.InvalidArgument, "unsupported mime type for encoder")
-	ErrUnsupportedURLFormat    = psrpc.NewErrorf(psrpc.InvalidArgument, "unsupported URL type")
-	ErrDuplicateTrack          = psrpc.NewErrorf(psrpc.NotAcceptable, "more than 1 track with given media kind")
-	ErrUnableToAddPad          = psrpc.NewErrorf(psrpc.Internal, "could not add pads to bin")
-	ErrMissingResourceId       = psrpc.NewErrorf(psrpc.InvalidArgument, "missing resource ID")
-	ErrInvalidRelayToken       = psrpc.NewErrorf(psrpc.PermissionDenied, "invalid token")
-	ErrIngressNotFound         = psrpc.NewErrorf(psrpc.NotFound, "ingress not found")
-	ErrServerCapacityExceeded  = psrpc.NewErrorf(psrpc.ResourceExhausted, "server capacity exceeded")
-	ErrServerShuttingDown      = psrpc.NewErrorf(psrpc.Unavailable, "server shutting down")
-	ErrIngressClosing          = psrpc.NewErrorf(psrpc.Unavailable, "ingress closing")
-	ErrMissingStreamKey        = psrpc.NewErrorf(psrpc.InvalidArgument, "missing stream key")
-	ErrPrerollBufferReset      = psrpc.NewErrorf(psrpc.Internal, "preroll buffer reset")
-	ErrInvalidSimulcast        = psrpc.NewErrorf(psrpc.NotAcceptable, "invalid simulcast configuration")
-	ErrSimulcastTranscode      = psrpc.NewErrorf(psrpc.NotAcceptable, "simulcast is not supported when transcoding")
+	ErrNoConfig                     = psrpc.NewErrorf(psrpc.InvalidArgument, "missing config")
+	ErrInvalidAudioOptions          = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid audio options")
+	ErrInvalidVideoOptions          = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid video options")
+	ErrInvalidAudioPreset           = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid audio encoding preset")
+	ErrInvalidVideoPreset           = psrpc.NewErrorf(psrpc.InvalidArgument, "invalid video encoding preset")
+	ErrSourceNotReady               = psrpc.NewErrorf(psrpc.FailedPrecondition, "source encoder not ready")
+	ErrUnsupportedDecodeFormat      = psrpc.NewErrorf(psrpc.NotAcceptable, "unsupported format for the source media")
+	ErrUnsupportedEncodeFormat      = psrpc.NewErrorf(psrpc.InvalidArgument, "unsupported mime type for encoder")
+	ErrUnsupportedURLFormat         = psrpc.NewErrorf(psrpc.InvalidArgument, "unsupported URL type")
+	ErrDuplicateTrack               = psrpc.NewErrorf(psrpc.NotAcceptable, "more than 1 track with given media kind")
+	ErrUnableToAddPad               = psrpc.NewErrorf(psrpc.Internal, "could not add pads to bin")
+	ErrMissingResourceId            = psrpc.NewErrorf(psrpc.InvalidArgument, "missing resource ID")
+	ErrInvalidRelayToken            = psrpc.NewErrorf(psrpc.PermissionDenied, "invalid token")
+	ErrIngressNotFound              = psrpc.NewErrorf(psrpc.NotFound, "ingress not found")
+	ErrServerCapacityExceeded       = psrpc.NewErrorf(psrpc.ResourceExhausted, "server capacity exceeded")
+	ErrServerShuttingDown           = psrpc.NewErrorf(psrpc.Unavailable, "server shutting down")
+	ErrIngressClosing               = psrpc.NewErrorf(psrpc.Unavailable, "ingress closing")
+	ErrMissingStreamKey             = psrpc.NewErrorf(psrpc.InvalidArgument, "missing stream key")
+	ErrPrerollBufferReset           = psrpc.NewErrorf(psrpc.Internal, "preroll buffer reset")
+	ErrInvalidSimulcast             = psrpc.NewErrorf(psrpc.NotAcceptable, "invalid simulcast configuration")
+	ErrSimulcastTranscode           = psrpc.NewErrorf(psrpc.NotAcceptable, "simulcast is not supported when transcoding")
+	ErrRoomDisconnected             = psrpc.NewErrorf(psrpc.NotAcceptable, "room disonnected")
+	ErrRoomDisconnectedUnexpectedly = RetryableError{psrpc.NewErrorf(psrpc.Unavailable, "room disonnected unexpectedly")}
 )
+
+type RetryableError struct {
+	psrpcErr psrpc.Error
+}
+
+func (err RetryableError) Error() string {
+	return err.psrpcErr.Error()
+}
+
+func (err RetryableError) Code() psrpc.ErrorCode {
+	return err.psrpcErr.Code()
+}
+
+func (err RetryableError) ToHttp() int {
+	return err.psrpcErr.ToHttp()
+}
+
+func (err RetryableError) GRPCStatus() *status.Status {
+	return err.psrpcErr.GRPCStatus()
+}
+
+func (err RetryableError) Unwrap() error {
+	return err.psrpcErr
+}
 
 func New(err string) error {
 	return errors.New(err)

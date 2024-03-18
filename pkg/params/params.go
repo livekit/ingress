@@ -43,6 +43,9 @@ type Params struct {
 	*livekit.IngressInfo
 	*config.Config
 
+	// extra state
+	err error
+
 	logger logger.Logger
 
 	AudioEncodingOptions *livekit.IngressAudioEncodingOptions
@@ -266,7 +269,12 @@ func (p *Params) CopyInfo() *livekit.IngressInfo {
 	p.stateLock.Lock()
 	defer p.stateLock.Unlock()
 
-	return proto.Clone(p.IngressInfo).(*livekit.IngressInfo)
+	info := proto.Clone(p.IngressInfo).(*livekit.IngressInfo)
+	if info.State != nil && p.err != nil {
+		info.State.Error = p.err.Error()
+	}
+
+	return info
 }
 
 // Useful in some paths where the extanded params are not known at creation time
@@ -274,12 +282,15 @@ func (p *Params) SetExtraParams(ep any) {
 	p.ExtraParams = ep
 }
 
-func (p *Params) SetStatus(status livekit.IngressState_Status, errString string) {
+func (p *Params) SetStatus(status livekit.IngressState_Status, err error) {
 	p.stateLock.Lock()
 	defer p.stateLock.Unlock()
 
 	p.State.Status = status
-	p.State.Error = errString
+	// Always return the first error
+	if p.err == nil {
+		p.err = err
+	}
 
 	switch status {
 	case livekit.IngressState_ENDPOINT_COMPLETE,

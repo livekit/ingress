@@ -181,6 +181,16 @@ func (s *WHIPServer) Start(
 	return nil
 }
 
+func (s *WHIPServer) CloseHandler(resourceId string) {
+	s.handlersLock.Lock()
+	h, ok := s.handlers[resourceId]
+	s.handlersLock.Unlock()
+
+	if ok && h != nil {
+		h.Close()
+	}
+}
+
 func (s *WHIPServer) Stop() {
 	s.cancel()
 }
@@ -199,6 +209,15 @@ func (s *WHIPServer) AssociateRelay(resourceId string, kind types.StreamKind, to
 	}
 
 	return nil
+}
+
+func (s *WHIPServer) DissociateRelay(resourceId string, kind types.StreamKind) {
+	s.handlersLock.Lock()
+	h, ok := s.handlers[resourceId]
+	s.handlersLock.Unlock()
+	if ok && h != nil {
+		h.DissociateRelay(kind)
+	}
 }
 
 func (s *WHIPServer) IsIdle() bool {

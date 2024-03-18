@@ -22,6 +22,7 @@ import (
 	"path"
 	"sync"
 
+	"github.com/frostbyte73/core"
 	"github.com/livekit/go-rtmp"
 	rtmpmsg "github.com/livekit/go-rtmp/message"
 	log "github.com/sirupsen/logrus"
@@ -144,6 +145,13 @@ func (s *RTMPServer) DissociateRelay(resourceId string) error {
 	return nil
 }
 
+func (s *RTMPServer) CloseHandler(resourceId string) {
+	h, ok := s.handlers.Load(resourceId)
+	if ok && h != nil {
+		h.(*RTMPHandler).Close()
+	}
+}
+
 func (s *RTMPServer) Stop() error {
 	return s.server.Close()
 }
@@ -160,7 +168,8 @@ type RTMPHandler struct {
 	keyFrameFound bool
 	mediaBuffer   *utils.PrerollBuffer
 
-	log logger.Logger
+	log    logger.Logger
+	closed core.Fuse
 
 	onPublish func(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error)
 	onClose   func(resourceId string)
@@ -216,6 +225,10 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 }
 
 func (h *RTMPHandler) OnSetDataFrame(timestamp uint32, data *rtmpmsg.NetStreamSetDataFrame) error {
+	if h.closed.IsBroken() {
+		return io.EOF
+	}
+
 	if h.flvEnc == nil {
 		err := h.initFlvEncoder()
 		if err != nil {
@@ -243,6 +256,10 @@ func (h *RTMPHandler) OnSetDataFrame(timestamp uint32, data *rtmpmsg.NetStreamSe
 }
 
 func (h *RTMPHandler) OnAudio(timestamp uint32, payload io.Reader) error {
+	if h.closed.IsBroken() {
+		return io.EOF
+	}
+
 	if h.flvEnc == nil {
 		err := h.initFlvEncoder()
 		if err != nil {
@@ -283,6 +300,10 @@ func (h *RTMPHandler) OnAudio(timestamp uint32, payload io.Reader) error {
 }
 
 func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
+	if h.closed.IsBroken() {
+		return io.EOF
+	}
+
 	if h.flvEnc == nil {
 		err := h.initFlvEncoder()
 		if err != nil {
@@ -342,6 +363,10 @@ func (h *RTMPHandler) OnClose() {
 
 func (h *RTMPHandler) SetWriter(w io.WriteCloser) error {
 	return h.mediaBuffer.SetWriter(w)
+}
+
+func (h *RTMPHandler) Close() {
+	h.closed.Break()
 }
 
 func (h *RTMPHandler) initFlvEncoder() error {

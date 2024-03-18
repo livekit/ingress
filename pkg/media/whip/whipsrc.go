@@ -18,6 +18,8 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sync/atomic"
+	"time"
 
 	"github.com/go-gst/go-gst/gst"
 	"github.com/livekit/ingress/pkg/params"
@@ -34,9 +36,10 @@ const (
 )
 
 type WHIPSource struct {
-	params     *params.Params
-	resourceId string
-	trackSrc   map[types.StreamKind]*whipAppSource
+	params      *params.Params
+	resourceId  string
+	startOffset atomic.Int64
+	trackSrc    map[types.StreamKind]*whipAppSource
 }
 
 func NewWHIPRelaySource(ctx context.Context, p *params.Params) (*WHIPSource, error) {
@@ -45,6 +48,8 @@ func NewWHIPRelaySource(ctx context.Context, p *params.Params) (*WHIPSource, err
 		trackSrc:   make(map[types.StreamKind]*whipAppSource),
 		resourceId: p.State.ResourceId,
 	}
+
+	s.startOffset.Store(-1)
 
 	mimeTypes := s.params.ExtraParams.(*params.WhipExtraParams).MimeTypes
 	for k, v := range mimeTypes {
@@ -62,7 +67,7 @@ func NewWHIPRelaySource(ctx context.Context, p *params.Params) (*WHIPSource, err
 
 func (s *WHIPSource) Start(ctx context.Context) error {
 	for _, t := range s.trackSrc {
-		err := t.Start(ctx)
+		err := t.Start(ctx, s.getCorrctedTimestamp)
 		if err != nil {
 			return err
 		}
@@ -108,4 +113,10 @@ func (s *WHIPSource) ValidateCaps(*gst.Caps) error {
 
 func (s *WHIPSource) getRelayUrl(kind types.StreamKind) string {
 	return fmt.Sprintf("%s/%s?token=%s", s.params.RelayUrl, kind, s.params.RelayToken)
+}
+
+func (s *WHIPSource) getCorrctedTimestamp(ts time.Duration) time.Duration {
+	s.startOffset.CompareAndSwap(-1, int64(ts))
+
+	return ts - time.Duration(s.startOffset.Load())
 }

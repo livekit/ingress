@@ -24,4 +24,5 @@ type SessionAPI interface {
 
 	GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error)
 	GetPipelineDot(ctx context.Context) (string, error)
+	CloseSession(ctx context.Context)
 }
