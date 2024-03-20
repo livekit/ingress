@@ -623,10 +623,14 @@ func (h *whipHandler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHI
 }
 
 func addICEToAnswer(sdp string) string {
-	iceString := "a=ice-options:trickle"
+	iceString := "a=ice-options:trickle\r\n"
 	if strings.Contains(sdp, iceString) {
 		return sdp
 	}
 
-	return sdp + "\r\n" + iceString
+	if !strings.HasSuffix(sdp, "\r\n") {
+		sdp += "\r\n"
+	}
+
+	return sdp + iceString
 }
