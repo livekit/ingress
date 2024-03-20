@@ -152,10 +152,14 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 		}
 	}()
 
+	h.logger.Infow("created peer connection with offer", sdpOffer)
 	sdpAnswer, err := h.getSDPAnswer(ctx, offer)
 	if err != nil {
 		return "", err
 	}
+	h.logger.Infow("created SDP answer", "sdpAnswer", sdpAnswer)
+
+	sdpAnswer = addICEToAnswer(sdpAnswer)
 
 	return sdpAnswer, nil
 }
@@ -345,6 +349,7 @@ func (h *whipHandler) getSDPAnswer(ctx context.Context, offer *webrtc.SessionDes
 		return "", err
 	}
 
+	h.logger.Infow("created answer", "answer", answer.SDP)
 	// Create channel that is blocked until ICE Gathering is complete
 	gatherComplete := webrtc.GatheringCompletePromise(h.pc)
 
@@ -373,6 +378,8 @@ func (h *whipHandler) getSDPAnswer(ctx context.Context, offer *webrtc.SessionDes
 	}
 
 	sdpAnswer := h.pc.LocalDescription().SDP
+	h.logger.Infow("created SDP answer from Local Description", sdpAnswer)
+	sdpAnswer = addICEToAnswer(sdpAnswer)
 
 	return sdpAnswer, nil
 }
@@ -613,4 +620,13 @@ func (h *whipHandler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHI
 	h.Close()
 
 	return &google_protobuf2.Empty{}, nil
+}
+
+func addICEToAnswer(sdp string) string {
+	iceString := "a=ice-options:trickle"
+	if strings.Contains(sdp, iceString) {
+		return sdp
+	}
+
+	return sdp + "\r\n" + iceString
 }
