@@ -33,7 +33,7 @@ import (
 )
 
 func RunURLTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
-	svc := service.NewService(conf.Config, psrpcClient, bus, nil, newCmd)
+	svc := service.NewService(conf.Config, psrpcClient, bus, nil, nil, newCmd)
 	svc.StartDebugHandlers()
 
 	go func() {
