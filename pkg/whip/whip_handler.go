@@ -152,7 +152,7 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 		}
 	}()
 
-	h.logger.Infow("created peer connection with offer", sdpOffer)
+	h.logger.Infow("created peer connection with offer", "offer", sdpOffer)
 	sdpAnswer, err := h.getSDPAnswer(ctx, offer)
 	if err != nil {
 		return "", err
@@ -378,7 +378,7 @@ func (h *whipHandler) getSDPAnswer(ctx context.Context, offer *webrtc.SessionDes
 	}
 
 	sdpAnswer := h.pc.LocalDescription().SDP
-	h.logger.Infow("created SDP answer from Local Description", sdpAnswer)
+	h.logger.Infow("created SDP answer from Local Description", "answer", sdpAnswer)
 	sdpAnswer = addICEToAnswer(sdpAnswer)
 
 	return sdpAnswer, nil
