@@ -89,6 +89,7 @@ func NewRelayWhipTrackHandler(
 		relaySink:    relaySink,
 		sync:         sync,
 		jb:           jb,
+		onRTCP:       onRTCP,
 		depacketizer: depacketizer,
 	}, nil
 }
