@@ -84,6 +84,7 @@ func NewSDKWhipTrackHandler(
 		receiver:     receiver,
 		sync:         sync,
 		jb:           jb,
+		onRTCP:       onRTCP,
 		depacketizer: depacketizer,
 	}, nil
 }
