@@ -27,7 +27,6 @@ import (
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/server-sdk-go/v2/pkg/jitter"
 	"github.com/livekit/server-sdk-go/v2/pkg/synchronizer"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
@@ -44,8 +43,6 @@ type SDKWhipTrackHandler struct {
 	sync         *synchronizer.TrackSynchronizer
 	writePLI     func(ssrc webrtc.SSRC)
 	onRTCP       func(packet rtcp.Packet)
-
-	jb *jitter.Buffer
 
 	firstPacket sync.Once
 	startRTCP   sync.Once
@@ -65,13 +62,8 @@ func NewSDKWhipTrackHandler(
 	quality livekit.VideoQuality,
 	sync *synchronizer.TrackSynchronizer,
 	receiver *webrtc.RTPReceiver,
-	writePLI func(ssrc webrtc.SSRC),
 	onRTCP func(packet rtcp.Packet),
 ) (*SDKWhipTrackHandler, error) {
-	jb, err := createJitterBuffer(track, logger, writePLI)
-	if err != nil {
-		return nil, err
-	}
 	depacketizer, err := createDepacketizer(track)
 	if err != nil {
 		return nil, err

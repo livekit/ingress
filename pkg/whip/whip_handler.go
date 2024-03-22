@@ -33,7 +33,6 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -69,7 +68,6 @@ type whipHandler struct {
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
-	outputSync         *utils.OutputSynchronizer
 	stats              *stats.LocalMediaStatsGatherer
 	expectedTrackCount int
 	closeOnce          sync.Once
@@ -407,19 +405,19 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 	defer h.trackLock.Unlock()
 	h.tracks[track.ID()] = track
 
-	sync := h.sync.AddTrack(track, whipIdentity)
-
 	trackQuality := h.getTrackQuality(track)
 
 	var th WhipTrackHandler
 	var err error
 	if h.params.BypassTranscoding {
-		th, err = NewSDKWhipTrackHandler(logger, track, trackQuality, sync, receiver, h.writePLI, h.sync.OnRTCP)
+		th, err = NewSDKWhipTrackHandler(logger, track, trackQuality, receiver, onUpstreamRTCP)
 		if err != nil {
 			logger.Warnw("failed creating SDK whip track handler", err)
 			return
 		}
 	} else {
+		sync := h.sync.AddTrack(track, whipIdentity)
+
 		th, err = NewRelayWhipTrackHandler(logger, track, trackQuality, sync, receiver, h.writePLI, h.sync.OnRTCP)
 		if err != nil {
 			logger.Warnw("failed creating relay whip track handler", err)
@@ -449,7 +447,7 @@ func (h *whipHandler) getSDKTrackMediaSink(sdkOutput *lksdk_output.LKSDKOutput, 
 			layers = []livekit.VideoQuality{livekit.VideoQuality_HIGH, livekit.VideoQuality_MEDIUM}
 		}
 
-		h.trackSDKMediaSink[kind] = NewSDKMediaSink(h.logger, h.params, sdkOutput, track.Codec(), streamKindFromCodecType(track.Kind()), h.outputSync, layers)
+		h.trackSDKMediaSink[kind] = NewSDKMediaSink(h.logger, h.params, sdkOutput, track.Codec(), streamKindFromCodecType(track.Kind()), layers)
 	}
 
 	sdkTrack := h.trackSDKMediaSink[kind].GetTrack(trackQuality)
@@ -459,8 +457,8 @@ func (h *whipHandler) getSDKTrackMediaSink(sdkOutput *lksdk_output.LKSDKOutput, 
 		return nil, err
 	}
 
-	sdkTrack.SetWritePLI(func() {
-		h.writePLI(track.SSRC())
+	sdkTrack.SetOnRTCP(func(pkt rtcp.Packet) {
+		h.onDownstreamRTCP(pkt, track.SSRC())
 	})
 
 	return sdkTrack, nil
@@ -486,8 +484,6 @@ func (h *whipHandler) runSession(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-
-		h.outputSync = utils.NewOutputSynchronizer()
 
 		h.trackLock.Lock()
 		for _, track := range h.tracks {

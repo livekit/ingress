@@ -25,6 +25,7 @@ import (
 
 	"github.com/Eyevinn/mp4ff/avc"
 	"github.com/frostbyte73/core"
+	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
 	"github.com/pion/webrtc/v3/pkg/media"
 	"golang.org/x/image/vp8"
@@ -34,7 +35,6 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/psrpc"
@@ -47,13 +47,12 @@ var (
 
 type SDKMediaSinkTrack struct {
 	stateLock sync.Mutex
-	writePLI  func()
+	writeRTCP func(pkt rtcp.Packet)
 
 	quality       livekit.VideoQuality
 	width, height uint
 
 	trackStatsGatherer *stats.MediaTrackStatGatherer
-	outputSync         *utils.TrackOutputSynchronizer
 	localTrack         *lksdk.LocalTrack
 
 	sink *SDKMediaSink
@@ -74,18 +73,12 @@ type SDKMediaSink struct {
 	fuse core.Fuse
 }
 
-type sample struct {
-	s  *media.Sample
-	ts time.Duration
-}
-
 func NewSDKMediaSink(
 	l logger.Logger,
 	p *params.Params,
 	sdkOutput *lksdk_output.LKSDKOutput,
 	codecParameters webrtc.RTPCodecParameters,
 	streamKind types.StreamKind,
-	outputSync *utils.OutputSynchronizer,
 	layers []livekit.VideoQuality,
 ) *SDKMediaSink {
 	s := &SDKMediaSink{
@@ -98,7 +91,7 @@ func NewSDKMediaSink(
 	}
 
 	for _, q := range layers {
-		s.addTrack(q, outputSync.AddTrack())
+		s.addTrack(q)
 	}
 
 	return s
@@ -117,11 +110,10 @@ func (sp *SDKMediaSink) Close() error {
 	return nil
 }
 
-func (sp *SDKMediaSink) addTrack(quality livekit.VideoQuality, outputSync *utils.TrackOutputSynchronizer) {
+func (sp *SDKMediaSink) addTrack(quality livekit.VideoQuality) {
 	sp.tracks[quality] = &SDKMediaSinkTrack{
-		sink:       sp,
-		quality:    quality,
-		outputSync: outputSync,
+		sink:    sp,
+		quality: quality,
 	}
 }
 
@@ -249,20 +241,6 @@ func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error 
 		return nil
 	}
 
-	drop, err := t.outputSync.WaitForMediaTime(ts)
-	if err != nil {
-		return err
-	}
-	if drop {
-		t.sink.logger.Debugw("dropping sample", "timestamp", ts)
-
-		if g != nil {
-			g.PacketLost(1)
-		}
-
-		return nil
-	}
-
 	// WriteSample seems to return successfully even if the Peer Connection disconnected.
 	// We need to return success to the caller even if the PC is disconnected to allow for reconnections
 	err = localTrack.WriteSample(*s, nil)
@@ -278,7 +256,6 @@ func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error 
 }
 
 func (t *SDKMediaSinkTrack) Close() error {
-	t.outputSync.Close()
 	return t.sink.Close()
 }
 
