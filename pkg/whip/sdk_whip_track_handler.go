@@ -35,14 +35,14 @@ import (
 )
 
 type SDKWhipTrackHandler struct {
-	logger       logger.Logger
-	remoteTrack  *webrtc.TrackRemote
-	depacketizer rtp.Depacketizer
-	quality      livekit.VideoQuality
-	receiver     *webrtc.RTPReceiver
-	sync         *synchronizer.TrackSynchronizer
-	writePLI     func(ssrc webrtc.SSRC)
-	onRTCP       func(packet rtcp.Packet)
+	logger           logger.Logger
+	remoteTrack      *webrtc.TrackRemote
+	depacketizer     rtp.Depacketizer
+	quality          livekit.VideoQuality
+	receiver         *webrtc.RTPReceiver
+	sync             *synchronizer.TrackSynchronizer
+	writePLI         func(ssrc webrtc.SSRC)
+	sendRTCPUpStream func(pkts []rtcp.Packet)
 
 	firstPacket sync.Once
 	startRTCP   sync.Once
@@ -60,9 +60,8 @@ func NewSDKWhipTrackHandler(
 	logger logger.Logger,
 	track *webrtc.TrackRemote,
 	quality livekit.VideoQuality,
-	sync *synchronizer.TrackSynchronizer,
-	receiver *webrtc.RTPReceiver,
-	onRTCP func(packet rtcp.Packet),
+	writePLI func(ssrc webrtc.SSRC),
+	sendRTCPUpStream func(pkts []rtcp.Packet),
 ) (*SDKWhipTrackHandler, error) {
 	depacketizer, err := createDepacketizer(track)
 	if err != nil {
@@ -70,22 +69,21 @@ func NewSDKWhipTrackHandler(
 	}
 
 	return &SDKWhipTrackHandler{
-		logger:       logger,
-		remoteTrack:  track,
-		quality:      quality,
-		receiver:     receiver,
-		sync:         sync,
-		jb:           jb,
-		onRTCP:       onRTCP,
-		depacketizer: depacketizer,
+		logger:           logger,
+		remoteTrack:      track,
+		quality:          quality,
+		receiver:         receiver,
+		sync:             sync,
+		jb:               jb,
+		writePLI:         writePLI,
+		sendRTCPUpStream: sendRTCPUpStream,
+		depacketizer:     depacketizer,
 	}, nil
 }
 
 func (t *SDKWhipTrackHandler) Start(onDone func(err error)) (err error) {
 	t.startRTPReceiver(onDone)
-	if t.onRTCP != nil {
-		t.startRTCP.Do(t.startRTCPReceiver)
-	}
+	t.startRTCP.Do(t.startRTCPReceiver)
 
 	return nil
 }
@@ -122,11 +120,21 @@ func (t *SDKWhipTrackHandler) SetMediaSink(s *SDKMediaSinkTrack) {
 	if t.stats != nil {
 		t.trackMediaSink.SetStatsGatherer(t.stats)
 	}
+
+	t.trackMediaSink.SetRTCPPacketSink(t)
+
 	t.stateLock.Unlock()
 }
 
 func (t *SDKWhipTrackHandler) Close() {
 	t.fuse.Break()
+}
+
+func (t *SDKWhipTrackHandler) HandlePackets(pkts []rtcp.Packet) error {
+	if t.sendRTCPUpStream != nil {
+		t.translateRTCPPakets(pkts)
+		t.sendRTCPUpStream(pkts)
+	}
 }
 
 func (t *SDKWhipTrackHandler) startRTPReceiver(onDone func(err error)) {
@@ -204,7 +212,7 @@ func (t *SDKWhipTrackHandler) startRTCPReceiver() {
 				}
 
 				for _, pkt := range pkts {
-					t.onRTCP(pkt)
+					t.onUpStreamRTCP(pkt)
 				}
 			}
 		}

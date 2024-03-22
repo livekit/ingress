@@ -410,7 +410,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 	var th WhipTrackHandler
 	var err error
 	if h.params.BypassTranscoding {
-		th, err = NewSDKWhipTrackHandler(logger, track, trackQuality, receiver, onUpstreamRTCP)
+		th, err = NewSDKWhipTrackHandler(logger, track, trackQuality, receiver, h.writePLI, writeRTCPUpstream)
 		if err != nil {
 			logger.Warnw("failed creating SDK whip track handler", err)
 			return
@@ -456,10 +456,6 @@ func (h *whipHandler) getSDKTrackMediaSink(sdkOutput *lksdk_output.LKSDKOutput, 
 		h.logger.Warnw("no SDK track for the current quality", err)
 		return nil, err
 	}
-
-	sdkTrack.SetOnRTCP(func(pkt rtcp.Packet) {
-		h.onDownstreamRTCP(pkt, track.SSRC())
-	})
 
 	return sdkTrack, nil
 }

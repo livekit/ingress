@@ -21,6 +21,7 @@ import (
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Eyevinn/mp4ff/avc"
@@ -46,14 +47,12 @@ var (
 )
 
 type SDKMediaSinkTrack struct {
-	stateLock sync.Mutex
-	writeRTCP func(pkt rtcp.Packet)
-
 	quality       livekit.VideoQuality
 	width, height uint
 
 	trackStatsGatherer *stats.MediaTrackStatGatherer
 	localTrack         *lksdk.LocalTrack
+	bound              atomic.Bool
 
 	sink *SDKMediaSink
 }
@@ -179,7 +178,7 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 		sp.params.SetInputVideoState(context.Background(), videoState, true)
 	}
 
-	tracks, pliHandlers, err := sp.sdkOutput.AddVideoTrack(layers, sp.codecParameters.MimeType)
+	tracks, rtcpHandlers, err := sp.sdkOutput.AddVideoTrack(layers, sp.codecParameters.MimeType)
 	if err != nil {
 		return false, err
 	}
@@ -189,7 +188,7 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 	for i, q := range layers {
 		t = sp.tracks[q.Quality]
 		t.localTrack = tracks[i]
-		pliHandlers[i].SetKeyFrameEmitter(t)
+		rtcpHandlers[i].SetKeyFrameEmitter(t)
 	}
 
 	for _, l := range layers {
@@ -255,17 +254,40 @@ func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error 
 	return nil
 }
 
+func (t *SDKMediaSinkTrack) PushRTCP(pkts []rtcp.Packet) error {
+	t.translateRTCPPackets(pkts)
+
+	if !t.bound.Load() {
+		return nil
+	}
+
+	err := t.sink.sdkOutput.WriteRTCP(pkts)
+	// Write can fail if the pc is in a disconnected/failing and the track hasn't been unbound yet. The "bound" check is also racy.
+	// Do not fail if RTCP writing failed
+	if err != nil {
+		t.sink.logger.Infow("RTCP write failed", "error", err)
+	}
+
+	retutn nil
+}
+
 func (t *SDKMediaSinkTrack) Close() error {
 	return t.sink.Close()
 }
 
 func (t *SDKMediaSinkTrack) OnBind() error {
 	t.sink.logger.Infow("media sink bound")
+
+	t.bound.Store(true)
+
 	return nil
 }
 
 func (t *SDKMediaSinkTrack) OnUnbind() error {
 	t.sink.logger.Infow("media sink unbound")
+
+	t.bound.Store(false)
+
 	return nil
 }
 
@@ -285,25 +307,6 @@ func (t *SDKMediaSinkTrack) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) 
 	t.sink.tracksLock.Lock()
 	t.trackStatsGatherer = g
 	t.sink.tracksLock.Unlock()
-}
-
-func (t *SDKMediaSinkTrack) SetWritePLI(writePLI func()) {
-	t.stateLock.Lock()
-	defer t.stateLock.Unlock()
-
-	t.writePLI = writePLI
-}
-
-func (t *SDKMediaSinkTrack) ForceKeyFrame() error {
-	t.stateLock.Lock()
-	writePLI := t.writePLI
-	t.stateLock.Unlock()
-
-	if writePLI != nil {
-		writePLI()
-	}
-
-	return nil
 }
 
 func getVideoParams(mimeType string, s *media.Sample) (uint, uint, error) {

@@ -44,7 +44,7 @@ type KeyFrameEmitter interface {
 }
 
 type PacketSink interface {
-	HandlePacket(pkt *rtcp.Packet) error
+	HandlePackets(pkt []rtcp.Packet) error
 }
 
 type RTCPHandler struct {
@@ -52,11 +52,11 @@ type RTCPHandler struct {
 	k atomic.Pointer[KeyFrameEmitter]
 }
 
-func (h *RTCPHandler) HandleRTCP(pkt *rtcp.Packet) error {
+func (h *RTCPHandler) HandleRTCP(pkt []rtcp.Packet) error {
 	p := h.p.Load()
 
 	if p != nil {
-		return (*p).HandlePacket(pkt)
+		return (*p).HandlePackets(pkt)
 	}
 
 	return nil
@@ -300,6 +300,23 @@ func (s *LKSDKOutput) closeOutput() {
 	s.outputs = nil
 
 	s.room.Disconnect()
+}
+
+func (s *LKSDKOutput) WriteRTCP(pkts []rtcp.Packet) error {
+	if s.room == nil {
+		return nil
+	}
+
+	if s.room.LocalParticipant == nil {
+		return nil
+	}
+
+	pc := s.room.LocalParticipant.GetPublisherPeerConnection()
+	if pc == nil {
+		return nil
+	}
+
+	return pc.WriteRTCP(pkts)
 }
 
 func (s *LKSDKOutput) Close() error {
