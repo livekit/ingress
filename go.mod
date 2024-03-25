@@ -18,11 +18,11 @@ require (
 	github.com/livekit/psrpc v0.5.3-0.20240315045730-ba2e5b9923b5
 	github.com/livekit/server-sdk-go/v2 v2.0.7-0.20240315195514-46474eb45977
 	github.com/pion/dtls/v2 v2.2.10
-	github.com/pion/interceptor v0.1.25
+	github.com/pion/interceptor v0.1.27
 	github.com/pion/rtcp v1.2.14
-	github.com/pion/rtp v1.8.3
-	github.com/pion/sdp/v3 v3.0.6
-	github.com/pion/webrtc/v3 v3.2.28
+	github.com/pion/rtp v1.8.4
+	github.com/pion/sdp/v3 v3.0.8
+	github.com/pion/webrtc/v3 v3.2.29
 	github.com/prometheus/client_golang v1.19.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
@@ -30,7 +30,7 @@ require (
 	github.com/yutopp/go-flv v0.3.1
 	go.uber.org/atomic v1.11.0
 	golang.org/x/image v0.15.0
-	google.golang.org/grpc v1.62.0
+	google.golang.org/grpc v1.62.1
 	google.golang.org/protobuf v1.33.0
 	gopkg.in/yaml.v3 v3.0.1
 )
