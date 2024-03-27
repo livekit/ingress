@@ -26,7 +26,6 @@ import (
 
 	"github.com/frostbyte73/core"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
@@ -145,8 +144,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 
 		rpcServer, err = rpc.NewIngressHandlerServer(rpcHandlerContext{
 			service: s,
-			resourceID: resourceId,
-			streamKey: streamKey,
+			params:  p,
 		}, s.bus)
 		if err != nil {
 			return nil, nil, nil, err
@@ -520,72 +518,4 @@ func (a *localSessionAPI) GatherStats(ctx context.Context) (*ipc.MediaStats, err
 	// Return a nil stats map. Use the local gatherer in the session manager for local stats
 
 	return nil, nil
-}
-
-type rpcHandlerContext struct {
-	service    *Service
-	resourceID string
-	streamKey  string
-}
-
-// IngressHandler RPC interface
-func (r rpcHandlerContext) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
-	_, span := tracer.Start(ctx, "whipHandler.UpdateIngress")
-	defer span.End()
-
-	r.service.whipSrv.CloseHandler(r.resourceID)
-
-	return h.params.CopyInfo().State, nil
-}
-
-func (r rpcHandlerContext)) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
-	_, span := tracer.Start(ctx, "whipHandler.DeleteIngress")
-	defer span.End()
-
-	r.service.whipSrv.CloseHandler(r.resourceID)
-
-	return h.params.CopyInfo().State, nil
-}
-
-func (r rpcHandlerContext) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {
-	_, span := tracer.Start(ctx, "whipHandler.DeleteWHIPResource")
-	defer span.End()
-
-	// only test for stream key correctness if it is part of the request for backward compatibility
-	if req.StreamKey != "" && r.StreamKey != req.StreamKey {
-		h.logger.Infow("received delete request with wrong stream key", "streamKey", req.StreamKey)
-	}
-
-	h.Close()
-
-	return &google_protobuf2.Empty{}, nil
-}
-func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) error {
-	if err := server.RegisterUpdateIngressTopic(info.IngressId); err != nil {
-		return err
-	}
-	if err := server.RegisterDeleteIngressTopic(info.IngressId); err != nil {
-		return err
-	}
-
-	if info.InputType == livekit.IngressInput_WHIP_INPUT {
-		if err := server.RegisterDeleteWHIPResourceTopic(info.State.ResourceId); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func DeregisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) {
-	server.DeregisterUpdateIngressTopic(info.IngressId)
-	server.RegisterDeleteIngressTopic(info.IngressId)
-
-	if info.InputType == livekit.IngressInput_WHIP_INPUT {
-		server.RegisterDeleteWHIPResourceTopic(info.State.ResourceId)
-	}
-}
-
-func RegisterListIngress(topic string, srv rpc.IngressInternalServer) error {
-	return srv.RegisterListActiveIngressTopic(topic)
 }

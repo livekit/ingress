@@ -52,6 +52,7 @@ type whipHandler interface {
 	Start(ctx context.Context) (map[types.StreamKind]string, error)
 	WaitForSessionEnd(ctx context.Context) error
 	Close()
+	SetMediaStatsGatherer(s *stats.LocalMediaStatsGatherer)
 }
 
 type WHIPServer struct {
@@ -60,7 +61,7 @@ type WHIPServer struct {
 
 	conf         *config.Config
 	webRTCConfig *rtcconfig.WebRTCConfig
-	onPublish    func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error)
+	onPublish    func(streamKey, resourceId string) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error)
 	rpcClient    rpc.IngressHandlerClient
 
 	handlersLock sync.Mutex
@@ -76,7 +77,7 @@ func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
 
 func (s *WHIPServer) Start(
 	conf *config.Config,
-	onPublish func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error),
+	onPublish func(streamKey, resourceId string) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error),
 	healthHandlers HealthHandlers,
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())

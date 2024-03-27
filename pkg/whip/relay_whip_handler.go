@@ -59,7 +59,7 @@ type relayWhipHandler struct {
 
 	trackLock      sync.Mutex
 	tracks         map[string]*webrtc.TrackRemote
-	trackHandlers  map[types.StreamKind]RelayWhipTrackHandler
+	trackHandlers  map[types.StreamKind]*RelayWhipTrackHandler
 	trackAddedChan chan *webrtc.TrackRemote
 }
 
@@ -71,7 +71,7 @@ func NewRelayWhipHandler(webRTCConfig *rtcconfig.WebRTCConfig) *relayWhipHandler
 		rtcConfig:     &rtcConfCopy,
 		sync:          synchronizer.NewSynchronizer(nil),
 		tracks:        make(map[string]*webrtc.TrackRemote),
-		trackHandlers: make(map[types.StreamKind]RelayWhipTrackHandler),
+		trackHandlers: make(map[types.StreamKind]*RelayWhipTrackHandler),
 	}
 }
 
@@ -201,15 +201,9 @@ func (h *relayWhipHandler) AssociateRelay(kind types.StreamKind, token string, w
 		return errors.ErrInvalidRelayToken
 	}
 
-	t, ok := h.trackHandlers[kind]
+	th, ok := h.trackHandlers[kind]
 	if !ok {
 		h.logger.Errorw("track handler not found", nil)
-		return errors.ErrIngressNotFound
-	}
-
-	th, ok := t.(*RelayWhipTrackHandler)
-	if !ok {
-		h.logger.Errorw("failed type assertion on track handler", nil)
 		return errors.ErrIngressNotFound
 	}
 
@@ -225,14 +219,8 @@ func (h *relayWhipHandler) DissociateRelay(kind types.StreamKind) {
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
 
-	t, ok := h.trackHandlers[kind]
+	th, ok := h.trackHandlers[kind]
 	if !ok {
-		return
-	}
-
-	th, ok := t.(*RelayWhipTrackHandler)
-	if !ok {
-		h.logger.Errorw("failed type assertion on track handler", nil)
 		return
 	}
 
@@ -365,9 +353,7 @@ func (h *relayWhipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.
 
 	sync := h.sync.AddTrack(track, whipIdentity)
 
-	var th WhipTrackHandler
-	var err error
-	th, err = NewRelayWhipTrackHandler(logger, track, trackQuality, sync, receiver, h.writePLI, h.sync.OnRTCP)
+	th, err := NewRelayWhipTrackHandler(logger, track, sync, receiver, h.writePLI, h.sync.OnRTCP)
 	if err != nil {
 		logger.Warnw("failed creating relay whip track handler", err)
 		return

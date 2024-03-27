@@ -33,8 +33,8 @@ import (
 )
 
 const (
-	maxRetryCount = 10
-	maxWaitTime   = 10 * time.Second
+	maxSignalRetryCount = 10
+	maxWaitTime         = 10 * time.Second
 )
 
 type sdkWhipHandler struct {
@@ -57,7 +57,7 @@ func NewSDKWHIPHandler() *sdkWhipHandler {
 }
 
 func (h *sdkWhipHandler) Init(ctx context.Context, p *params.Params, sdpOffer string) (string, error) {
-	ctx, done = context.WithTimeout(ctx, 10*time.Second)
+	ctx, done := context.WithTimeout(ctx, 10*time.Second)
 	defer done()
 
 	h.logger = p.GetLogger()
@@ -88,30 +88,30 @@ func (h *sdkWhipHandler) Init(ctx context.Context, p *params.Params, sdpOffer st
 
 	h.client.Start()
 
-	err := h.client.Join(p.WsUrl, p.Token)
+	_, err := h.client.Join(p.WsUrl, p.Token)
 	if err != nil {
 		return "", err
 	}
 	h.logger.Infow("connected to controller")
 
-	offer := &webrtc.SessionDescription{
+	offer := webrtc.SessionDescription{
 		Type: webrtc.SDPTypeOffer,
 		SDP:  sdpOffer,
 	}
 
-	err := h.client.SendOffer(offer)
+	err = h.client.SendOffer(offer)
 	if err != nil {
 		return "", err
 	}
 
-	var answer *webrtc.SessionDescription
+	var answer webrtc.SessionDescription
 	var ok bool
 	select {
 	case answer, ok = <-h.answers:
 		if !ok {
 			return "", errors.ErrServerShuttingDown
 		}
-	case <-h.Watch():
+	case <-h.closed.Watch():
 		return "", errors.ErrServerShuttingDown
 	case <-ctx.Done():
 		return "", psrpc.NewErrorf(psrpc.DeadlineExceeded, "timed out while waiting for ICE candidate gathering")
@@ -157,7 +157,7 @@ func (h *sdkWhipHandler) WaitForSessionEnd(ctx context.Context) error {
 
 	h.logger.Infow("WHIP handler ended")
 
-	return err
+	return nil
 }
 
 func (h *sdkWhipHandler) AssociateRelay(kind types.StreamKind, token string, w io.WriteCloser) error {
@@ -170,8 +170,9 @@ func (h *sdkWhipHandler) DissociateRelay(kind types.StreamKind) {
 func (h *sdkWhipHandler) reconnect() error {
 	sleepDuration := time.Second
 
-	for retryCount := 0; retryCount <= maxRetryCount; retryCount++ {
-		err := h.client.Reconnect(p.WsUrl, p.Token)
+	var retryCount int
+	for retryCount = 0; retryCount <= maxSignalRetryCount; retryCount++ {
+		_, err := h.client.Reconnect(h.params.WsUrl, h.params.Token)
 		if err == nil {
 			h.logger.Infow("successfully reconnected to controller", "retryCount", retryCount)
 			return nil
