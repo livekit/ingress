@@ -26,6 +26,7 @@ import (
 
 	"github.com/frostbyte73/core"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
@@ -129,7 +130,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 	return p, stats, nil
 }
 
-func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, ended func(err error), err error) {
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, ended func(err error), err error) {
 	ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest")
 	defer span.End()
 
@@ -142,7 +143,11 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 	if p.BypassTranscoding {
 		// RPC is handled in the handler process when transcoding
 
-		rpcServer, err = rpc.NewIngressHandlerServer(ihs, s.bus)
+		rpcServer, err = rpc.NewIngressHandlerServer(rpcHandlerContext{
+			service: s,
+			resourceID: resourceId,
+			streamKey: streamKey,
+		}, s.bus)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -517,6 +522,44 @@ func (a *localSessionAPI) GatherStats(ctx context.Context) (*ipc.MediaStats, err
 	return nil, nil
 }
 
+type rpcHandlerContext struct {
+	service    *Service
+	resourceID string
+	streamKey  string
+}
+
+// IngressHandler RPC interface
+func (r rpcHandlerContext) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
+	_, span := tracer.Start(ctx, "whipHandler.UpdateIngress")
+	defer span.End()
+
+	r.service.whipSrv.CloseHandler(r.resourceID)
+
+	return h.params.CopyInfo().State, nil
+}
+
+func (r rpcHandlerContext)) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
+	_, span := tracer.Start(ctx, "whipHandler.DeleteIngress")
+	defer span.End()
+
+	r.service.whipSrv.CloseHandler(r.resourceID)
+
+	return h.params.CopyInfo().State, nil
+}
+
+func (r rpcHandlerContext) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {
+	_, span := tracer.Start(ctx, "whipHandler.DeleteWHIPResource")
+	defer span.End()
+
+	// only test for stream key correctness if it is part of the request for backward compatibility
+	if req.StreamKey != "" && r.StreamKey != req.StreamKey {
+		h.logger.Infow("received delete request with wrong stream key", "streamKey", req.StreamKey)
+	}
+
+	h.Close()
+
+	return &google_protobuf2.Empty{}, nil
+}
 func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) error {
 	if err := server.RegisterUpdateIngressTopic(info.IngressId); err != nil {
 		return err

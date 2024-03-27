@@ -16,7 +16,6 @@ package whip
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"net"
 	"sync"
@@ -25,7 +24,6 @@ import (
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/stats"
-	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/server-sdk-go/v2/pkg/jitter"
 	"github.com/livekit/server-sdk-go/v2/pkg/synchronizer"
@@ -44,7 +42,6 @@ type RelayWhipTrackHandler struct {
 	logger       logger.Logger
 	remoteTrack  *webrtc.TrackRemote
 	depacketizer rtp.Depacketizer
-	quality      livekit.VideoQuality
 	receiver     *webrtc.RTPReceiver
 	sync         *synchronizer.TrackSynchronizer
 	writePLI     func(ssrc webrtc.SSRC)
@@ -65,7 +62,6 @@ type RelayWhipTrackHandler struct {
 func NewRelayWhipTrackHandler(
 	logger logger.Logger,
 	track *webrtc.TrackRemote,
-	quality livekit.VideoQuality,
 	sync *synchronizer.TrackSynchronizer,
 	receiver *webrtc.RTPReceiver,
 	writePLI func(ssrc webrtc.SSRC),
@@ -84,7 +80,6 @@ func NewRelayWhipTrackHandler(
 	return &RelayWhipTrackHandler{
 		logger:       logger,
 		remoteTrack:  track,
-		quality:      quality,
 		receiver:     receiver,
 		relaySink:    relaySink,
 		sync:         sync,
@@ -112,7 +107,7 @@ func (t *RelayWhipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaS
 	case webrtc.RTPCodecTypeAudio:
 		path = stats.InputAudio
 	case webrtc.RTPCodecTypeVideo:
-		path = fmt.Sprintf("%s.%s", stats.InputVideo, t.quality)
+		path = stats.InputVideo
 	default:
 		path = "input.unknown"
 	}

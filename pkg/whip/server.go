@@ -45,6 +45,15 @@ const (
 
 type HealthHandlers map[string]http.HandlerFunc
 
+type whipHandler interface {
+	AssociateRelay(kind types.StreamKind, token string, w io.WriteCloser) error
+	DissociateRelay(kind types.StreamKind)
+	Init(ctx context.Context, p *params.Params, sdpOffer string) (string, error)
+	Start(ctx context.Context) (map[types.StreamKind]string, error)
+	WaitForSessionEnd(ctx context.Context) error
+	Close()
+}
+
 type WHIPServer struct {
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -55,13 +64,13 @@ type WHIPServer struct {
 	rpcClient    rpc.IngressHandlerClient
 
 	handlersLock sync.Mutex
-	handlers     map[string]*whipHandler
+	handlers     map[string]whipHandler
 }
 
 func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
 	return &WHIPServer{
 		rpcClient: rpcClient,
-		handlers:  make(map[string]*whipHandler),
+		handlers:  make(map[string]whipHandler),
 	}
 }
 
@@ -276,11 +285,17 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
 
-	h := NewWHIPHandler(s.webRTCConfig)
-
-	p, ready, ended, err := s.onPublish(streamKey, resourceId, h)
+	p, ready, ended, err := s.onPublish(streamKey, resourceId)
 	if err != nil {
 		return "", "", err
+	}
+
+	var h whipHandler
+
+	if p.BypassTranscoding {
+		h = NewSDKWHIPHandler()
+	} else {
+		h = NewRelayWhipHandler(s.webRTCConfig)
 	}
 
 	sdpResponse, err := h.Init(ctx, p, sdpOffer)
