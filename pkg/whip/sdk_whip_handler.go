@@ -160,6 +160,59 @@ func (h *sdkWhipHandler) WaitForSessionEnd(ctx context.Context) error {
 	return nil
 }
 
+func (h *sdkWhipHandler) addTrackVideoTrack(cid string, source livekit.TrackSource, width uint32, height uint32) error {
+	req := &livekit.AddTrackRequest{
+		Cid:    cid,
+		Source: source,
+		Type:   livekit.TrackType_VIDEO,
+		Width:  width,
+		Height, height,
+	}
+
+	req.Layers = []*livekit.VideoLayer{
+		{
+			Quality: livekit.VideoQuality_HIGH,
+			Width:   width,
+			Height:  height,
+		},
+	}
+
+	return h.addTrack(req)
+}
+
+func (h *sdkWhipHandler) addTrackVideoTrack(cid string, source livekit.TrackSource, disableDTX bool, stereo bool) error {
+	req := &livekit.AddTrackRequest{
+		Cid:        cid,
+		Source:     source,
+		Type:       livekit.TrackType_AUDIO,
+		DisableDtx: disableDTX,
+		Stereo:     stereo,
+	}
+
+	return h.addTrack(req)
+}
+
+func (h *sdkWhipHandler) addTrack(req *livekit.AddTrackRequest) error {
+	err := h.client.SendRequest(&livekit.SignalRequest{
+		Message: &livekit.SignalRequest_AddTrack{
+			AddTrack: req,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	pubChan := p.engine.TrackPublishedChan()
+	var pubRes *livekit.TrackPublishedResponse
+
+	select {
+	case pubRes = <-pubChan:
+		break
+	case <-time.After(trackPublishTimeout):
+		return nil, ErrTrackPublishTimeout
+	}
+}
+
 func (h *sdkWhipHandler) AssociateRelay(kind types.StreamKind, token string, w io.WriteCloser) error {
 	return nil
 }
