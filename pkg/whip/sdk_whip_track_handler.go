@@ -60,6 +60,7 @@ func NewSDKWhipTrackHandler(
 	logger logger.Logger,
 	track *webrtc.TrackRemote,
 	quality livekit.VideoQuality,
+	receiver *webrtc.RTPReceiver,
 	writePLI func(ssrc webrtc.SSRC),
 	sendRTCPUpStream func(pkts []rtcp.Packet),
 ) (*SDKWhipTrackHandler, error) {
@@ -131,6 +132,8 @@ func (t *SDKWhipTrackHandler) Close() {
 }
 
 func (t *SDKWhipTrackHandler) HandlePackets(pkts []rtcp.Packet) error {
+	// LK SDK -> WHIP RTCP handling
+
 	if t.sendRTCPUpStream != nil {
 		t.translateRTCPPakets(pkts)
 		t.sendRTCPUpStream(pkts)
@@ -211,9 +214,7 @@ func (t *SDKWhipTrackHandler) startRTCPReceiver() {
 					return
 				}
 
-				for _, pkt := range pkts {
-					t.onUpStreamRTCP(pkt)
-				}
+				t.onUpStreamRTCP(pkts)
 			}
 		}
 	}()
@@ -310,4 +311,28 @@ func (t *SDKWhipTrackHandler) pushRTP(pkt *rtp.Packet, trackMediaSink *SDKMediaS
 	}
 
 	return nil
+}
+
+func (t *SDKWhipTrackHandler) onUpStreamRTCP(pkts []rtcp.Packet) {
+	// WHIP -> LK SDK RTCP handling
+
+	t.stateLock.Lock()
+	trackMediaSink := t.trackMediaSink
+	t.stateLock.Unlock()
+
+	if trackMediaSink == nil {
+		return
+	}
+
+	pkts, err := t.translateRTCPPakets()
+	if err != nil {
+		t.logger.Infow("failed translating upstream WHIP rtcp packets", "error", err)
+		return
+	}
+
+	err = trackMediaSink.PushRTCP(pkts)
+	if err != nil {
+		t.logger.Infow("failed translating upstream WHIP rtcp packets", "error", err)
+		return
+	}
 }
