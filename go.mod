@@ -1,14 +1,14 @@
 module github.com/livekit/ingress
 
-go 1.21
+go 1.22
 
-toolchain go1.21.4
+toolchain go1.22.1
 
 require (
 	github.com/Eyevinn/mp4ff v0.42.0
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
 	github.com/frostbyte73/core v0.0.10
-	github.com/go-gst/go-glib v0.0.0-20231207075824-6d6aaf082c65
+	github.com/go-gst/go-glib v1.0.0
 	github.com/go-gst/go-gst v0.0.0-20240207190302-04ec17f96d71
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
@@ -21,6 +21,7 @@ require (
 	github.com/pion/interceptor v0.1.25
 	github.com/pion/rtcp v1.2.14
 	github.com/pion/rtp v1.8.3
+	github.com/pion/rtp/v2 v2.0.0
 	github.com/pion/sdp/v3 v3.0.6
 	github.com/pion/webrtc/v3 v3.2.28
 	github.com/prometheus/client_golang v1.19.0
