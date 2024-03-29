@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pion/interceptor"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
 
@@ -136,7 +137,9 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 		lksdk.WithAutoSubscribe(false),
 	}
 
-	if !p.BypassTranscoding {
+	if p.BypassTranscoding {
+		opts = append(opts, lksdk.WithInterceptors([]interceptor.Factory{}))
+	} else {
 		var br uint32
 		if p.VideoEncodingOptions != nil {
 			for _, l := range p.VideoEncodingOptions.Layers {
