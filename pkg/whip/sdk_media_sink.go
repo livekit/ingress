@@ -36,6 +36,7 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/psrpc"
@@ -188,7 +189,7 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 	for i, q := range layers {
 		t = sp.tracks[q.Quality]
 		t.localTrack = tracks[i]
-		rtcpHandlers[i].SetKeyFrameEmitter(t)
+		rtcpHandlers[i].SetPacketSink(t)
 	}
 
 	for _, l := range layers {
@@ -255,20 +256,26 @@ func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error 
 }
 
 func (t *SDKMediaSinkTrack) PushRTCP(pkts []rtcp.Packet) error {
-	t.translateRTCPPackets(pkts)
-
 	if !t.bound.Load() {
 		return nil
 	}
 
-	err := t.sink.sdkOutput.WriteRTCP(pkts)
-	// Write can fail if the pc is in a disconnected/failing and the track hasn't been unbound yet. The "bound" check is also racy.
-	// Do not fail if RTCP writing failed
-	if err != nil {
-		t.sink.logger.Infow("RTCP write failed", "error", err)
+	ssrc := t.localTrack.SSRC()
+	if ssrc == 0 {
+		return nil
 	}
 
-	retutn nil
+	for _, pkt := range pkts {
+		utils.ReplaceRTCPPacketSSRC(pkt, uint32(ssrc))
+	}
+
+	err := t.sink.sdkOutput.WriteRTCP(pkts)
+	// Write can fail if the pc is in a disconnected/failing and the track hasn't been unbound yet. The "bound" check is also racy.
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (t *SDKMediaSinkTrack) Close() error {

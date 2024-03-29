@@ -25,6 +25,7 @@ import (
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/server-sdk-go/v2/pkg/synchronizer"
@@ -131,11 +132,14 @@ func (t *SDKWhipTrackHandler) Close() {
 	t.fuse.Break()
 }
 
-func (t *SDKWhipTrackHandler) HandlePackets(pkts []rtcp.Packet) error {
+func (t *SDKWhipTrackHandler) HandleRTCPPackets(pkts []rtcp.Packet) error {
 	// LK SDK -> WHIP RTCP handling
 
 	if t.sendRTCPUpStream != nil {
-		t.translateRTCPPakets(pkts)
+		for _, pkt := range pkts {
+			utils.ReplaceRTCPPacketSSRC(pkt, uint32(t.remoteTrack.SSRC()))
+		}
+
 		t.sendRTCPUpStream(pkts)
 	}
 }
@@ -324,15 +328,9 @@ func (t *SDKWhipTrackHandler) onUpStreamRTCP(pkts []rtcp.Packet) {
 		return
 	}
 
-	pkts, err := t.translateRTCPPakets()
-	if err != nil {
-		t.logger.Infow("failed translating upstream WHIP rtcp packets", "error", err)
-		return
-	}
-
 	err = trackMediaSink.PushRTCP(pkts)
 	if err != nil {
-		t.logger.Infow("failed translating upstream WHIP rtcp packets", "error", err)
+		t.logger.Infow("failed writing upstream WHIP RTCP packets", "error", err)
 		return
 	}
 }

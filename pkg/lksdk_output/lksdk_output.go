@@ -44,7 +44,7 @@ type KeyFrameEmitter interface {
 }
 
 type PacketSink interface {
-	HandlePackets(pkt []rtcp.Packet) error
+	HandleRTCPPackets(pkt []rtcp.Packet) error
 }
 
 type RTCPHandler struct {
@@ -56,7 +56,7 @@ func (h *RTCPHandler) HandleRTCP(pkt []rtcp.Packet) error {
 	p := h.p.Load()
 
 	if p != nil {
-		return (*p).HandlePackets(pkt)
+		return (*p).HandleRTCPPackets(pkt)
 	}
 
 	return nil

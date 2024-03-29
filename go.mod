@@ -1,5 +1,7 @@
 module github.com/livekit/ingress
 
+replace github.com/livekit/server-sdk-go/v2 => ../server-sdk-go
+
 go 1.21
 
 toolchain go1.21.4
