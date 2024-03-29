@@ -44,19 +44,19 @@ type KeyFrameEmitter interface {
 }
 
 type PacketSink interface {
-	HandleRTCPPackets(pkt []rtcp.Packet) error
+	HandleRTCPPacket(pkt rtcp.Packet) error
 }
 
 type RTCPHandler struct {
-	p atomic.Pointer[HandlePacket]
+	p atomic.Pointer[PacketSink]
 	k atomic.Pointer[KeyFrameEmitter]
 }
 
-func (h *RTCPHandler) HandleRTCP(pkt []rtcp.Packet) error {
+func (h *RTCPHandler) HandleRTCP(pkt rtcp.Packet) error {
 	p := h.p.Load()
 
 	if p != nil {
-		return (*p).HandleRTCPPackets(pkt)
+		return (*p).HandleRTCPPacket(pkt)
 	}
 
 	return nil

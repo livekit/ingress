@@ -15,7 +15,6 @@
 package whip
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"net"
@@ -28,24 +27,19 @@ import (
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/server-sdk-go/v2/pkg/synchronizer"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v3"
-	"github.com/pion/webrtc/v3/pkg/media"
 )
 
 type SDKWhipTrackHandler struct {
 	logger           logger.Logger
 	remoteTrack      *webrtc.TrackRemote
-	depacketizer     rtp.Depacketizer
 	quality          livekit.VideoQuality
 	receiver         *webrtc.RTPReceiver
-	sync             *synchronizer.TrackSynchronizer
 	writePLI         func(ssrc webrtc.SSRC)
-	sendRTCPUpStream func(pkts []rtcp.Packet)
+	sendRTCPUpStream func(pkt rtcp.Packet)
 
-	firstPacket sync.Once
 	startRTCP   sync.Once
 	fuse        core.Fuse
 	lastSn      uint16
@@ -63,23 +57,16 @@ func NewSDKWhipTrackHandler(
 	quality livekit.VideoQuality,
 	receiver *webrtc.RTPReceiver,
 	writePLI func(ssrc webrtc.SSRC),
-	sendRTCPUpStream func(pkts []rtcp.Packet),
+	sendRTCPUpStream func(pkt rtcp.Packet),
 ) (*SDKWhipTrackHandler, error) {
-	depacketizer, err := createDepacketizer(track)
-	if err != nil {
-		return nil, err
-	}
 
 	return &SDKWhipTrackHandler{
 		logger:           logger,
 		remoteTrack:      track,
 		quality:          quality,
 		receiver:         receiver,
-		sync:             sync,
-		jb:               jb,
 		writePLI:         writePLI,
 		sendRTCPUpStream: sendRTCPUpStream,
-		depacketizer:     depacketizer,
 	}, nil
 }
 
@@ -123,7 +110,7 @@ func (t *SDKWhipTrackHandler) SetMediaSink(s *SDKMediaSinkTrack) {
 		t.trackMediaSink.SetStatsGatherer(t.stats)
 	}
 
-	t.trackMediaSink.SetRTCPPacketSink(t)
+	t.trackMediaSink.SetRTCPPacketSink(t.handleRTCPPacket)
 
 	t.stateLock.Unlock()
 }
@@ -132,15 +119,13 @@ func (t *SDKWhipTrackHandler) Close() {
 	t.fuse.Break()
 }
 
-func (t *SDKWhipTrackHandler) HandleRTCPPackets(pkts []rtcp.Packet) error {
+func (t *SDKWhipTrackHandler) handleRTCPPacket(pkt rtcp.Packet) {
 	// LK SDK -> WHIP RTCP handling
 
 	if t.sendRTCPUpStream != nil {
-		for _, pkt := range pkts {
-			utils.ReplaceRTCPPacketSSRC(pkt, uint32(t.remoteTrack.SSRC()))
-		}
+		utils.ReplaceRTCPPacketSSRC(pkt, uint32(t.remoteTrack.SSRC()))
 
-		t.sendRTCPUpStream(pkts)
+		t.sendRTCPUpStream(pkt)
 	}
 }
 
@@ -237,81 +222,30 @@ func (t *SDKWhipTrackHandler) processRTPPacket(trackMediaSink *SDKMediaSinkTrack
 }
 
 func (t *SDKWhipTrackHandler) pushRTP(pkt *rtp.Packet, trackMediaSink *SDKMediaSinkTrack) error {
-	t.firstPacket.Do(func() {
-		t.logger.Debugw("first packet received")
-		t.sync.Initialize(pkt)
-	})
+	t.stateLock.Lock()
+	stats := t.trackStats
+	t.stateLock.Unlock()
 
-	t.jb.Push(pkt)
-
-	samples := t.jb.PopSamples(false)
-	for _, pkts := range samples {
-		if len(pkts) == 0 {
-			continue
+	if t.lastSnValid && t.lastSn+1 != pkt.SequenceNumber {
+		gap := pkt.SequenceNumber - t.lastSn
+		if t.lastSn-pkt.SequenceNumber < gap {
+			gap = t.lastSn - pkt.SequenceNumber
 		}
-
-		var ts time.Duration
-		var err error
-		var buffer bytes.Buffer // TODO reuse the same buffer across calls, after resetting it if buffer allocation is a performane bottleneck
-		for _, pkt := range pkts {
-			ts, err = t.sync.GetPTS(pkt)
-			switch err {
-			case nil, synchronizer.ErrBackwardsPTS:
-				err = nil
-			default:
-				return err
-			}
-
-			t.stateLock.Lock()
-			stats := t.trackStats
-			t.stateLock.Unlock()
-
-			if t.lastSnValid && t.lastSn+1 != pkt.SequenceNumber {
-				gap := pkt.SequenceNumber - t.lastSn
-				if t.lastSn-pkt.SequenceNumber < gap {
-					gap = t.lastSn - pkt.SequenceNumber
-				}
-				if stats != nil {
-					stats.PacketLost(int64(gap - 1))
-				}
-			}
-
-			t.lastSnValid = true
-			t.lastSn = pkt.SequenceNumber
-
-			if len(pkt.Payload) <= 2 {
-				// Padding
-				continue
-			}
-
-			buf, err := t.depacketizer.Unmarshal(pkt.Payload)
-			if err != nil {
-				return err
-			}
-
-			if stats != nil {
-				stats.MediaReceived(int64(len(buf)))
-			}
-
-			_, err = buffer.Write(buf)
-			if err != nil {
-				return err
-			}
+		if stats != nil {
+			stats.PacketLost(int64(gap - 1))
 		}
+	}
 
-		// This returns the average duration, not the actual duration of the specific sample
-		// SampleBuilder is using the duration of the previous sample, which is inaccurate as well
-		sampleDuration := t.sync.GetFrameDuration()
+	t.lastSnValid = true
+	t.lastSn = pkt.SequenceNumber
 
-		s := &media.Sample{
-			Data:     buffer.Bytes(),
-			Duration: sampleDuration,
-		}
+	if stats != nil {
+		stats.MediaReceived(int64(len(pkt.Payload)))
+	}
 
-		err = trackMediaSink.PushSample(s, ts)
-		if err != nil {
-			return err
-		}
+	err := trackMediaSink.PushRTP(pkt)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -328,7 +262,7 @@ func (t *SDKWhipTrackHandler) onUpStreamRTCP(pkts []rtcp.Packet) {
 		return
 	}
 
-	err = trackMediaSink.PushRTCP(pkts)
+	err := trackMediaSink.PushRTCP(pkts)
 	if err != nil {
 		t.logger.Infow("failed writing upstream WHIP RTCP packets", "error", err)
 		return

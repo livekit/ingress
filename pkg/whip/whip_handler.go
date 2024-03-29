@@ -410,7 +410,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 	var th WhipTrackHandler
 	var err error
 	if h.params.BypassTranscoding {
-		th, err = NewSDKWhipTrackHandler(logger, track, trackQuality, receiver, h.writePLI, writeRTCPUpstream)
+		th, err = NewSDKWhipTrackHandler(logger, track, trackQuality, receiver, h.writePLI, h.writeRTCPUpstream)
 		if err != nil {
 			logger.Warnw("failed creating SDK whip track handler", err)
 			return
@@ -468,6 +468,13 @@ func (h *whipHandler) writePLI(ssrc webrtc.SSRC) {
 	err := h.pc.WriteRTCP(pli)
 	if err != nil {
 		h.logger.Warnw("failed writing PLI", err, "ssrc", ssrc)
+	}
+}
+
+func (h *whipHandler) writeRTCPUpstream(pkt rtcp.Packet) {
+	err := h.pc.WriteRTCP([]rtcp.Packet{pkt})
+	if err != nil {
+		h.logger.Warnw("failed writing RTCP packet upstream", err)
 	}
 }
 
