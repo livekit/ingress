@@ -27,6 +27,7 @@ import (
 	"github.com/frostbyte73/core"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
+	"github.com/pion/rtp/codecs"
 	"github.com/pion/webrtc/v3"
 	"golang.org/x/image/vp8"
 
@@ -351,7 +352,14 @@ func getVideoParams(mimeType string, pkt *rtp.Packet) (uint, uint, error) {
 }
 
 func getH264VideoParams(pkt *rtp.Packet) (uint, uint, error) {
-	spss := avc.ExtractNalusOfTypeFromByteStream(avc.NALU_SPS, pkt.Payload, true)
+	depacketizer := &codecs.H264Packet{}
+
+	b, err := depacketizer.Unmarshal(pkt.Payload)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	spss := avc.ExtractNalusOfTypeFromByteStream(avc.NALU_SPS, b, true)
 	if len(spss) == 0 {
 		return 0, 0, ErrParamsUnavailable
 	}
@@ -365,8 +373,12 @@ func getH264VideoParams(pkt *rtp.Packet) (uint, uint, error) {
 }
 
 func getVP8VideoParams(pkt *rtp.Packet) (uint, uint, error) {
+	depacketizer := &codecs.VP8Packet{}
+
+	b, err := depacketizer.Unmarshal(pkt.Payload)
+
 	d := vp8.NewDecoder()
-	b := bytes.NewReader(pkt.Payload)
+	b := bytes.NewReader(b)
 
 	d.Init(b, b.Len())
 	fh, err := d.DecodeFrameHeader()
