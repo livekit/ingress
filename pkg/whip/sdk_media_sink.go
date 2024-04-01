@@ -378,9 +378,9 @@ func getVP8VideoParams(pkt *rtp.Packet) (uint, uint, error) {
 	b, err := depacketizer.Unmarshal(pkt.Payload)
 
 	d := vp8.NewDecoder()
-	b := bytes.NewReader(b)
+	r := bytes.NewReader(b)
 
-	d.Init(b, b.Len())
+	d.Init(r, r.Len())
 	fh, err := d.DecodeFrameHeader()
 	if err != nil {
 		return 0, 0, err

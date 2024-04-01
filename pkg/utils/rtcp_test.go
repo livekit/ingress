@@ -165,6 +165,30 @@ func TestReplaceRTCPPacketSSRC(t *testing.T) {
 		require.Equal(t, uint32(1), p.SenderSSRC)
 		checkDestinationSSRC(t, r)
 	})
+
+	t.Run("ExtendedReport", func(t *testing.T) {
+		p := &rtcp.ExtendedReport{
+			Reports: []rtcp.ReportBlock{
+				&rtcp.LossRLEReportBlock{},
+				&rtcp.DuplicateRLEReportBlock{},
+				&rtcp.DLRRReportBlock{
+					Reports: []rtcp.DLRRReport{
+						rtcp.DLRRReport{},
+					},
+				},
+				&rtcp.StatisticsSummaryReportBlock{},
+				&rtcp.VoIPMetricsReportBlock{},
+			},
+		}
+
+		r, err := ReplaceRTCPPacketSSRC(p, 1)
+
+		require.NoError(t, err)
+		require.Equal(t, uint32(1), p.SenderSSRC)
+
+		require.Equal(t, 6, len(p.DestinationSSRC()))
+		checkDestinationSSRC(t, r)
+	})
 }
 
 func checkDestinationSSRC(t *testing.T, p rtcp.Packet) {

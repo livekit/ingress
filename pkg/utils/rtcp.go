@@ -22,6 +22,9 @@ func ReplaceRTCPPacketSSRC(pkt rtcp.Packet, newSSRC uint32) (rtcp.Packet, error)
 		cpkt.SSRC = newSSRC
 	case *rtcp.ReceiverReport:
 		cpkt.SSRC = newSSRC
+		for i, _ := range cpkt.Reports {
+			cpkt.Reports[i].SSRC = newSSRC
+		}
 	case *rtcp.SourceDescription:
 		for i, _ := range cpkt.Chunks {
 			cpkt.Chunks[i].Source = newSSRC
@@ -52,8 +55,36 @@ func ReplaceRTCPPacketSSRC(pkt rtcp.Packet, newSSRC uint32) (rtcp.Packet, error)
 	case *rtcp.FullIntraRequest:
 		cpkt.SenderSSRC = newSSRC
 		cpkt.MediaSSRC = newSSRC
-		// TODO ExtendedReport
+	case *rtcp.ExtendedReport:
+		cpkt.SenderSSRC = newSSRC
+		err := handleExtendedReports(cpkt.Reports, newSSRC)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return pkt, nil
+}
+
+func handleExtendedReports(reports []rtcp.ReportBlock, newSSRC uint32) error {
+	for _, report := range reports {
+		switch r := report.(type) {
+		case *rtcp.LossRLEReportBlock:
+			r.SSRC = newSSRC
+		case *rtcp.DuplicateRLEReportBlock:
+			r.SSRC = newSSRC
+		case *rtcp.PacketReceiptTimesReportBlock:
+			r.SSRC = newSSRC
+		case *rtcp.DLRRReportBlock:
+			for i, _ := range r.Reports {
+				r.Reports[i].SSRC = newSSRC
+			}
+		case *rtcp.StatisticsSummaryReportBlock:
+			r.SSRC = newSSRC
+		case *rtcp.VoIPMetricsReportBlock:
+			r.SSRC = newSSRC
+		}
+	}
+
+	return nil
 }
