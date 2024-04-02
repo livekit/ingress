@@ -138,7 +138,7 @@ func (sp *SDKMediaSink) ensureAudioTracksInitialized(pkt *rtp.Packet, t *SDKMedi
 
 func (sp *SDKMediaSink) ensureVideoTracksInitialized(pkt *rtp.Packet, t *SDKMediaSinkTrack) (bool, error) {
 	var err error
-	t.width, t.height, err = getVideoParams(sp.codecParameters.MimeType, pkt)
+	width, height, err := getVideoParams(sp.codecParameters.MimeType, pkt)
 	switch err {
 	case nil:
 		// continue
@@ -147,6 +147,9 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(pkt *rtp.Packet, t *SDKMedi
 	default:
 		return false, err
 	}
+
+	t.width = width
+	t.height = height
 
 	layers := []*livekit.VideoLayer{}
 	sbArray := []lksdk_output.SampleProvider{}
@@ -344,7 +347,13 @@ func getH264VideoParams(pkt *rtp.Packet) (uint, uint, error) {
 		return 0, 0, err
 	}
 
-	spss := avc.ExtractNalusOfTypeFromByteStream(avc.NALU_SPS, b, true)
+	var spss [][]byte
+	if isAnnexB(b) {
+		spss = avc.ExtractNalusOfTypeFromByteStream(avc.NALU_SPS, b, true)
+	} else {
+		spss, _ = avc.GetParameterSets(b)
+	}
+
 	if len(spss) == 0 {
 		return 0, 0, ErrParamsUnavailable
 	}
@@ -355,6 +364,19 @@ func getH264VideoParams(pkt *rtp.Packet) (uint, uint, error) {
 	}
 
 	return sps.Width, sps.Height, nil
+}
+
+func isAnnexB(b []byte) bool {
+	for i := 0; i < len(b)-3; i++ {
+		if b[i] != 0 {
+			return false
+		}
+		if b[i] == 0 && b[i+1] == 0 && b[i+2] == 1 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func getVP8VideoParams(pkt *rtp.Packet) (uint, uint, error) {

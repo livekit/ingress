@@ -74,7 +74,7 @@ type whipHandler struct {
 
 	trackLock       sync.Mutex
 	simulcastLayers []string
-	tracks          map[string]*webrtc.TrackRemote
+	tracks          []*webrtc.TrackRemote
 	trackHandlers   map[WhipTrackDescription]WhipTrackHandler
 	trackAddedChan  chan *webrtc.TrackRemote
 
@@ -89,7 +89,6 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 	return &whipHandler{
 		rtcConfig:         &rtcConfCopy,
 		sync:              synchronizer.NewSynchronizer(nil),
-		tracks:            make(map[string]*webrtc.TrackRemote),
 		trackHandlers:     make(map[WhipTrackDescription]WhipTrackHandler),
 		trackSDKMediaSink: make(map[types.StreamKind]*SDKMediaSink),
 	}
@@ -405,7 +404,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
-	h.tracks[track.ID()] = track
+	h.tracks = append(h.tracks, track)
 
 	trackQuality := h.getTrackQuality(track)
 
