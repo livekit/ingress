@@ -21,7 +21,6 @@ import (
 	"io"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/Eyevinn/mp4ff/avc"
 	"github.com/frostbyte73/core"
@@ -53,7 +52,6 @@ type SDKMediaSinkTrack struct {
 
 	trackStatsGatherer *stats.MediaTrackStatGatherer
 	localTrack         *lksdk.LocalTrack
-	bound              atomic.Bool
 
 	stateLock        sync.Mutex
 	sendRTCPUpStream func(pkt rtcp.Packet)
@@ -273,11 +271,15 @@ func (t *SDKMediaSinkTrack) HandleRTCPPacket(pkt rtcp.Packet) error {
 func (t *SDKMediaSinkTrack) PushRTCP(pkts []rtcp.Packet) error {
 	// WHIP -> LK SDK RTCP handling
 
-	if !t.bound.Load() {
+	t.sink.tracksLock.Lock()
+	localTrack := t.localTrack
+	t.sink.tracksLock.Unlock()
+
+	if localTrack == nil {
 		return nil
 	}
 
-	ssrc := t.localTrack.SSRC()
+	ssrc := localTrack.SSRC()
 	if ssrc == 0 {
 		return nil
 	}
@@ -287,7 +289,6 @@ func (t *SDKMediaSinkTrack) PushRTCP(pkts []rtcp.Packet) error {
 	}
 
 	err := t.sink.sdkOutput.WriteRTCP(pkts)
-	// Write can fail if the pc is in a disconnected/failing and the track hasn't been unbound yet. The "bound" check is also racy.
 	if err != nil {
 		return err
 	}
@@ -297,22 +298,6 @@ func (t *SDKMediaSinkTrack) PushRTCP(pkts []rtcp.Packet) error {
 
 func (t *SDKMediaSinkTrack) Close() error {
 	return t.sink.Close()
-}
-
-func (t *SDKMediaSinkTrack) OnBind() error {
-	t.sink.logger.Infow("media sink bound")
-
-	t.bound.Store(true)
-
-	return nil
-}
-
-func (t *SDKMediaSinkTrack) OnUnbind() error {
-	t.sink.logger.Infow("media sink unbound")
-
-	t.bound.Store(false)
-
-	return nil
 }
 
 func (t *SDKMediaSinkTrack) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) {

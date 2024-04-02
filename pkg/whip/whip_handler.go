@@ -130,9 +130,11 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 	// for each PeerConnection.
 	i := &interceptor.Registry{}
 
-	// Use the default set of Interceptors
-	if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
-		return "", err
+	if !p.BypassTranscoding {
+		// Use the default set of Interceptors
+		if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
+			return "", err
+		}
 	}
 
 	// Create the API object with the MediaEngine
