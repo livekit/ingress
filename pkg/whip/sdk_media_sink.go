@@ -21,12 +21,13 @@ import (
 	"io"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Eyevinn/mp4ff/avc"
 	"github.com/frostbyte73/core"
+	"github.com/pion/rtcp"
+	"github.com/pion/rtp"
+	"github.com/pion/rtp/codecs"
 	"github.com/pion/webrtc/v3"
-	"github.com/pion/webrtc/v3/pkg/media"
 	"golang.org/x/image/vp8"
 
 	"github.com/livekit/ingress/pkg/errors"
@@ -46,15 +47,14 @@ var (
 )
 
 type SDKMediaSinkTrack struct {
-	stateLock sync.Mutex
-	writePLI  func()
-
 	quality       livekit.VideoQuality
 	width, height uint
 
 	trackStatsGatherer *stats.MediaTrackStatGatherer
-	outputSync         *utils.TrackOutputSynchronizer
 	localTrack         *lksdk.LocalTrack
+
+	stateLock        sync.Mutex
+	sendRTCPUpStream func(pkt rtcp.Packet)
 
 	sink *SDKMediaSink
 }
@@ -74,18 +74,12 @@ type SDKMediaSink struct {
 	fuse core.Fuse
 }
 
-type sample struct {
-	s  *media.Sample
-	ts time.Duration
-}
-
 func NewSDKMediaSink(
 	l logger.Logger,
 	p *params.Params,
 	sdkOutput *lksdk_output.LKSDKOutput,
 	codecParameters webrtc.RTPCodecParameters,
 	streamKind types.StreamKind,
-	outputSync *utils.OutputSynchronizer,
 	layers []livekit.VideoQuality,
 ) *SDKMediaSink {
 	s := &SDKMediaSink{
@@ -98,7 +92,7 @@ func NewSDKMediaSink(
 	}
 
 	for _, q := range layers {
-		s.addTrack(q, outputSync.AddTrack())
+		s.addTrack(q)
 	}
 
 	return s
@@ -117,15 +111,14 @@ func (sp *SDKMediaSink) Close() error {
 	return nil
 }
 
-func (sp *SDKMediaSink) addTrack(quality livekit.VideoQuality, outputSync *utils.TrackOutputSynchronizer) {
+func (sp *SDKMediaSink) addTrack(quality livekit.VideoQuality) {
 	sp.tracks[quality] = &SDKMediaSinkTrack{
-		sink:       sp,
-		quality:    quality,
-		outputSync: outputSync,
+		sink:    sp,
+		quality: quality,
 	}
 }
 
-func (sp *SDKMediaSink) ensureAudioTracksInitialized(s *media.Sample, t *SDKMediaSinkTrack) (bool, error) {
+func (sp *SDKMediaSink) ensureAudioTracksInitialized(pkt *rtp.Packet, t *SDKMediaSinkTrack) (bool, error) {
 	stereo := strings.Contains(sp.codecParameters.SDPFmtpLine, "sprop-stereo=1")
 	audioState := getAudioState(sp.codecParameters.MimeType, stereo, sp.codecParameters.ClockRate)
 	sp.params.SetInputAudioState(context.Background(), audioState, true)
@@ -143,9 +136,9 @@ func (sp *SDKMediaSink) ensureAudioTracksInitialized(s *media.Sample, t *SDKMedi
 	return sp.sinkInitialized, nil
 }
 
-func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMediaSinkTrack) (bool, error) {
+func (sp *SDKMediaSink) ensureVideoTracksInitialized(pkt *rtp.Packet, t *SDKMediaSinkTrack) (bool, error) {
 	var err error
-	t.width, t.height, err = getVideoParams(sp.codecParameters.MimeType, s)
+	width, height, err := getVideoParams(sp.codecParameters.MimeType, pkt)
 	switch err {
 	case nil:
 		// continue
@@ -154,6 +147,9 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 	default:
 		return false, err
 	}
+
+	t.width = width
+	t.height = height
 
 	layers := []*livekit.VideoLayer{}
 	sbArray := []lksdk_output.SampleProvider{}
@@ -187,7 +183,7 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 		sp.params.SetInputVideoState(context.Background(), videoState, true)
 	}
 
-	tracks, pliHandlers, err := sp.sdkOutput.AddVideoTrack(layers, sp.codecParameters.MimeType)
+	tracks, rtcpHandlers, err := sp.sdkOutput.AddVideoTrack(layers, sp.codecParameters.MimeType)
 	if err != nil {
 		return false, err
 	}
@@ -197,7 +193,7 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 	for i, q := range layers {
 		t = sp.tracks[q.Quality]
 		t.localTrack = tracks[i]
-		pliHandlers[i].SetKeyFrameEmitter(t)
+		rtcpHandlers[i].SetPacketSink(t)
 	}
 
 	for _, l := range layers {
@@ -209,26 +205,26 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(s *media.Sample, t *SDKMedi
 
 }
 
-func (sp *SDKMediaSink) ensureTracksInitialized(s *media.Sample, t *SDKMediaSinkTrack) (bool, error) {
+func (sp *SDKMediaSink) ensureTracksInitialized(pkt *rtp.Packet, t *SDKMediaSinkTrack) (bool, error) {
 	if sp.sinkInitialized {
 		return sp.sinkInitialized, nil
 	}
 
 	if sp.streamKind == types.Audio {
-		return sp.ensureAudioTracksInitialized(s, t)
+		return sp.ensureAudioTracksInitialized(pkt, t)
 	}
 
-	return sp.ensureVideoTracksInitialized(s, t)
+	return sp.ensureVideoTracksInitialized(pkt, t)
 }
 
-func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error {
+func (t *SDKMediaSinkTrack) PushRTP(pkt *rtp.Packet) error {
 	if t.sink.fuse.IsBroken() {
 		return io.EOF
 	}
 
 	t.sink.tracksLock.Lock()
 
-	tracksInitialized, err := t.sink.ensureTracksInitialized(s, t)
+	tracksInitialized, err := t.sink.ensureTracksInitialized(pkt, t)
 	if err != nil {
 		t.sink.tracksLock.Unlock()
 		return err
@@ -249,47 +245,62 @@ func (t *SDKMediaSinkTrack) PushSample(s *media.Sample, ts time.Duration) error 
 		return nil
 	}
 
-	drop, err := t.outputSync.WaitForMediaTime(ts)
-	if err != nil {
-		return err
-	}
-	if drop {
-		t.sink.logger.Debugw("dropping sample", "timestamp", ts)
-
-		if g != nil {
-			g.PacketLost(1)
-		}
-
-		return nil
-	}
-
 	// WriteSample seems to return successfully even if the Peer Connection disconnected.
 	// We need to return success to the caller even if the PC is disconnected to allow for reconnections
-	err = localTrack.WriteSample(*s, nil)
+	err = localTrack.WriteRTP(pkt, nil)
 	if err != nil {
 		return err
 	}
 
 	if g != nil {
-		g.MediaReceived(int64(len(s.Data)))
+		g.MediaReceived(int64(len(pkt.Payload)))
+	}
+
+	return nil
+}
+
+func (t *SDKMediaSinkTrack) HandleRTCPPacket(pkt rtcp.Packet) error {
+	// LK SDK -> WHIP RTCP handling
+	t.stateLock.Lock()
+	defer t.stateLock.Unlock()
+
+	if t.sendRTCPUpStream != nil {
+		t.sendRTCPUpStream(pkt)
+	}
+
+	return nil
+}
+
+func (t *SDKMediaSinkTrack) PushRTCP(pkts []rtcp.Packet) error {
+	// WHIP -> LK SDK RTCP handling
+
+	t.sink.tracksLock.Lock()
+	localTrack := t.localTrack
+	t.sink.tracksLock.Unlock()
+
+	if localTrack == nil {
+		return nil
+	}
+
+	ssrc := localTrack.SSRC()
+	if ssrc == 0 {
+		return nil
+	}
+
+	for _, pkt := range pkts {
+		utils.ReplaceRTCPPacketSSRC(pkt, uint32(ssrc))
+	}
+
+	err := t.sink.sdkOutput.WriteRTCP(pkts)
+	if err != nil {
+		return err
 	}
 
 	return nil
 }
 
 func (t *SDKMediaSinkTrack) Close() error {
-	t.outputSync.Close()
 	return t.sink.Close()
-}
-
-func (t *SDKMediaSinkTrack) OnBind() error {
-	t.sink.logger.Infow("media sink bound")
-	return nil
-}
-
-func (t *SDKMediaSinkTrack) OnUnbind() error {
-	t.sink.logger.Infow("media sink unbound")
-	return nil
 }
 
 func (t *SDKMediaSinkTrack) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) {
@@ -310,38 +321,39 @@ func (t *SDKMediaSinkTrack) SetStatsGatherer(st *stats.LocalMediaStatsGatherer) 
 	t.sink.tracksLock.Unlock()
 }
 
-func (t *SDKMediaSinkTrack) SetWritePLI(writePLI func()) {
+func (t *SDKMediaSinkTrack) SetRTCPPacketSink(handleRTCPPacket func(pkt rtcp.Packet)) {
 	t.stateLock.Lock()
 	defer t.stateLock.Unlock()
 
-	t.writePLI = writePLI
+	t.sendRTCPUpStream = handleRTCPPacket
 }
 
-func (t *SDKMediaSinkTrack) ForceKeyFrame() error {
-	t.stateLock.Lock()
-	writePLI := t.writePLI
-	t.stateLock.Unlock()
-
-	if writePLI != nil {
-		writePLI()
-	}
-
-	return nil
-}
-
-func getVideoParams(mimeType string, s *media.Sample) (uint, uint, error) {
+func getVideoParams(mimeType string, pkt *rtp.Packet) (uint, uint, error) {
 	switch strings.ToLower(mimeType) {
 	case strings.ToLower(webrtc.MimeTypeH264):
-		return getH264VideoParams(s)
+		return getH264VideoParams(pkt)
 	case strings.ToLower(webrtc.MimeTypeVP8):
-		return getVP8VideoParams(s)
+		return getVP8VideoParams(pkt)
 	default:
 		return 0, 0, errors.ErrUnsupportedDecodeMimeType(mimeType)
 	}
 }
 
-func getH264VideoParams(s *media.Sample) (uint, uint, error) {
-	spss := avc.ExtractNalusOfTypeFromByteStream(avc.NALU_SPS, s.Data, true)
+func getH264VideoParams(pkt *rtp.Packet) (uint, uint, error) {
+	depacketizer := &codecs.H264Packet{}
+
+	b, err := depacketizer.Unmarshal(pkt.Payload)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	var spss [][]byte
+	if isAnnexB(b) {
+		spss = avc.ExtractNalusOfTypeFromByteStream(avc.NALU_SPS, b, true)
+	} else {
+		spss, _ = avc.GetParameterSets(b)
+	}
+
 	if len(spss) == 0 {
 		return 0, 0, ErrParamsUnavailable
 	}
@@ -354,11 +366,28 @@ func getH264VideoParams(s *media.Sample) (uint, uint, error) {
 	return sps.Width, sps.Height, nil
 }
 
-func getVP8VideoParams(s *media.Sample) (uint, uint, error) {
-	d := vp8.NewDecoder()
-	b := bytes.NewReader(s.Data)
+func isAnnexB(b []byte) bool {
+	for i := 0; i < len(b)-3; i++ {
+		if b[i] != 0 {
+			return false
+		}
+		if b[i] == 0 && b[i+1] == 0 && b[i+2] == 1 {
+			return true
+		}
+	}
 
-	d.Init(b, b.Len())
+	return false
+}
+
+func getVP8VideoParams(pkt *rtp.Packet) (uint, uint, error) {
+	depacketizer := &codecs.VP8Packet{}
+
+	b, err := depacketizer.Unmarshal(pkt.Payload)
+
+	d := vp8.NewDecoder()
+	r := bytes.NewReader(b)
+
+	d.Init(r, r.Len())
 	fh, err := d.DecodeFrameHeader()
 	if err != nil {
 		return 0, 0, err

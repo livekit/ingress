@@ -33,7 +33,6 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -69,14 +68,13 @@ type whipHandler struct {
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
 	sync               *synchronizer.Synchronizer
-	outputSync         *utils.OutputSynchronizer
 	stats              *stats.LocalMediaStatsGatherer
 	expectedTrackCount int
 	closeOnce          sync.Once
 
 	trackLock       sync.Mutex
 	simulcastLayers []string
-	tracks          map[string]*webrtc.TrackRemote
+	tracks          []*webrtc.TrackRemote
 	trackHandlers   map[WhipTrackDescription]WhipTrackHandler
 	trackAddedChan  chan *webrtc.TrackRemote
 
@@ -91,7 +89,6 @@ func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 	return &whipHandler{
 		rtcConfig:         &rtcConfCopy,
 		sync:              synchronizer.NewSynchronizer(nil),
-		tracks:            make(map[string]*webrtc.TrackRemote),
 		trackHandlers:     make(map[WhipTrackDescription]WhipTrackHandler),
 		trackSDKMediaSink: make(map[types.StreamKind]*SDKMediaSink),
 	}
@@ -132,9 +129,11 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 	// for each PeerConnection.
 	i := &interceptor.Registry{}
 
-	// Use the default set of Interceptors
-	if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
-		return "", err
+	if !p.BypassTranscoding {
+		// Use the default set of Interceptors
+		if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
+			return "", err
+		}
 	}
 
 	// Create the API object with the MediaEngine
@@ -405,21 +404,21 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
-	h.tracks[track.ID()] = track
-
-	sync := h.sync.AddTrack(track, whipIdentity)
+	h.tracks = append(h.tracks, track)
 
 	trackQuality := h.getTrackQuality(track)
 
 	var th WhipTrackHandler
 	var err error
 	if h.params.BypassTranscoding {
-		th, err = NewSDKWhipTrackHandler(logger, track, trackQuality, sync, receiver, h.writePLI, h.sync.OnRTCP)
+		th, err = NewSDKWhipTrackHandler(logger, track, trackQuality, receiver, h.writePLI, h.writeRTCPUpstream)
 		if err != nil {
 			logger.Warnw("failed creating SDK whip track handler", err)
 			return
 		}
 	} else {
+		sync := h.sync.AddTrack(track, whipIdentity)
+
 		th, err = NewRelayWhipTrackHandler(logger, track, trackQuality, sync, receiver, h.writePLI, h.sync.OnRTCP)
 		if err != nil {
 			logger.Warnw("failed creating relay whip track handler", err)
@@ -449,7 +448,7 @@ func (h *whipHandler) getSDKTrackMediaSink(sdkOutput *lksdk_output.LKSDKOutput, 
 			layers = []livekit.VideoQuality{livekit.VideoQuality_HIGH, livekit.VideoQuality_MEDIUM}
 		}
 
-		h.trackSDKMediaSink[kind] = NewSDKMediaSink(h.logger, h.params, sdkOutput, track.Codec(), streamKindFromCodecType(track.Kind()), h.outputSync, layers)
+		h.trackSDKMediaSink[kind] = NewSDKMediaSink(h.logger, h.params, sdkOutput, track.Codec(), streamKindFromCodecType(track.Kind()), layers)
 	}
 
 	sdkTrack := h.trackSDKMediaSink[kind].GetTrack(trackQuality)
@@ -458,10 +457,6 @@ func (h *whipHandler) getSDKTrackMediaSink(sdkOutput *lksdk_output.LKSDKOutput, 
 		h.logger.Warnw("no SDK track for the current quality", err)
 		return nil, err
 	}
-
-	sdkTrack.SetWritePLI(func() {
-		h.writePLI(track.SSRC())
-	})
 
 	return sdkTrack, nil
 }
@@ -477,6 +472,13 @@ func (h *whipHandler) writePLI(ssrc webrtc.SSRC) {
 	}
 }
 
+func (h *whipHandler) writeRTCPUpstream(pkt rtcp.Packet) {
+	err := h.pc.WriteRTCP([]rtcp.Packet{pkt})
+	if err != nil {
+		h.logger.Warnw("failed writing RTCP packet upstream", err)
+	}
+}
+
 func (h *whipHandler) runSession(ctx context.Context) error {
 	var err error
 	var sdkOutput *lksdk_output.LKSDKOutput
@@ -486,8 +488,6 @@ func (h *whipHandler) runSession(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-
-		h.outputSync = utils.NewOutputSynchronizer()
 
 		h.trackLock.Lock()
 		for _, track := range h.tracks {

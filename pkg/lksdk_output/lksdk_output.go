@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pion/interceptor"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v3"
 
@@ -39,27 +40,45 @@ const (
 type SampleProvider interface {
 	Close() error
 }
-
 type KeyFrameEmitter interface {
 	ForceKeyFrame() error
 }
 
-type PLIHandler struct {
-	p atomic.Pointer[KeyFrameEmitter]
+type PacketSink interface {
+	HandleRTCPPacket(pkt rtcp.Packet) error
 }
 
-func (h *PLIHandler) HandlePLI() error {
+type RTCPHandler struct {
+	p atomic.Pointer[PacketSink]
+	k atomic.Pointer[KeyFrameEmitter]
+}
+
+func (h *RTCPHandler) HandleRTCP(pkt rtcp.Packet) error {
 	p := h.p.Load()
 
 	if p != nil {
-		return (*p).ForceKeyFrame()
+		return (*p).HandleRTCPPacket(pkt)
 	}
 
 	return nil
 }
 
-func (h *PLIHandler) SetKeyFrameEmitter(p KeyFrameEmitter) {
+func (h *RTCPHandler) SetPacketSink(p PacketSink) {
 	h.p.Store(&p)
+}
+
+func (h *RTCPHandler) HandlePLI() error {
+	k := h.k.Load()
+
+	if k != nil {
+		return (*k).ForceKeyFrame()
+	}
+
+	return nil
+}
+
+func (h *RTCPHandler) SetKeyFrameEmitter(k KeyFrameEmitter) {
+	h.k.Store(&k)
 }
 
 type LKSDKOutput struct {
@@ -118,7 +137,9 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 		lksdk.WithAutoSubscribe(false),
 	}
 
-	if !p.BypassTranscoding {
+	if p.BypassTranscoding {
+		opts = append(opts, lksdk.WithInterceptors([]interceptor.Factory{}))
+	} else {
 		var br uint32
 		if p.VideoEncodingOptions != nil {
 			for _, l := range p.VideoEncodingOptions.Layers {
@@ -200,7 +221,7 @@ func (s *LKSDKOutput) AddAudioTrack(mimeType string, disableDTX bool, stereo boo
 	return track, nil
 }
 
-func (s *LKSDKOutput) AddVideoTrack(layers []*livekit.VideoLayer, mimeType string) ([]*lksdk.LocalTrack, []*PLIHandler, error) {
+func (s *LKSDKOutput) AddVideoTrack(layers []*livekit.VideoLayer, mimeType string) ([]*lksdk.LocalTrack, []*RTCPHandler, error) {
 	opts := &lksdk.TrackPublicationOptions{
 		Name:        s.params.Video.Name,
 		Source:      s.params.Video.Source,
@@ -211,17 +232,21 @@ func (s *LKSDKOutput) AddVideoTrack(layers []*livekit.VideoLayer, mimeType strin
 	var err error
 
 	tracks := make([]*lksdk.LocalSampleTrack, 0)
-	pliHandlers := make([]*PLIHandler, 0)
+	rtcpHandlers := make([]*RTCPHandler, 0)
 	for _, layer := range layers {
-		pliHandler := &PLIHandler{}
-		pliHandlers = append(pliHandlers, pliHandler)
+		rtcpHandler := &RTCPHandler{}
+		rtcpHandlers = append(rtcpHandlers, rtcpHandler)
 
 		onRTCP := func(pkt rtcp.Packet) {
 			switch pkt.(type) {
 			case *rtcp.PictureLossIndication:
-				if err := pliHandler.HandlePLI(); err != nil {
+				if err := rtcpHandler.HandlePLI(); err != nil {
 					s.logger.Errorw("could not force key frame", err)
 				}
+			}
+
+			if err := rtcpHandler.HandleRTCP(pkt); err != nil {
+				s.logger.Errorw("RTCP message handling failed", err)
 			}
 		}
 		track, err := lksdk.NewLocalSampleTrack(webrtc.RTPCodecCapability{
@@ -256,7 +281,7 @@ func (s *LKSDKOutput) AddVideoTrack(layers []*livekit.VideoLayer, mimeType strin
 
 	s.logger.Debugw("published video track")
 
-	return tracks, pliHandlers, nil
+	return tracks, rtcpHandlers, nil
 }
 
 func (s *LKSDKOutput) AddOutputs(o ...SampleProvider) {
@@ -278,6 +303,23 @@ func (s *LKSDKOutput) closeOutput() {
 	s.outputs = nil
 
 	s.room.Disconnect()
+}
+
+func (s *LKSDKOutput) WriteRTCP(pkts []rtcp.Packet) error {
+	if s.room == nil {
+		return nil
+	}
+
+	if s.room.LocalParticipant == nil {
+		return nil
+	}
+
+	pc := s.room.LocalParticipant.GetPublisherPeerConnection()
+	if pc == nil {
+		return nil
+	}
+
+	return pc.WriteRTCP(pkts)
 }
 
 func (s *LKSDKOutput) Close() error {
