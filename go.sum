@@ -106,6 +106,8 @@ github.com/livekit/psrpc v0.5.3-0.20240315045730-ba2e5b9923b5 h1:I2noW2VjGcf8E0p
 github.com/livekit/psrpc v0.5.3-0.20240315045730-ba2e5b9923b5/go.mod h1:CQUBSPfYYAaevg1TNCc6/aYsa8DJH4jSRFdCeSZk5u0=
 github.com/livekit/server-sdk-go/v2 v2.1.0 h1:2YIW6c1IhHTVCsBsTD6P3TLIP3l/3nK+iokopquP8eE=
 github.com/livekit/server-sdk-go/v2 v2.1.0/go.mod h1:uOiQU0kIhiZM10y9RIuig2CwRA/g5fW5bzy+2WiIxP8=
+github.com/mackerelio/go-osstat v0.2.4 h1:qxGbdPkFo65PXOb/F/nhDKpF2nGmGaCFDLXoZjJTtUs=
+github.com/mackerelio/go-osstat v0.2.4/go.mod h1:Zy+qzGdZs3A9cuIqmgbJvwbmLQH9dJvtio5ZjJTbdlQ=
 github.com/magefile/mage v1.15.0 h1:BvGheCMAsG3bWUDbZ8AyXXpCNwU9u5CB6sM+HNb9HYg=
 github.com/magefile/mage v1.15.0/go.mod h1:z5UZb/iS3GoOSn0JgWuiw7dxlurVYTu+/jHXqQg881A=
 github.com/mattn/go-pointer v0.0.1 h1:n+XhsuGeVO6MEAp7xyEukFINEa+Quek5psIR/ylA6o0=
