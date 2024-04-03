@@ -1,7 +1,5 @@
 module github.com/livekit/ingress
 
-replace github.com/livekit/server-sdk-go/v2 => ../server-sdk-go
-
 go 1.21
 
 toolchain go1.21.4
@@ -18,13 +16,13 @@ require (
 	github.com/livekit/mediatransportutil v0.0.0-20240302142739-1c3dd691a1b8
 	github.com/livekit/protocol v1.12.0
 	github.com/livekit/psrpc v0.5.3-0.20240315045730-ba2e5b9923b5
-	github.com/livekit/server-sdk-go/v2 v2.0.7-0.20240315195514-46474eb45977
+	github.com/livekit/server-sdk-go/v2 v2.1.1-0.20240403161440-39126a2c9d49
 	github.com/pion/dtls/v2 v2.2.10
-	github.com/pion/interceptor v0.1.25
+	github.com/pion/interceptor v0.1.27
 	github.com/pion/rtcp v1.2.14
-	github.com/pion/rtp v1.8.3
-	github.com/pion/sdp/v3 v3.0.6
-	github.com/pion/webrtc/v3 v3.2.28
+	github.com/pion/rtp v1.8.4
+	github.com/pion/sdp/v3 v3.0.8
+	github.com/pion/webrtc/v3 v3.2.29
 	github.com/prometheus/client_golang v1.19.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
@@ -92,7 +90,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/crypto v0.19.0 // indirect
-	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect
+	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8 // indirect
 	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/sync v0.6.0 // indirect
 	golang.org/x/sys v0.17.0 // indirect
