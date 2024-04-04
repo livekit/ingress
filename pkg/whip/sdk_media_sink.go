@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"sync"
 
@@ -178,6 +179,10 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(pkt *rtp.Packet, t *SDKMedi
 
 	}
 
+	sort.Slice(layers, func(i, j int) bool {
+		return layers[i].Width > layers[j].Width
+	})
+
 	if len(layers) != 0 {
 		videoState := getVideoState(sp.codecParameters.MimeType, uint(layers[0].Width), uint(layers[0].Height))
 		sp.params.SetInputVideoState(context.Background(), videoState, true)
@@ -194,11 +199,9 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(pkt *rtp.Packet, t *SDKMedi
 		t = sp.tracks[q.Quality]
 		t.localTrack = tracks[i]
 		rtcpHandlers[i].SetPacketSink(t)
+		sp.logger.Infow("adding video track", "width", q.Width, "height", q.Height, "quality", q.Quality, "codec", sp.codecParameters.MimeType)
 	}
 
-	for _, l := range layers {
-		sp.logger.Infow("adding video track", "width", l.Width, "height", l.Height, "codec", sp.codecParameters.MimeType)
-	}
 	sp.sinkInitialized = true
 
 	return sp.sinkInitialized, nil
