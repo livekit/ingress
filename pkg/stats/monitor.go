@@ -63,12 +63,16 @@ func (m *Monitor) Start(conf *config.Config) error {
 	if err != nil {
 		return err
 	}
+
+	m.costConfigLock.Lock()
 	m.cpuStats = cpuStats
 	m.cpuCostConfig = conf.CPUCost
 
 	if err := m.checkCPUConfig(); err != nil {
+		m.costConfigLock.Unlock()
 		return err
 	}
+	m.costConfigLock.Unlock()
 
 	m.promCPULoad = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace:   "livekit",
@@ -134,6 +138,11 @@ func (m *Monitor) Stop() {
 }
 
 func (m *Monitor) checkCPUConfig() error {
+	// Not started
+	if m.cpuStats == nil {
+		return nil
+	}
+
 	if m.cpuCostConfig.MinIdleRatio <= 0 {
 		m.cpuCostConfig.MinIdleRatio = defaultMinIdle
 	}
