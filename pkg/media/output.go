@@ -96,6 +96,23 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 		return nil, err
 	}
 
+	pads, err := queueIn.GetSinkPads()
+	for _, pad := range pads {
+		fmt.Println("PAD PROBE")
+		drop := make(chan struct{})
+		time.AfterFunc(time.Second, func() { close(drop) })
+
+		pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+			select {
+			case <-drop:
+				return gst.PadProbeOK
+			default:
+				fmt.Println("DROP VIDEO")
+				return gst.PadProbeDrop
+			}
+		})
+	}
+
 	videoScale, err := gst.NewElement("videoscale")
 	if err != nil {
 		return nil, err
@@ -263,6 +280,23 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 	}
 	if err = queueEnc.SetProperty("max-size-buffers", uint(1)); err != nil {
 		return nil, err
+	}
+
+	pads, err := queueEnc.GetSinkPads()
+	for _, pad := range pads {
+		fmt.Println("PAD PROBE")
+		drop := make(chan struct{})
+		time.AfterFunc(time.Second, func() { close(drop) })
+
+		pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+			select {
+			case <-drop:
+				return gst.PadProbeOK
+			default:
+				fmt.Println("DROP AUDIO")
+				return gst.PadProbeDrop
+			}
+		})
 	}
 
 	switch options.AudioCodec {
