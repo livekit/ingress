@@ -17,6 +17,7 @@ package media
 import (
 	"fmt"
 	"io"
+	"sync/atomic"
 	"time"
 
 	"github.com/frostbyte73/core"
@@ -30,6 +31,7 @@ import (
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/psrpc"
 	lksdk "github.com/livekit/server-sdk-go/v2"
 )
 
@@ -51,7 +53,8 @@ type Output struct {
 	outputSync         *utils.TrackOutputSynchronizer
 	trackStatsGatherer *stats.MediaTrackStatGatherer
 
-	localTrack *lksdk.LocalTrack
+	localTrack   atomic.Pointer[lksdk.LocalTrack]
+	stopDropping func()
 
 	closed core.Fuse
 }
@@ -74,8 +77,8 @@ type AudioOutput struct {
 	codec livekit.AudioCodec
 }
 
-func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *utils.TrackOutputSynchronizer, localTrack *lksdk.LocalTrack, statsGatherer *stats.LocalMediaStatsGatherer) (*VideoOutput, error) {
-	e, err := newVideoOutput(codec, outputSync, localTrack)
+func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *utils.TrackOutputSynchronizer, statsGatherer *stats.LocalMediaStatsGatherer) (*VideoOutput, error) {
+	e, err := newVideoOutput(codec, outputSync)
 	if err != nil {
 		return nil, err
 	}
@@ -97,20 +100,18 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 	}
 
 	pads, err := queueIn.GetSinkPads()
-	for _, pad := range pads {
-		fmt.Println("PAD PROBE")
-		drop := make(chan struct{})
-		time.AfterFunc(time.Second, func() { close(drop) })
-
-		pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
-			select {
-			case <-drop:
-				return gst.PadProbeOK
-			default:
-				fmt.Println("DROP VIDEO")
-				return gst.PadProbeDrop
-			}
-		})
+	if err != nil {
+		return nil, err
+	}
+	if len(pads) == 0 {
+		return nil, psrpc.NewErrorf(psrpc.Internal, "no sink pad on queue")
+	}
+	pad := pads[0]
+	id := pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+		return gst.PadProbeDrop
+	})
+	e.stopDropping = func() {
+		pad.RemoveProbe(id)
 	}
 
 	videoScale, err := gst.NewElement("videoscale")
@@ -238,8 +239,8 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 	return e, nil
 }
 
-func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *utils.TrackOutputSynchronizer, track *lksdk.LocalTrack, statsGatherer *stats.LocalMediaStatsGatherer) (*AudioOutput, error) {
-	e, err := newAudioOutput(options.AudioCodec, outputSync, track)
+func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *utils.TrackOutputSynchronizer, statsGatherer *stats.LocalMediaStatsGatherer) (*AudioOutput, error) {
+	e, err := newAudioOutput(options.AudioCodec, outputSync)
 	if err != nil {
 		return nil, err
 	}
@@ -283,20 +284,18 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 	}
 
 	pads, err := queueEnc.GetSinkPads()
-	for _, pad := range pads {
-		fmt.Println("PAD PROBE")
-		drop := make(chan struct{})
-		time.AfterFunc(time.Second, func() { close(drop) })
-
-		pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
-			select {
-			case <-drop:
-				return gst.PadProbeOK
-			default:
-				fmt.Println("DROP AUDIO")
-				return gst.PadProbeDrop
-			}
-		})
+	if err != nil {
+		return nil, err
+	}
+	if len(pads) == 0 {
+		return nil, psrpc.NewErrorf(psrpc.Internal, "no sink pad on queue")
+	}
+	pad := pads[0]
+	id := pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+		return gst.PadProbeDrop
+	})
+	e.stopDropping = func() {
+		pad.RemoveProbe(id)
 	}
 
 	switch options.AudioCodec {
@@ -344,8 +343,8 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 	return e, nil
 }
 
-func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynchronizer, localTrack *lksdk.LocalTrack) (*VideoOutput, error) {
-	e, err := newOutput(outputSync, localTrack)
+func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynchronizer) (*VideoOutput, error) {
+	e, err := newOutput(outputSync)
 	if err != nil {
 		return nil, err
 	}
@@ -363,8 +362,8 @@ func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynch
 	return o, nil
 }
 
-func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynchronizer, localTrack *lksdk.LocalTrack) (*AudioOutput, error) {
-	e, err := newOutput(outputSync, localTrack)
+func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynchronizer) (*AudioOutput, error) {
+	e, err := newOutput(outputSync)
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +381,7 @@ func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynch
 	return o, nil
 }
 
-func newOutput(outputSync *utils.TrackOutputSynchronizer, localTrack *lksdk.LocalTrack) (*Output, error) {
+func newOutput(outputSync *utils.TrackOutputSynchronizer) (*Output, error) {
 	sink, err := app.NewAppSink()
 	if err != nil {
 		return nil, err
@@ -391,10 +390,17 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer, localTrack *lksdk.Loca
 	e := &Output{
 		sink:       sink,
 		outputSync: outputSync,
-		localTrack: localTrack,
 	}
 
 	return e, nil
+}
+
+func (o *Output) SinkReady(localTrack *lksdk.LocalTrack) {
+	o.localTrack.Store(localTrack)
+
+	if o.stopDropping != nil {
+		o.stopDropping()
+	}
 }
 
 func (e *Output) linkElements() error {
@@ -451,9 +457,15 @@ func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 		return nil
 	}
 
+	localTrack := e.localTrack.Load()
+	if localTrack == nil {
+		e.logger.Infow("localTrack unexpectedly nil")
+		return psrpc.NewErrorf(psrpc.Internal, "localTrack unexpectedly nil")
+	}
+
 	// WriteSample seems to return successfully even if the Peer Connection disconnected.
 	// We need to return success to the caller even if the PC is disconnected to allow for reconnections
-	err = e.localTrack.WriteSample(*s, nil)
+	err = localTrack.WriteSample(*s, nil)
 	if err != nil {
 		return err
 	}

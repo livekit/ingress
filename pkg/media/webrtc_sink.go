@@ -16,7 +16,9 @@ package media
 
 import (
 	"context"
+	"sync"
 
+	"github.com/frostbyte73/core"
 	"github.com/go-gst/go-gst/gst"
 
 	"github.com/livekit/ingress/pkg/errors"
@@ -34,6 +36,10 @@ import (
 type WebRTCSink struct {
 	params *params.Params
 
+	lock     sync.Mutex
+	sdkReady core.Fuse
+	closed   core.Fuse
+
 	sdkOut        *lksdk_output.LKSDKOutput
 	outputSync    *utils.OutputSynchronizer
 	statsGatherer *stats.LocalMediaStatsGatherer
@@ -43,32 +49,57 @@ func NewWebRTCSink(ctx context.Context, p *params.Params, statsGatherer *stats.L
 	ctx, span := tracer.Start(ctx, "media.NewWebRTCSink")
 	defer span.End()
 
-	sdkOut, err := lksdk_output.NewLKSDKOutput(ctx, p)
-	if err != nil {
-		return nil, err
-	}
-
-	return &WebRTCSink{
+	s := &WebRTCSink{
 		params:        p,
-		sdkOut:        sdkOut,
 		outputSync:    utils.NewOutputSynchronizer(),
 		statsGatherer: statsGatherer,
-	}, nil
+	}
+
+	go func() {
+		defer s.sdkReady.Break()
+
+		sdkOut, err := lksdk_output.NewLKSDKOutput(ctx, p)
+		if err != nil {
+			return
+		}
+
+		s.lock.Lock()
+		s.sdkOut = sdkOut
+		s.lock.Unlock()
+	}()
+
+	return s, nil
 }
 
 func (s *WebRTCSink) addAudioTrack() (*Output, error) {
-	track, err := s.sdkOut.AddAudioTrack(putils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec), s.params.AudioEncodingOptions.DisableDtx, s.params.AudioEncodingOptions.Channels > 1)
-	if err != nil {
-		return nil, err
-	}
-
-	output, err := NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync.AddTrack(), track, s.statsGatherer)
+	output, err := NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync.AddTrack(), s.statsGatherer)
 	if err != nil {
 		logger.Errorw("could not create output", err)
 		return nil, err
 	}
 
-	s.sdkOut.AddOutputs(output)
+	go func() {
+		var sdkOut *lksdk_output.LKSDKOutput
+
+		select {
+		case <-s.closed.Watch():
+		case <-s.sdkReady.Watch():
+			s.lock.Lock()
+			sdkOut = s.sdkOut
+			s.lock.Unlock()
+		}
+
+		if sdkOut != nil {
+			track, err := sdkOut.AddAudioTrack(putils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec), s.params.AudioEncodingOptions.DisableDtx, s.params.AudioEncodingOptions.Channels > 1)
+			if err != nil {
+				return
+			}
+
+			output.SinkReady(track)
+
+			sdkOut.AddOutputs(output)
+		}
+	}()
 
 	return output.Output, nil
 }
@@ -79,24 +110,42 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 
 	sortedLayers := filterAndSortLayersByQuality(s.params.VideoEncodingOptions.Layers, w, h)
 
-	tracks, pliHandlers, err := s.sdkOut.AddVideoTrack(sortedLayers, putils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
-	if err != nil {
-		return nil, err
-	}
-
-	for i, layer := range sortedLayers {
-		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, s.outputSync.AddTrack(), tracks[i], s.statsGatherer)
+	for _, layer := range sortedLayers {
+		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, s.outputSync.AddTrack(), s.statsGatherer)
 		if err != nil {
 			return nil, err
 		}
-
-		pliHandlers[i].SetKeyFrameEmitter(output)
 
 		outputs = append(outputs, output.Output)
 		sbArray = append(sbArray, output)
 	}
 
-	s.sdkOut.AddOutputs(sbArray...)
+	go func() {
+		var sdkOut *lksdk_output.LKSDKOutput
+
+		select {
+		case <-s.closed.Watch():
+		case <-s.sdkReady.Watch():
+			s.lock.Lock()
+			sdkOut = s.sdkOut
+			s.lock.Unlock()
+		}
+
+		if sdkOut != nil {
+			tracks, pliHandlers, err := sdkOut.AddVideoTrack(sortedLayers, putils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
+			if err != nil {
+				return
+			}
+
+			for i, o := range outputs {
+				o.SinkReady(tracks[i])
+				pliHandlers[i].SetKeyFrameEmitter(o)
+			}
+
+			sdkOut.AddOutputs(sbArray...)
+		}
+
+	}()
 
 	return outputs, nil
 }
@@ -141,7 +190,18 @@ func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps) (*gst.Bin, 
 }
 
 func (s *WebRTCSink) Close() error {
-	return s.sdkOut.Close()
+	s.closed.Break()
+
+	<-s.sdkReady.Watch()
+
+	var err error
+	s.lock.Lock()
+	if s.sdkOut != nil {
+		err = s.sdkOut.Close()
+	}
+	s.lock.Unlock()
+
+	return err
 }
 
 func getResolution(caps *gst.Caps) (w int, h int, err error) {
