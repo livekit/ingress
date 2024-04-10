@@ -75,18 +75,22 @@ func New(ctx context.Context, conf *config.Config, params *params.Params, g *sta
 		return nil, err
 	}
 
-	sink, err := NewWebRTCSink(ctx, params, g)
-	if err != nil {
-		return nil, err
-	}
-
 	p := &Pipeline{
 		Params:      params,
 		pipeline:    pipeline,
-		sink:        sink,
 		input:       input,
 		pipelineErr: make(chan error, 1),
 	}
+
+	sink, err := NewWebRTCSink(ctx, params, func() {
+		if p.loop != nil {
+			p.loop.Quit()
+		}
+	}, g)
+	if err != nil {
+		return nil, err
+	}
+	p.sink = sink
 
 	input.OnOutputReady(p.onOutputReady)
 

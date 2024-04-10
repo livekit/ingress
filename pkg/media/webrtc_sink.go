@@ -34,29 +34,44 @@ import (
 )
 
 type WebRTCSink struct {
-	params *params.Params
+	params    *params.Params
+	onFailure func()
 
 	lock     sync.Mutex
 	sdkReady core.Fuse
 	closed   core.Fuse
+	errChan  chan error
 
 	sdkOut        *lksdk_output.LKSDKOutput
 	outputSync    *utils.OutputSynchronizer
 	statsGatherer *stats.LocalMediaStatsGatherer
 }
 
-func NewWebRTCSink(ctx context.Context, p *params.Params, statsGatherer *stats.LocalMediaStatsGatherer) (*WebRTCSink, error) {
+func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), statsGatherer *stats.LocalMediaStatsGatherer) (*WebRTCSink, error) {
 	ctx, span := tracer.Start(ctx, "media.NewWebRTCSink")
 	defer span.End()
 
 	s := &WebRTCSink{
 		params:        p,
+		onFailure:     onFailure,
+		errChan:       make(chan error),
 		outputSync:    utils.NewOutputSynchronizer(),
 		statsGatherer: statsGatherer,
 	}
 
 	go func() {
-		defer s.sdkReady.Break()
+		var err error
+
+		defer func() {
+			s.sdkReady.Break()
+			if err != nil && s.onFailure != nil {
+				select {
+				case s.errChan <- err:
+				default:
+				}
+				s.onFailure()
+			}
+		}()
 
 		sdkOut, err := lksdk_output.NewLKSDKOutput(ctx, p)
 		if err != nil {
@@ -80,6 +95,17 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 
 	go func() {
 		var sdkOut *lksdk_output.LKSDKOutput
+		var err error
+
+		defer func() {
+			if err != nil && s.onFailure != nil {
+				select {
+				case s.errChan <- err:
+				default:
+				}
+				s.onFailure()
+			}
+		}()
 
 		select {
 		case <-s.closed.Watch():
@@ -122,6 +148,17 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 
 	go func() {
 		var sdkOut *lksdk_output.LKSDKOutput
+		var err error
+
+		defer func() {
+			if err != nil && s.onFailure != nil {
+				select {
+				case s.errChan <- err:
+				default:
+				}
+				s.onFailure()
+			}
+		}()
 
 		select {
 		case <-s.closed.Watch():
@@ -200,6 +237,13 @@ func (s *WebRTCSink) Close() error {
 		err = s.sdkOut.Close()
 	}
 	s.lock.Unlock()
+
+	if err == nil {
+		select {
+		case err = <-s.errChan:
+		default:
+		}
+	}
 
 	return err
 }
