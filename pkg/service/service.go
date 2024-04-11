@@ -536,10 +536,10 @@ func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.I
 
 func DeregisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) {
 	server.DeregisterUpdateIngressTopic(info.IngressId)
-	server.RegisterDeleteIngressTopic(info.IngressId)
+	server.DeregisterDeleteIngressTopic(info.IngressId)
 
 	if info.InputType == livekit.IngressInput_WHIP_INPUT {
-		server.RegisterDeleteWHIPResourceTopic(info.State.ResourceId)
+		server.DeregisterDeleteWHIPResourceTopic(info.State.ResourceId)
 	}
 }
 
