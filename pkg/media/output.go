@@ -459,8 +459,9 @@ func (e *Output) writeSample(s *media.Sample, pts time.Duration) error {
 
 	localTrack := e.localTrack.Load()
 	if localTrack == nil {
-		e.logger.Infow("localTrack unexpectedly nil")
-		return psrpc.NewErrorf(psrpc.Internal, "localTrack unexpectedly nil")
+		err = psrpc.NewErrorf(psrpc.Internal, "localTrack unexpectedly nil")
+		e.logger.Warnw("unable to write sample", err)
+		return err
 	}
 
 	// WriteSample seems to return successfully even if the Peer Connection disconnected.

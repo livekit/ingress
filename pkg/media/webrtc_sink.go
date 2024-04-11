@@ -31,6 +31,7 @@ import (
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 	putils "github.com/livekit/protocol/utils"
+	lksdk "github.com/livekit/server-sdk-go/v2"
 )
 
 type WebRTCSink struct {
@@ -64,12 +65,14 @@ func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), stat
 
 		defer func() {
 			s.sdkReady.Break()
-			if err != nil && s.onFailure != nil {
+			if err != nil {
 				select {
 				case s.errChan <- err:
 				default:
 				}
-				s.onFailure()
+				if s.onFailure != nil {
+					s.onFailure()
+				}
 			}
 		}()
 
@@ -98,12 +101,14 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 		var err error
 
 		defer func() {
-			if err != nil && s.onFailure != nil {
+			if err != nil {
 				select {
 				case s.errChan <- err:
 				default:
 				}
-				s.onFailure()
+				if s.onFailure != nil {
+					s.onFailure()
+				}
 			}
 		}()
 
@@ -116,7 +121,8 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 		}
 
 		if sdkOut != nil {
-			track, err := sdkOut.AddAudioTrack(putils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec), s.params.AudioEncodingOptions.DisableDtx, s.params.AudioEncodingOptions.Channels > 1)
+			var track *lksdk.LocalTrack
+			track, err = sdkOut.AddAudioTrack(putils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec), s.params.AudioEncodingOptions.DisableDtx, s.params.AudioEncodingOptions.Channels > 1)
 			if err != nil {
 				return
 			}
@@ -151,12 +157,14 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 		var err error
 
 		defer func() {
-			if err != nil && s.onFailure != nil {
+			if err != nil {
 				select {
 				case s.errChan <- err:
 				default:
 				}
-				s.onFailure()
+				if s.onFailure != nil {
+					s.onFailure()
+				}
 			}
 		}()
 
@@ -169,7 +177,10 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 		}
 
 		if sdkOut != nil {
-			tracks, pliHandlers, err := sdkOut.AddVideoTrack(sortedLayers, putils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
+			var tracks []*lksdk.LocalTrack
+			var pliHandlers []*lksdk_output.RTCPHandler
+
+			tracks, pliHandlers, err = sdkOut.AddVideoTrack(sortedLayers, putils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
 			if err != nil {
 				return
 			}
