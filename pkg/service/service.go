@@ -410,6 +410,8 @@ func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err
 		logger.Warnw("ingress failed", errors.New(state.Error))
 	}
 
+	state.UpdatedAt = time.Now().UnixNano()
+
 	_, err = s.psrpcClient.UpdateIngressState(ctx, &rpc.UpdateIngressStateRequest{
 		IngressId: info.IngressId,
 		State:     state,

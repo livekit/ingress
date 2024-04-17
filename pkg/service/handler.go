@@ -278,6 +278,8 @@ func (h *Handler) sendUpdate(ctx context.Context, info *livekit.IngressInfo) {
 		logger.Infow("ingress update", "ingressID", info.IngressId)
 	}
 
+	info.State.UpdatedAt = time.Now().UnixNano()
+
 	_, err := h.rpcClient.UpdateIngressState(ctx, &rpc.UpdateIngressStateRequest{
 		IngressId: info.IngressId,
 		State:     info.State,
