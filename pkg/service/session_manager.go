@@ -15,6 +15,7 @@
 package service
 
 import (
+	"context"
 	"sync"
 
 	"github.com/livekit/ingress/pkg/errors"
@@ -75,6 +76,7 @@ func (sm *SessionManager) IngressEnded(info *livekit.IngressInfo) {
 	p := sm.sessions[info.State.ResourceId]
 	if p != nil {
 		delete(sm.sessions, info.State.ResourceId)
+		p.sessionAPI.CloseSession(context.Background())
 		p.mediaStats.Close()
 	}
 

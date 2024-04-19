@@ -28,7 +28,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/utils"
+	"github.com/livekit/protocol/utils/hwstats"
 )
 
 const (
@@ -44,7 +44,7 @@ type Monitor struct {
 	requestGauge      *prometheus.GaugeVec
 	promNodeAvailable prometheus.GaugeFunc
 
-	cpuStats *utils.CPUStats
+	cpuStats *hwstats.CPUStats
 
 	pendingCPUs atomic.Float64
 
@@ -57,18 +57,22 @@ func NewMonitor() *Monitor {
 }
 
 func (m *Monitor) Start(conf *config.Config) error {
-	cpuStats, err := utils.NewCPUStats(func(idle float64) {
+	cpuStats, err := hwstats.NewCPUStats(func(idle float64) {
 		m.promCPULoad.Set(1 - idle/float64(m.cpuStats.NumCPU()))
 	})
 	if err != nil {
 		return err
 	}
+
+	m.costConfigLock.Lock()
 	m.cpuStats = cpuStats
 	m.cpuCostConfig = conf.CPUCost
 
 	if err := m.checkCPUConfig(); err != nil {
+		m.costConfigLock.Unlock()
 		return err
 	}
+	m.costConfigLock.Unlock()
 
 	m.promCPULoad = prometheus.NewGauge(prometheus.GaugeOpts{
 		Namespace:   "livekit",
@@ -134,6 +138,11 @@ func (m *Monitor) Stop() {
 }
 
 func (m *Monitor) checkCPUConfig() error {
+	// Not started
+	if m.cpuStats == nil {
+		return nil
+	}
+
 	if m.cpuCostConfig.MinIdleRatio <= 0 {
 		m.cpuCostConfig.MinIdleRatio = defaultMinIdle
 	}

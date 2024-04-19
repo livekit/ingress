@@ -15,6 +15,7 @@
 package utils
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 	"time"
@@ -34,17 +35,26 @@ import (
 */
 
 func SerializeMediaForRelay(w io.Writer, data []byte, ts time.Duration) error {
-	err := binary.Write(w, binary.BigEndian, ts)
+	// Only 1 write for a single parsable unit
+
+	b := &bytes.Buffer{}
+
+	err := binary.Write(b, binary.BigEndian, ts)
 	if err != nil {
 		return err
 	}
 
-	err = binary.Write(w, binary.BigEndian, uint32(len(data)))
+	err = binary.Write(b, binary.BigEndian, uint32(len(data)))
 	if err != nil {
 		return err
 	}
 
-	err = binary.Write(w, binary.BigEndian, data)
+	_, err = b.Write(data)
+	if err != nil {
+		return err
+	}
+
+	_, err = w.Write(b.Bytes())
 	if err != nil {
 		return err
 	}
@@ -67,7 +77,7 @@ func DeserializeMediaForRelay(r io.Reader) ([]byte, time.Duration, error) {
 	}
 
 	data := make([]byte, int(size))
-	err = binary.Read(r, binary.BigEndian, data)
+	_, err = io.ReadFull(r, data)
 	if err != nil {
 		return nil, 0, err
 	}

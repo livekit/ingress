@@ -31,6 +31,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/ingress/pkg/whip"
@@ -60,6 +61,7 @@ type Service struct {
 	manager *ProcessManager
 	sm      *SessionManager
 	whipSrv *whip.WHIPServer
+	rtmpSrv *rtmp.RTMPServer
 
 	psrpcClient rpc.IOInfoClient
 	bus         psrpc.MessageBus
@@ -70,7 +72,7 @@ type Service struct {
 	shutdown core.Fuse
 }
 
-func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, whipSrv *whip.WHIPServer, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) *Service {
+func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, rtmpSrv *rtmp.RTMPServer, whipSrv *whip.WHIPServer, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) *Service {
 	monitor := stats.NewMonitor()
 	sm := NewSessionManager(monitor)
 
@@ -80,6 +82,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		sm:          sm,
 		manager:     NewProcessManager(sm, newCmd),
 		whipSrv:     whipSrv,
+		rtmpSrv:     rtmpSrv,
 		psrpcClient: psrpcClient,
 		bus:         bus,
 	}
@@ -111,7 +114,9 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 		return nil, nil, err
 	}
 
-	err = s.manager.launchHandler(ctx, p)
+	err = s.manager.startIngress(ctx, p, func(ctx context.Context) {
+		s.rtmpSrv.CloseHandler(resourceId)
+	})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -154,7 +159,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		if err != nil {
 			// Client failed to finalize session start
 			logger.Warnw("ingress failed", err)
-			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			p.SendStateUpdate(ctx)
 
 			if p.BypassTranscoding {
@@ -165,16 +170,20 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		}
 
 		if p.BypassTranscoding {
-			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, "")
+			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
 			p.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}})
+			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(ctx context.Context) {
+				s.whipSrv.CloseHandler(resourceId)
+			}})
 		} else {
 			p.SetExtraParams(&params.WhipExtraParams{
 				MimeTypes: mimeTypes,
 			})
 
-			err := s.manager.launchHandler(ctx, p)
+			err := s.manager.startIngress(ctx, p, func(ctx context.Context) {
+				s.whipSrv.CloseHandler(resourceId)
+			})
 			if err != nil {
 				return nil
 			}
@@ -193,10 +202,10 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			defer span.End()
 
 			if err == nil {
-				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, "")
+				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, nil)
 			} else {
 				logger.Warnw("ingress failed", err)
-				p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err.Error())
+				p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			}
 
 			p.SendStateUpdate(ctx)
@@ -217,7 +226,7 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 		return nil, err
 	}
 
-	err = s.manager.launchHandler(ctx, p)
+	err = s.manager.startIngress(ctx, p, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -401,6 +410,8 @@ func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err
 		logger.Warnw("ingress failed", errors.New(state.Error))
 	}
 
+	state.UpdatedAt = time.Now().UnixNano()
+
 	_, err = s.psrpcClient.UpdateIngressState(ctx, &rpc.UpdateIngressStateRequest{
 		IngressId: info.IngressId,
 		State:     state,
@@ -480,8 +491,17 @@ func (s *Service) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Healthy"))
 }
 
+type sessionCloser func(ctx context.Context)
+
+func (p sessionCloser) CloseSession(ctx context.Context) {
+	if p != nil {
+		p(ctx)
+	}
+}
+
 type localSessionAPI struct {
 	stats.LocalStatsUpdater
+	sessionCloser
 }
 
 func (a *localSessionAPI) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {
@@ -518,10 +538,10 @@ func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.I
 
 func DeregisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) {
 	server.DeregisterUpdateIngressTopic(info.IngressId)
-	server.RegisterDeleteIngressTopic(info.IngressId)
+	server.DeregisterDeleteIngressTopic(info.IngressId)
 
 	if info.InputType == livekit.IngressInput_WHIP_INPUT {
-		server.RegisterDeleteWHIPResourceTopic(info.State.ResourceId)
+		server.DeregisterDeleteWHIPResourceTopic(info.State.ResourceId)
 	}
 }
 

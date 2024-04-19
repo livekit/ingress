@@ -95,6 +95,7 @@ func (h *WHIPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		pw.Close()
+		h.whipServer.DissociateRelay(resourceId, kind)
 	}()
 
 	err = h.whipServer.AssociateRelay(resourceId, kind, token, pw)

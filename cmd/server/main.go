@@ -138,7 +138,7 @@ func runService(c *cli.Context) error {
 		whipsrv = whip.NewWHIPServer(psrpcWHIPClient)
 	}
 
-	svc := service.NewService(conf, psrpcClient, bus, whipsrv, service.NewCmd)
+	svc := service.NewService(conf, psrpcClient, bus, rtmpsrv, whipsrv, service.NewCmd)
 
 	srv, err := rpc.NewIngressInternalServer(svc, bus)
 	if err != nil {
@@ -258,7 +258,7 @@ func runHandler(c *cli.Context) error {
 
 	var handler interface {
 		Kill()
-		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, loggingFields map[string]string, extraParams any)
+		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, loggingFields map[string]string, extraParams any) error
 	}
 
 	bus := psrpc.NewRedisMessageBus(rc)
@@ -296,8 +296,18 @@ func runHandler(c *cli.Context) error {
 		}
 	}
 
-	handler.HandleIngress(ctx, info, wsUrl, token, c.String("relay-token"), loggingFields, ep)
-	return nil
+	err = handler.HandleIngress(ctx, info, wsUrl, token, c.String("relay-token"), loggingFields, ep)
+	return translateRetryableError(err)
+}
+
+func translateRetryableError(err error) error {
+	retrErr := errors.RetryableError{}
+
+	if errors.As(err, &retrErr) {
+		return cli.Exit(err, 1)
+	}
+
+	return err
 }
 
 func setupHandlerRPCHandlers(conf *config.Config, handler *service.Handler, bus psrpc.MessageBus, info *livekit.IngressInfo, ep any) error {
