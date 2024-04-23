@@ -26,6 +26,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/utils/hwstats"
@@ -274,6 +275,8 @@ func (m *Monitor) canAcceptIngress(info *livekit.IngressInfo, alreadyCommitted b
 }
 
 func (m *Monitor) CanAcceptIngress(info *livekit.IngressInfo) bool {
+	params.UpdateTranscodingEnabled(info)
+
 	accept, _, _ := m.canAcceptIngress(info, false)
 
 	return accept
