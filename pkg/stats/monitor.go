@@ -254,7 +254,7 @@ func (m *Monitor) canAcceptIngress(info *livekit.IngressInfo, alreadyCommitted b
 		accept = available > m.cpuCostConfig.RTMPCpuCost
 		cpuHold = m.cpuCostConfig.RTMPCpuCost
 	case livekit.IngressInput_WHIP_INPUT:
-		if info.BypassTranscoding {
+		if !*info.EnableTranscoding {
 			accept = available > m.cpuCostConfig.WHIPBypassTranscodingCpuCost
 			cpuHold = m.cpuCostConfig.WHIPBypassTranscodingCpuCost
 		} else {
@@ -297,11 +297,11 @@ func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "rtmp", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Add(1)
+		m.requestGauge.With(prometheus.Labels{"type": "rtmp", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
 	case livekit.IngressInput_WHIP_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "whip", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Add(1)
+		m.requestGauge.With(prometheus.Labels{"type": "whip", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
 	case livekit.IngressInput_URL_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "url", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Add(1)
+		m.requestGauge.With(prometheus.Labels{"type": "url", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
 
 	}
 }
@@ -309,11 +309,11 @@ func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
 func (m *Monitor) IngressEnded(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "rtmp", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Sub(1)
+		m.requestGauge.With(prometheus.Labels{"type": "rtmp", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	case livekit.IngressInput_WHIP_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "whip", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Sub(1)
+		m.requestGauge.With(prometheus.Labels{"type": "whip", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	case livekit.IngressInput_URL_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "url", "transcoding": fmt.Sprintf("%v", !info.BypassTranscoding)}).Sub(1)
+		m.requestGauge.With(prometheus.Labels{"type": "url", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	}
 }
 
