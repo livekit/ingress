@@ -112,7 +112,7 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 		return "", err
 	}
 
-	if !p.BypassTranscoding && len(h.simulcastLayers) != 0 {
+	if *p.EnableTranscoding && len(h.simulcastLayers) != 0 {
 		return "", errors.ErrSimulcastTranscode
 	}
 
@@ -129,7 +129,7 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 	// for each PeerConnection.
 	i := &interceptor.Registry{}
 
-	if !p.BypassTranscoding {
+	if *p.EnableTranscoding {
 		// Use the default set of Interceptors
 		if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
 			return "", err
@@ -410,7 +410,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 
 	var th WhipTrackHandler
 	var err error
-	if h.params.BypassTranscoding {
+	if !*h.params.EnableTranscoding {
 		th, err = NewSDKWhipTrackHandler(logger, track, trackQuality, receiver, h.writePLI, h.writeRTCPUpstream)
 		if err != nil {
 			logger.Warnw("failed creating SDK whip track handler", err)
@@ -483,7 +483,7 @@ func (h *whipHandler) runSession(ctx context.Context) error {
 	var err error
 	var sdkOutput *lksdk_output.LKSDKOutput
 
-	if h.params.BypassTranscoding {
+	if !*h.params.EnableTranscoding {
 		sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, h.params)
 		if err != nil {
 			return err

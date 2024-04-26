@@ -135,6 +135,8 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		return nil, err
 	}
 
+	UpdateTranscodingEnabled(infoCopy)
+
 	if token == "" {
 		token, err = ingress.BuildIngressToken(conf.ApiKey, conf.ApiSecret, info.RoomName, info.ParticipantIdentity, info.ParticipantName, info.ParticipantMetadata)
 		if err != nil {
@@ -159,6 +161,23 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	}
 
 	return p, nil
+}
+
+func UpdateTranscodingEnabled(info *livekit.IngressInfo) {
+	if info.EnableTranscoding != nil {
+		return
+	}
+
+	// Backward compatibility. This is an ingress created before the EnableTranscoding field was added.
+	// Default to enabling transcoding for WHIP
+	switch info.InputType {
+	case livekit.IngressInput_WHIP_INPUT:
+		b := !info.BypassTranscoding
+		info.EnableTranscoding = &b
+	default:
+		t := true
+		info.EnableTranscoding = &t
+	}
 }
 
 func getLoggerFields(info *livekit.IngressInfo, loggingFields map[string]string) []interface{} {

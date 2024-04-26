@@ -139,7 +139,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 	}
 
 	var rpcServer rpc.IngressHandlerServer
-	if p.BypassTranscoding {
+	if !*p.EnableTranscoding {
 		// RPC is handled in the handler process when transcoding
 
 		rpcServer, err = rpc.NewIngressHandlerServer(ihs, s.bus)
@@ -162,14 +162,14 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			p.SendStateUpdate(ctx)
 
-			if p.BypassTranscoding {
+			if !*p.EnableTranscoding {
 				DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo)
 			}
 			span.RecordError(err)
 			return nil
 		}
 
-		if p.BypassTranscoding {
+		if !*p.EnableTranscoding {
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
 			p.SendStateUpdate(ctx)
 
@@ -196,7 +196,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 		return stats
 	}
 
-	if p.BypassTranscoding {
+	if !*p.EnableTranscoding {
 		ended = func(err error) {
 			ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ended")
 			defer span.End()
