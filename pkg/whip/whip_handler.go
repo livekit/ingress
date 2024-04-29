@@ -107,6 +107,8 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 		SDP:  sdpOffer,
 	}
 
+	h.logger.Infow("received SDP offer", "offer", sdpOffer, "transcoding", *p.EnableTranscoding, "simulcast", len(h.simulcastLayers) != 0, "params", p)
+
 	h.expectedTrackCount, err = h.validateOfferAndGetExpectedTrackCount(offer)
 	if err != nil {
 		return "", err
@@ -418,6 +420,7 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 	var th WhipTrackHandler
 	var err error
 	if !*h.params.EnableTranscoding {
+		h.logger.Infow("creating SDK whip track handler without transcoding", "trackID", track.ID(), "kind", kind, "quality", trackQuality)
 		th, err = NewSDKWhipTrackHandler(logger, track, trackQuality, receiver, h.writePLI, h.writeRTCPUpstream)
 		if err != nil {
 			logger.Warnw("failed creating SDK whip track handler", err)
