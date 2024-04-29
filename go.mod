@@ -1,8 +1,8 @@
 module github.com/livekit/ingress
 
-go 1.21
+go 1.22
 
-toolchain go1.21.4
+toolchain go1.22.2
 
 require (
 	github.com/Eyevinn/mp4ff v0.42.0
@@ -13,16 +13,16 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
-	github.com/livekit/mediatransportutil v0.0.0-20240406063423-a67d961689df
-	github.com/livekit/protocol v1.12.1-0.20240416154343-2d633a51d825
+	github.com/livekit/mediatransportutil v0.0.0-20240416023643-881d3dc5423e
+	github.com/livekit/protocol v1.14.0
 	github.com/livekit/psrpc v0.5.3-0.20240403150641-811331b106d9
-	github.com/livekit/server-sdk-go/v2 v2.1.1-0.20240405184340-9417bd1f3718
+	github.com/livekit/server-sdk-go/v2 v2.1.2
 	github.com/pion/dtls/v2 v2.2.10
 	github.com/pion/interceptor v0.1.28
 	github.com/pion/rtcp v1.2.14
 	github.com/pion/rtp v1.8.5
 	github.com/pion/sdp/v3 v3.0.9
-	github.com/pion/webrtc/v3 v3.2.37
+	github.com/pion/webrtc/v3 v3.2.38
 	github.com/prometheus/client_golang v1.19.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
@@ -66,11 +66,11 @@ require (
 	github.com/nats-io/nkeys v0.4.7 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pion/datachannel v1.5.5 // indirect
-	github.com/pion/ice/v2 v2.3.13 // indirect
+	github.com/pion/ice/v2 v2.3.15 // indirect
 	github.com/pion/logging v0.2.2 // indirect
 	github.com/pion/mdns v0.0.12 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
-	github.com/pion/sctp v1.8.14 // indirect
+	github.com/pion/sctp v1.8.16 // indirect
 	github.com/pion/srtp/v2 v2.0.18 // indirect
 	github.com/pion/stun v0.6.1 // indirect
 	github.com/pion/transport/v2 v2.2.4 // indirect
@@ -90,11 +90,11 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	go.uber.org/zap/exp v0.2.0 // indirect
-	golang.org/x/crypto v0.21.0 // indirect
+	golang.org/x/crypto v0.22.0 // indirect
 	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8 // indirect
-	golang.org/x/net v0.22.0 // indirect
-	golang.org/x/sync v0.6.0 // indirect
-	golang.org/x/sys v0.18.0 // indirect
+	golang.org/x/net v0.24.0 // indirect
+	golang.org/x/sync v0.7.0 // indirect
+	golang.org/x/sys v0.19.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240227224415-6ceb2ff114de // indirect
 )

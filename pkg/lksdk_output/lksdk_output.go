@@ -137,7 +137,7 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 		lksdk.WithAutoSubscribe(false),
 	}
 
-	if p.BypassTranscoding {
+	if !*p.EnableTranscoding {
 		opts = append(opts, lksdk.WithInterceptors([]interceptor.Factory{}))
 	} else {
 		var br uint32
