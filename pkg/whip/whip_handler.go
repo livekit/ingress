@@ -16,7 +16,9 @@ package whip
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -159,7 +161,11 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 
 	sdpAnswer = addICEToAnswer(sdpAnswer)
 
-	return sdpAnswer, nil
+	filteredAnswer := filterVP8IfPossible(sdpAnswer)
+
+	h.logger.Infow("filtered SDP answer", "filteredAnswer", filteredAnswer)
+
+	return filteredAnswer, nil
 }
 
 func (h *whipHandler) Start(ctx context.Context) (map[types.StreamKind]string, error) {
@@ -382,7 +388,6 @@ func (h *whipHandler) getSDPAnswer(ctx context.Context, offer *webrtc.SessionDes
 
 	sdpAnswer := h.pc.LocalDescription().SDP
 	h.logger.Infow("created SDP answer from Local Description", "answer", sdpAnswer)
-	sdpAnswer = addICEToAnswer(sdpAnswer)
 
 	return sdpAnswer, nil
 }
@@ -705,6 +710,24 @@ func (h *whipHandler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHI
 	h.Close()
 
 	return &google_protobuf2.Empty{}, nil
+}
+
+func filterVP8IfPossible(sdp string) string {
+	// If the SDP does not contain H264, return the original SDP
+	if !strings.Contains(sdp, "H264") {
+		return sdp
+	}
+
+	getVP8Number := regexp.MustCompile(`(?:[a=rtpmap:])([0-9]+)(?:[\s+VP8])`)
+	num := strings.TrimSpace(getVP8Number.FindString(sdp))
+	if num == "" {
+		return sdp
+	}
+
+	line := fmt.Sprintf(`a=.*%s.*([\n|\r]+|\z)`, num)
+	replaceVP8 := regexp.MustCompile(line)
+
+	return replaceVP8.ReplaceAllString(sdp, "")
 }
 
 func addICEToAnswer(sdp string) string {
