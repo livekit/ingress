@@ -68,6 +68,8 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPs
 		return nil
 	}
 
+	tr := true
+
 	info := &livekit.IngressInfo{
 		IngressId:           "ingress_id",
 		InputType:           livekit.IngressInput_WHIP_INPUT,
@@ -78,6 +80,7 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPs
 		Reusable:            true,
 		StreamKey:           "ingress-test",
 		Url:                 "http://localhost:8080/w",
+		EnableTranscoding:   &tr,
 		Audio: &livekit.IngressAudioOptions{
 			Name:   "audio",
 			Source: 0,
