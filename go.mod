@@ -13,9 +13,9 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
-	github.com/livekit/mediatransportutil v0.0.0-20240416023643-881d3dc5423e
-	github.com/livekit/protocol v1.14.0
-	github.com/livekit/psrpc v0.5.3-0.20240403150641-811331b106d9
+	github.com/livekit/mediatransportutil v0.0.0-20240501132628-6105557bbb9a
+	github.com/livekit/protocol v1.15.0
+	github.com/livekit/psrpc v0.5.3-0.20240426045048-8ba067a45715
 	github.com/livekit/server-sdk-go/v2 v2.1.2
 	github.com/pion/dtls/v2 v2.2.10
 	github.com/pion/interceptor v0.1.28
