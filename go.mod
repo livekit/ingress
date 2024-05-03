@@ -5,7 +5,7 @@ go 1.22
 toolchain go1.22.2
 
 require (
-	github.com/Eyevinn/mp4ff v0.42.0
+	github.com/Eyevinn/mp4ff v0.44.0
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
 	github.com/frostbyte73/core v0.0.10
 	github.com/go-gst/go-glib v0.0.0-20231207075824-6d6aaf082c65
@@ -17,21 +17,21 @@ require (
 	github.com/livekit/protocol v1.15.0
 	github.com/livekit/psrpc v0.5.3-0.20240426045048-8ba067a45715
 	github.com/livekit/server-sdk-go/v2 v2.1.2
-	github.com/pion/dtls/v2 v2.2.10
-	github.com/pion/interceptor v0.1.28
+	github.com/pion/dtls/v2 v2.2.11
+	github.com/pion/interceptor v0.1.29
 	github.com/pion/rtcp v1.2.14
-	github.com/pion/rtp v1.8.5
+	github.com/pion/rtp v1.8.6
 	github.com/pion/sdp/v3 v3.0.9
-	github.com/pion/webrtc/v3 v3.2.38
+	github.com/pion/webrtc/v3 v3.2.40
 	github.com/prometheus/client_golang v1.19.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
-	github.com/urfave/cli/v2 v2.27.1
+	github.com/urfave/cli/v2 v2.27.2
 	github.com/yutopp/go-flv v0.3.1
 	go.uber.org/atomic v1.11.0
 	golang.org/x/image v0.15.0
 	google.golang.org/grpc v1.63.2
-	google.golang.org/protobuf v1.33.0
+	google.golang.org/protobuf v1.34.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -40,7 +40,7 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
-	github.com/cpuguy83/go-md2man/v2 v2.0.2 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/eapache/channels v1.1.0 // indirect
@@ -66,7 +66,7 @@ require (
 	github.com/nats-io/nkeys v0.4.7 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pion/datachannel v1.5.5 // indirect
-	github.com/pion/ice/v2 v2.3.15 // indirect
+	github.com/pion/ice/v2 v2.3.24 // indirect
 	github.com/pion/logging v0.2.2 // indirect
 	github.com/pion/mdns v0.0.12 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
@@ -84,7 +84,7 @@ require (
 	github.com/redis/go-redis/v9 v9.5.1 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/twitchtv/twirp v8.1.3+incompatible // indirect
-	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673 // indirect
+	github.com/xrash/smetrics v0.0.0-20240312152122-5f08fbb34913 // indirect
 	github.com/yutopp/go-amf0 v0.1.0 // indirect
 	github.com/zeebo/xxh3 v1.0.2 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
