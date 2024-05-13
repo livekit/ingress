@@ -15,6 +15,7 @@
 package whip
 
 import (
+	"bufio"
 	"context"
 	"io"
 	"strings"
@@ -317,7 +318,7 @@ func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnect
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		h.logger.Infow("Peer Connection State changed", "state", state.String())
 
-		if state >= webrtc.PeerConnectionStateDisconnected {
+		if state >= webrtc.PeerConnectionStateFailed {
 			h.closeOnce.Do(func() {
 				h.sync.End()
 
@@ -695,4 +696,57 @@ func (h *whipHandler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHI
 	h.Close()
 
 	return &google_protobuf2.Empty{}, nil
+}
+
+func (h *whipHandler) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
+	_, span := tracer.Start(ctx, "whipHandler.ICERestartWHIPResource")
+	defer span.End()
+
+	if h.pc == nil {
+		return nil, errors.ErrIngressNotFound
+	}
+
+	remoteDescription := h.pc.CurrentRemoteDescription()
+	if remoteDescription == nil {
+		return nil, errors.ErrIngressNotFound
+	}
+
+	// Replace the current remote description with the values from remote
+	newRemoteDescription, err := replaceICEDetails(remoteDescription.SDP, req.UserFragment, req.Password)
+	if err != nil {
+		return nil, errors.ErrIngressNotFound
+	}
+	remoteDescription.SDP = newRemoteDescription
+
+	if err := h.pc.SetRemoteDescription(*remoteDescription); err != nil {
+		return nil, errors.ErrIngressNotFound
+	}
+
+	answer, err := h.pc.CreateAnswer(nil)
+	if err != nil {
+		return nil, errors.ErrIngressNotFound
+	}
+
+	gatherComplete := webrtc.GatheringCompletePromise(h.pc)
+	if err = h.pc.SetLocalDescription(answer); err != nil {
+		return nil, errors.ErrIngressNotFound
+	}
+	<-gatherComplete
+
+	// Discard all `a=` lines that aren't ICE related
+	// "WHIP does not support renegotiation of non-ICE related SDP information"
+	//
+	// https://www.ietf.org/archive/id/draft-ietf-wish-whip-14.html#name-ice-restarts
+	var trickleIceSdpfrag strings.Builder
+	scanner := bufio.NewScanner(strings.NewReader(h.pc.LocalDescription().SDP))
+	for scanner.Scan() {
+		l := scanner.Text()
+		if strings.HasPrefix(l, "a=") && !strings.HasPrefix(l, "a=ice-pwd") && !strings.HasPrefix(l, "a=ice-ufrag") && !strings.HasPrefix(l, "a=candidate") {
+			continue
+		}
+
+		trickleIceSdpfrag.WriteString(l + "\n")
+	}
+
+	return &rpc.ICERestartWHIPResourceResponse{TrickleIceSdpfrag: trickleIceSdpfrag.String()}, nil
 }

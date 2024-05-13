@@ -162,6 +162,13 @@ func (h *Handler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPRes
 	return &google_protobuf2.Empty{}, nil
 }
 
+func (h *Handler) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
+	_, span := tracer.Start(ctx, "Handler.ICERestartWHIPResource")
+	defer span.End()
+
+	return &rpc.ICERestartWHIPResourceResponse{}, nil
+}
+
 func (h *Handler) GetPProf(ctx context.Context, req *ipc.PProfRequest) (*ipc.PProfResponse, error) {
 	ctx, span := tracer.Start(ctx, "Handler.GetPProf")
 	defer span.End()

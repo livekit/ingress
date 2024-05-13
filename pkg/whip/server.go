@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"hash/crc32"
 	"io"
 	"net/http"
 	"strings"
@@ -31,6 +32,7 @@ import (
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
+
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/utils"
@@ -151,7 +153,61 @@ func (s *WHIPServer) Start(
 
 	// Trickle, ICE Restart unimplemented for now
 	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotImplemented)
+		vars := mux.Vars(r)
+		streamKey := vars["stream_key"]
+		resourceID := vars["resource_id"]
+
+		logger.Infow("handling ICE Restart request", "resourceID", resourceID)
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+
+		if r.Header.Get("If-Match") != "*" {
+			logger.Warnw("WHIP ICE Restart must have If-Match='*'", err, "streamKey", streamKey, "resourceID", resourceID)
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte("ICE Restart Request must have If-Match='*' Header"))
+			return
+		}
+
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			logger.Warnw("WHIP ICE Restart failed to read body", err, "streamKey", streamKey, "resourceID", resourceID)
+			s.handleError(errors.ErrInvalidWHIPRestartRequest, w)
+			return
+		}
+
+		// Only extract the ufrag/pwd and candidates from the request
+		// "WHIP does not support renegotiation of non-ICE related SDP information"
+		//
+		// https://www.ietf.org/archive/id/draft-ietf-wish-whip-14.html#name-ice-restarts
+		userFragment, password, err := extractICEDetails(body)
+		if err != nil {
+			logger.Warnw("WHIP ICE Restart failed to unmarshal SDP", err, "streamKey", streamKey, "resourceID", resourceID)
+			s.handleError(errors.ErrInvalidWHIPRestartRequest, w)
+			return
+		}
+
+		if userFragment == "" || password == "" {
+			logger.Warnw("WHIP ICE Restart failed to extract ice-ufrag/ice-pwd", err, "streamKey", streamKey, "resourceID", resourceID)
+			s.handleError(errors.ErrInvalidWHIPRestartRequest, w)
+			return
+		}
+
+		resp, err := s.rpcClient.ICERestartWHIPResource(s.ctx, resourceID, &rpc.ICERestartWHIPResourceRequest{
+			UserFragment: userFragment,
+			Password:     password,
+			ResourceId:   resourceID,
+			StreamKey:    streamKey,
+		}, psrpc.WithRequestTimeout(5*time.Second))
+		if err == psrpc.ErrNoResponse {
+			s.handleError(errors.ErrIngressNotFound, w)
+			logger.Warnw("WHIP ICE Restart failed no such session", err, "streamKey", streamKey, "resourceID", resourceID)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/trickle-ice-sdpfrag")
+		w.Header().Set("ETag", fmt.Sprintf("%08x", crc32.ChecksumIEEE([]byte(resp.TrickleIceSdpfrag))))
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(resp.TrickleIceSdpfrag))
+
 	}).Methods("PATCH")
 
 	r.HandleFunc("/{app}/{stream_key}/{resource_id}", func(w http.ResponseWriter, r *http.Request) {
@@ -264,6 +320,7 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 	w.Header().Set("Access-Control-Expose-Headers", "Location")
 	w.Header().Set("Content-Type", "application/sdp")
 	w.Header().Set("Location", fmt.Sprintf("/%s/%s/%s", app, streamKey, resourceId))
+	w.Header().Set("ETag", fmt.Sprintf("%08x", crc32.ChecksumIEEE(sdpOffer.Bytes())))
 	w.WriteHeader(http.StatusCreated)
 	_, _ = w.Write([]byte(sdp))
 
