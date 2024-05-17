@@ -531,6 +531,10 @@ func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.I
 		if err := server.RegisterDeleteWHIPResourceTopic(info.State.ResourceId); err != nil {
 			return err
 		}
+		if err := server.RegisterICERestartWHIPResourceTopic(info.State.ResourceId); err != nil {
+			return err
+		}
+
 	}
 
 	return nil
@@ -542,6 +546,7 @@ func DeregisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit
 
 	if info.InputType == livekit.IngressInput_WHIP_INPUT {
 		server.DeregisterDeleteWHIPResourceTopic(info.State.ResourceId)
+		server.DeregisterICERestartWHIPResourceTopic(info.State.ResourceId)
 	}
 }
 

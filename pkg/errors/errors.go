@@ -47,6 +47,7 @@ var (
 	ErrInvalidSimulcast             = psrpc.NewErrorf(psrpc.NotAcceptable, "invalid simulcast configuration")
 	ErrSimulcastTranscode           = psrpc.NewErrorf(psrpc.NotAcceptable, "simulcast is not supported when transcoding")
 	ErrRoomDisconnected             = psrpc.NewErrorf(psrpc.NotAcceptable, "room disonnected")
+	ErrInvalidWHIPRestartRequest    = psrpc.NewErrorf(psrpc.InvalidArgument, "whip restart request was invalid")
 	ErrRoomDisconnectedUnexpectedly = RetryableError{psrpc.NewErrorf(psrpc.Unavailable, "room disonnected unexpectedly")}
 )
 
