@@ -23,14 +23,14 @@ require (
 	github.com/pion/rtp v1.8.6
 	github.com/pion/sdp/v3 v3.0.9
 	github.com/pion/webrtc/v3 v3.2.40
-	github.com/prometheus/client_golang v1.19.0
+	github.com/prometheus/client_golang v1.19.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli/v2 v2.27.2
 	github.com/yutopp/go-flv v0.3.1
 	go.uber.org/atomic v1.11.0
 	golang.org/x/image v0.16.0
-	google.golang.org/grpc v1.63.2
+	google.golang.org/grpc v1.64.0
 	google.golang.org/protobuf v1.34.1
 	gopkg.in/yaml.v3 v3.0.1
 )
