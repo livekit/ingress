@@ -60,6 +60,8 @@ type RelayWhipTrackHandler struct {
 
 	statsLock  sync.Mutex
 	trackStats *stats.MediaTrackStatGatherer
+
+	debugRTPRawBytes map[uint16][]byte
 }
 
 func NewRelayWhipTrackHandler(
@@ -82,15 +84,16 @@ func NewRelayWhipTrackHandler(
 	relaySink := NewRelayMediaSink(logger)
 
 	return &RelayWhipTrackHandler{
-		logger:       logger,
-		remoteTrack:  track,
-		quality:      quality,
-		receiver:     receiver,
-		relaySink:    relaySink,
-		sync:         sync,
-		jb:           jb,
-		onRTCP:       onRTCP,
-		depacketizer: depacketizer,
+		logger:           logger,
+		remoteTrack:      track,
+		quality:          quality,
+		receiver:         receiver,
+		relaySink:        relaySink,
+		sync:             sync,
+		jb:               jb,
+		onRTCP:           onRTCP,
+		depacketizer:     depacketizer,
+		debugRTPRawBytes: make(map[uint16][]byte),
 	}, nil
 }
 
@@ -212,10 +215,19 @@ func (t *RelayWhipTrackHandler) processRTPPacket() error {
 
 	_ = t.remoteTrack.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
 
-	pkt, _, err := t.remoteTrack.ReadRTP()
+	b := make([]byte, 1460)
+
+	i, _, err := t.remoteTrack.Read(b)
 	if err != nil {
 		return err
 	}
+
+	pkt = &rtp.Packet{}
+	if err := pkt.Unmarshal(b[:i]); err != nil {
+		return err
+	}
+
+	t.debugRTPRawBytes[pkt.SequenceNumber] = b[:i]
 
 	return t.pushRTP(pkt)
 }
@@ -238,6 +250,9 @@ func (t *RelayWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
 		var err error
 		var buffer bytes.Buffer // TODO reuse the same buffer across calls, after resetting it if buffer allocation is a performane bottleneck
 		for _, pkt := range pkts {
+			db := t.debugRTPRawBytes[pkt.SequenceNumber]
+			delete(t.debugRTPRawBytes, pkt.SequenceNumber)
+
 			ts, err = t.sync.GetPTS(pkt)
 			switch err {
 			case nil, synchronizer.ErrBackwardsPTS:
@@ -270,7 +285,7 @@ func (t *RelayWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
 
 			buf, err := t.depacketizer.Unmarshal(pkt.Payload)
 			if err != nil {
-				logger.Warnw("failed unmarshalling RTP payload", err, "pkt", pkt, "payload", pkt.Payload[:min(len(pkt.Payload), 20)])
+				t.logger.Warnw("failed unmarshalling RTP payload", err, "pkt", pkt, "payload", pkt.Payload, "rawBytes", db, "header", pkt.Header)
 				return err
 			}
 
