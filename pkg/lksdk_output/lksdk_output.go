@@ -302,7 +302,9 @@ func (s *LKSDKOutput) closeOutput() {
 	// only close the outputs once
 	s.outputs = nil
 
-	s.room.Disconnect()
+	if s.room != nil {
+		s.room.Disconnect()
+	}
 }
 
 func (s *LKSDKOutput) WriteRTCP(pkts []rtcp.Packet) error {
