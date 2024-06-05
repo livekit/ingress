@@ -270,7 +270,7 @@ func (t *RelayWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
 
 			buf, err := t.depacketizer.Unmarshal(pkt.Payload)
 			if err != nil {
-				logger.Warnw("failed unmarshalling RTP payload", err, "pkt", pkt, "payload", pkt.Payload[:min(len(pkt.Payload), 20)])
+				t.logger.Warnw("failed unmarshalling RTP payload", err, "pkt", pkt, "payload", pkt.Payload[:min(len(pkt.Payload), 20)])
 				return err
 			}
 
