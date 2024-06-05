@@ -514,7 +514,7 @@ func (h *whipHandler) runSession(ctx context.Context) error {
 	for td, th := range h.trackHandlers {
 		err := th.Start(func(err error) {
 			h.logger.Infow("track handler done", "error", err, "kind", td.Kind, "quality", td.Quality)
-			// cancel all remaining trak handlers
+			// cancel all remaining track handlers
 			h.closeTrackHandlers()
 
 			result <- err
