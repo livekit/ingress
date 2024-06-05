@@ -76,7 +76,7 @@ func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), stat
 			}
 		}()
 
-		sdkOut, err := lksdk_output.NewLKSDKOutput(ctx, p)
+		sdkOut, err := lksdk_output.NewLKSDKOutput(ctx, onFailure, p)
 		if err != nil {
 			return
 		}

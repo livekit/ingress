@@ -93,7 +93,7 @@ type LKSDKOutput struct {
 	outputs []SampleProvider
 }
 
-func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error) {
+func NewLKSDKOutput(ctx context.Context, onDisconnected func(), p *params.Params) (*LKSDKOutput, error) {
 	ctx, span := tracer.Start(ctx, "lksdk.NewLKSDKOutput")
 	defer span.End()
 
@@ -131,6 +131,10 @@ func NewLKSDKOutput(ctx context.Context, p *params.Params) (*LKSDKOutput, error)
 		}
 
 		s.closeOutput()
+
+		if onDisconnected != nil {
+			onDisconnected()
+		}
 	}
 
 	opts := []lksdk.ConnectOption{
