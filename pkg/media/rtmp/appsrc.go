@@ -76,7 +76,13 @@ func (s *RTMPRelaySource) Start(ctx context.Context) error {
 	s.result = make(chan error, 1)
 
 	relayUrl := fmt.Sprintf("%s?token=%s", s.params.RelayUrl, s.params.RelayToken)
-	resp, err := http.Get(relayUrl)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", relayUrl, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	switch {
 	case err != nil:
 		return err

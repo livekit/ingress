@@ -481,7 +481,7 @@ func (h *whipHandler) runSession(ctx context.Context) error {
 	var sdkOutput *lksdk_output.LKSDKOutput
 
 	if !*h.params.EnableTranscoding {
-		sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, h.params)
+		sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, nil, h.params)
 		if err != nil {
 			return err
 		}
