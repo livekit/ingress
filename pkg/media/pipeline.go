@@ -17,6 +17,7 @@ package media
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/frostbyte73/core"
@@ -48,7 +49,7 @@ type Pipeline struct {
 	input    *Input
 
 	closed core.Fuse
-	cancel func()
+	cancel atomic.Pointer[context.CancelFunc]
 
 	pipelineErr chan error
 }
@@ -85,8 +86,8 @@ func New(ctx context.Context, conf *config.Config, params *params.Params, g *sta
 	}
 
 	sink, err := NewWebRTCSink(ctx, params, func() {
-		if p.cancel != nil {
-			p.cancel()
+		if cancel := p.cancel.Load(); cancel != nil {
+			(*cancel)()
 		}
 
 		if p.loop != nil {
@@ -165,8 +166,10 @@ func (p *Pipeline) Run(ctx context.Context) error {
 	ctx, span := tracer.Start(ctx, "Pipeline.Run")
 	defer span.End()
 
-	ctx, p.cancel = context.WithCancel(ctx)
-	defer p.cancel()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	p.cancel.Store(&cancel)
 
 	var err error
 
@@ -283,8 +286,8 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 	p.closed.Once(func() {
 		logger.Debugw("closing pipeline")
 
-		if p.cancel != nil {
-			p.cancel()
+		if cancel := p.cancel.Load(); cancel != nil {
+			(*cancel)()
 		}
 
 		c := make(chan struct{})
