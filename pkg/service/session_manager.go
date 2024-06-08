@@ -23,6 +23,7 @@ import (
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/rpc"
 )
 
 type sessionRecord struct {
@@ -114,13 +115,17 @@ func (sm *SessionManager) IsIdle() bool {
 	return len(sm.sessions) == 0
 }
 
-func (sm *SessionManager) ListIngress() []string {
+func (sm *SessionManager) ListIngress() []*rpc.IngressSession {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 
-	ingressIDs := make([]string, 0, len(sm.sessions))
+	ingressIDs := make([]*rpc.IngressSession, 0, len(sm.sessions))
 	for _, r := range sm.sessions {
-		ingressIDs = append(ingressIDs, r.info.IngressId)
+		startedAt := int64(0)
+		if r.info.State != nil {
+			startedAt = r.info.State.StartedAt
+		}
+		ingressIDs = append(ingressIDs, &rpc.IngressSession{IngressId: r.info.IngressId, StartedAt: startedAt})
 	}
 	return ingressIDs
 }

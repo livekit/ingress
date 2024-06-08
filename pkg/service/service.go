@@ -446,7 +446,7 @@ func (s *Service) Stop(kill bool) {
 	}
 }
 
-func (s *Service) ListIngress() []string {
+func (s *Service) ListIngress() []*rpc.IngressSession {
 	return s.sm.ListIngress()
 }
 
@@ -454,8 +454,16 @@ func (s *Service) ListActiveIngress(ctx context.Context, _ *rpc.ListActiveIngres
 	_, span := tracer.Start(ctx, "Service.ListActiveIngress")
 	defer span.End()
 
+	sessions := s.ListIngress()
+	ids := make([]string, 0, len(sessions))
+	for _, s := range sessions {
+		// backward compatiblity
+		ids = append(ids, s.IngressId)
+	}
+
 	return &rpc.ListActiveIngressResponse{
-		IngressIds: s.ListIngress(),
+		IngressIds:      ids,
+		IngressSessions: sessions,
 	}, nil
 }
 
