@@ -561,3 +561,11 @@ func DeregisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit
 func RegisterListIngress(topic string, srv rpc.IngressInternalServer) error {
 	return srv.RegisterListActiveIngressTopic(topic)
 }
+
+func registerKillIngressSession(ingressId string, startedAt int64, srv rpc.IngressInternalServer) error {
+	return srv.RegisterKillIngressSessionTopic(ingressId, fmt.Sprint(startedAt))
+}
+
+func deregisterKillIngressSession(ingressId string, startedAt int64, srv rpc.IngressInternalServer) {
+	return srv.DeregisterKillIngressSessionTopic(ingressId, fmt.Sprint(startedAt))
+}
