@@ -22,6 +22,7 @@ import (
 	"path"
 	"sync"
 	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -77,8 +78,27 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 	defer span.End()
 
 	h := &process{
-		info:          p.IngressInfo,
-		sessionCloser: closeSession,
+		info: p.IngressInfo,
+		sessionCloser: func(ctx context.Context) {
+			if closeSession != nil {
+				closeSession(ctx)
+			}
+
+			go func() {
+				time.Sleep(time.Second)
+
+				s.mu.Lock()
+				h := s.activeHandlers[p.State.ResourceId]
+
+				if !h.closed.IsBroken() && h.cmd != nil {
+					logger.Infow("killing handler process still present after termination was requested", "ingressID", h.info.IngressId, "resourceID", p.State.ResourceId, "startedAt", p.State.StartedAt)
+					if err := h.cmd.Process.Signal(syscall.SIGKILL); err != nil {
+						logger.Infow("failed to kill process", "error", err, "ingressID", h.info.IngressId)
+					}
+				}
+				s.mu.Unlock()
+			}()
+		},
 	}
 
 	s.sm.IngressStarted(p.IngressInfo, h)
@@ -106,7 +126,7 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 
 	defer func() {
 		h.closed.Break()
-		s.sm.IngressEnded(h.info)
+		s.sm.IngressEnded(h.info.State.ResourceId)
 
 		if p.TmpDir != "" {
 			os.RemoveAll(p.TmpDir)

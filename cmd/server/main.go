@@ -138,18 +138,12 @@ func runService(c *cli.Context) error {
 		whipsrv = whip.NewWHIPServer(psrpcWHIPClient)
 	}
 
-	svc := service.NewService(conf, psrpcClient, bus, rtmpsrv, whipsrv, service.NewCmd)
-
-	srv, err := rpc.NewIngressInternalServer(svc, bus)
+	svc, err := service.NewService(conf, psrpcClient, bus, rtmpsrv, whipsrv, service.NewCmd, "")
 	if err != nil {
 		return err
 	}
 
 	svc.StartDebugHandlers()
-
-	if err = service.RegisterListIngress("", srv); err != nil {
-		return err
-	}
 
 	err = setupHealthHandlers(conf, svc)
 	if err != nil {

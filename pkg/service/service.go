@@ -26,6 +26,7 @@ import (
 
 	"github.com/frostbyte73/core"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
@@ -64,6 +65,7 @@ type Service struct {
 	rtmpSrv *rtmp.RTMPServer
 
 	psrpcClient rpc.IOInfoClient
+	rpcSrv      rpc.IngressInternalServer
 	bus         psrpc.MessageBus
 
 	promServer *http.Server
@@ -72,21 +74,32 @@ type Service struct {
 	shutdown core.Fuse
 }
 
-func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, rtmpSrv *rtmp.RTMPServer, whipSrv *whip.WHIPServer, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) *Service {
+func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, rtmpSrv *rtmp.RTMPServer, whipSrv *whip.WHIPServer, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error), listIngressTopic string) (*Service, error) {
 	monitor := stats.NewMonitor()
-	sm := NewSessionManager(monitor)
 
 	s := &Service{
 		conf:        conf,
 		monitor:     monitor,
-		sm:          sm,
-		manager:     NewProcessManager(sm, newCmd),
 		whipSrv:     whipSrv,
 		rtmpSrv:     rtmpSrv,
 		psrpcClient: psrpcClient,
 		bus:         bus,
 	}
 
+	srv, err := rpc.NewIngressInternalServer(s, bus)
+	if err != nil {
+		return nil, err
+	}
+
+	err = srv.RegisterListActiveIngressTopic(listIngressTopic)
+	if err != nil {
+		return nil, err
+	}
+	s.rpcSrv = srv
+
+	s.sm = NewSessionManager(monitor, srv)
+
+	s.manager = NewProcessManager(s.sm, newCmd)
 	s.isActive.Store(true)
 
 	s.manager.onFatalError(func(info *livekit.IngressInfo, err error) {
@@ -102,7 +115,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		}
 	}
 
-	return s
+	return s, nil
 }
 
 func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error) {
@@ -209,7 +222,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			}
 
 			p.SendStateUpdate(ctx)
-			s.sm.IngressEnded(p.IngressInfo)
+			s.sm.IngressEnded(p.IngressInfo.State.ResourceId)
 			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo)
 		}
 	}
@@ -479,6 +492,12 @@ func (s *Service) StartIngressAffinity(ctx context.Context, req *rpc.StartIngres
 	return 1
 }
 
+func (s *Service) KillIngressSession(ctx context.Context, req *rpc.KillIngressSessionRequest) (*emptypb.Empty, error) {
+	s.sm.IngressEnded(req.Session.ResourceId)
+
+	return &emptypb.Empty{}, nil
+}
+
 func (s *Service) GetHealthHandlers() whip.HealthHandlers {
 	return whip.HealthHandlers{
 		"/health":       http.HandlerFunc(s.HealthHandler),
@@ -556,16 +575,4 @@ func DeregisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit
 		server.DeregisterDeleteWHIPResourceTopic(info.State.ResourceId)
 		server.DeregisterICERestartWHIPResourceTopic(info.State.ResourceId)
 	}
-}
-
-func RegisterListIngress(topic string, srv rpc.IngressInternalServer) error {
-	return srv.RegisterListActiveIngressTopic(topic)
-}
-
-func registerKillIngressSession(ingressId string, startedAt int64, srv rpc.IngressInternalServer) error {
-	return srv.RegisterKillIngressSessionTopic(ingressId, fmt.Sprint(startedAt))
-}
-
-func deregisterKillIngressSession(ingressId string, startedAt int64, srv rpc.IngressInternalServer) {
-	return srv.DeregisterKillIngressSessionTopic(ingressId, fmt.Sprint(startedAt))
 }
