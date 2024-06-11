@@ -24,7 +24,6 @@ import (
 	"github.com/go-gst/go-gst/gst"
 	"github.com/go-gst/go-gst/gst/app"
 	"github.com/pion/webrtc/v3/pkg/media"
-	"github.com/pion/webrtc/v3/pkg/media/h264reader"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/stats"
@@ -507,56 +506,10 @@ func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 
 	ts := time.Duration(segment.ToRunningTime(gst.FormatTime, uint64(pts)))
 
-	var err error
-	switch e.codec {
-	case livekit.VideoCodec_H264_BASELINE:
-		data := buffer.Bytes()
-
-		var (
-			currentNalType h264reader.NalUnitType
-		)
-		nalStart := -1
-		zeroes := 0
-
-	duration_loop:
-		for i, b := range data {
-			if i == nalStart {
-				// get type of current NAL
-				currentNalType = h264reader.NalUnitType(b & 0x1F)
-				switch currentNalType {
-				case h264reader.NalUnitTypeCodedSliceDataPartitionA,
-					h264reader.NalUnitTypeCodedSliceDataPartitionB,
-					h264reader.NalUnitTypeCodedSliceDataPartitionC,
-					h264reader.NalUnitTypeCodedSliceIdr,
-					h264reader.NalUnitTypeCodedSliceNonIdr:
-					break duration_loop
-				}
-			}
-
-			if b == 0 {
-				zeroes++
-			} else {
-				// NAL separator is either [0 0 0 1] or [0 0 1]
-				if b == 1 && (zeroes > 1) {
-
-					nalStart = i + 1
-				}
-
-				zeroes = 0
-			}
-		}
-		err = e.writeSample(&media.Sample{
-			Data:     buffer.Bytes(),
-			Duration: time.Duration(duration),
-		}, ts)
-
-	case livekit.VideoCodec_VP8:
-		// untested
-		err = e.writeSample(&media.Sample{
-			Data:     buffer.Bytes(),
-			Duration: time.Duration(duration),
-		}, ts)
-	}
+	err := e.writeSample(&media.Sample{
+		Data:     buffer.Bytes(),
+		Duration: time.Duration(duration),
+	}, ts)
 
 	return errors.ErrorToGstFlowReturn(err)
 }
