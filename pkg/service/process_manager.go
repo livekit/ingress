@@ -89,6 +89,7 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 
 				s.mu.Lock()
 				h := s.activeHandlers[p.State.ResourceId]
+				s.mu.Unlock()
 
 				if h != nil && !h.closed.IsBroken() && h.cmd != nil {
 					logger.Infow("killing handler process still present after termination was requested", "ingressID", h.info.IngressId, "resourceID", p.State.ResourceId, "startedAt", p.State.StartedAt)
@@ -96,7 +97,6 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 						logger.Infow("failed to kill process", "error", err, "ingressID", h.info.IngressId)
 					}
 				}
-				s.mu.Unlock()
 			}()
 		},
 	}
