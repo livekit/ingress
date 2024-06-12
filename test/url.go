@@ -33,7 +33,8 @@ import (
 )
 
 func RunURLTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
-	svc := service.NewService(conf.Config, psrpcClient, bus, nil, nil, newCmd)
+	svc, err := service.NewService(conf.Config, psrpcClient, bus, nil, nil, newCmd, "")
+	require.NoError(t, err)
 	svc.StartDebugHandlers()
 
 	go func() {
@@ -45,7 +46,7 @@ func RunURLTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsr
 		svc.Stop(true)
 	})
 
-	_, err := rpc.NewIngressInternalServer(svc, bus)
+	_, err = rpc.NewIngressInternalServer(svc, bus)
 	require.NoError(t, err)
 
 	internalPsrpcClient, err := rpc.NewIngressInternalClient(bus, psrpc.WithClientTimeout(5*time.Second))
