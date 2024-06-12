@@ -90,7 +90,7 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 				s.mu.Lock()
 				h := s.activeHandlers[p.State.ResourceId]
 
-				if !h.closed.IsBroken() && h.cmd != nil {
+				if h != nil && !h.closed.IsBroken() && h.cmd != nil {
 					logger.Infow("killing handler process still present after termination was requested", "ingressID", h.info.IngressId, "resourceID", p.State.ResourceId, "startedAt", p.State.StartedAt)
 					if err := h.cmd.Process.Signal(syscall.SIGKILL); err != nil {
 						logger.Infow("failed to kill process", "error", err, "ingressID", h.info.IngressId)
@@ -169,6 +169,9 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 		case errors.As(err, &exitErr):
 			if exitErr.ProcessState.ExitCode() == 1 {
 				logger.Infow("relaunching handler process after retryable failure")
+			} else if err.Error() == "signal: killed" {
+				logger.Infow("handler killed")
+				return
 			} else {
 				logger.Errorw("unknown handler exit code", err)
 				return
