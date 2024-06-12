@@ -44,13 +44,14 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPs
 	whipsrv := whip.NewWHIPServer(commandPsrpcClient)
 	relay := service.NewRelay(nil, whipsrv)
 
-	svc := service.NewService(conf.Config, psrpcClient, bus, nil, whipsrv, newCmd)
+	svc, err := service.NewService(conf.Config, psrpcClient, bus, nil, whipsrv, newCmd, "")
+	require.NoError(t, err)
 	go func() {
 		err := svc.Run()
 		require.NoError(t, err)
 	}()
 
-	err := whipsrv.Start(conf.Config, svc.HandleWHIPPublishRequest, svc.GetHealthHandlers())
+	err = whipsrv.Start(conf.Config, svc.HandleWHIPPublishRequest, svc.GetHealthHandlers())
 	require.NoError(t, err)
 	err = relay.Start(conf.Config)
 	require.NoError(t, err)
