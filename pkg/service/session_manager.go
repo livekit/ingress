@@ -23,6 +23,7 @@ import (
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/rpc"
 )
 
 type sessionRecord struct {
@@ -34,14 +35,16 @@ type sessionRecord struct {
 
 type SessionManager struct {
 	monitor *stats.Monitor
+	rpcSrv  rpc.IngressInternalServer
 
 	lock     sync.Mutex
 	sessions map[string]*sessionRecord // resourceId -> sessionRecord
 }
 
-func NewSessionManager(monitor *stats.Monitor) *SessionManager {
+func NewSessionManager(monitor *stats.Monitor, rpcSrv rpc.IngressInternalServer) *SessionManager {
 	return &SessionManager{
 		monitor:  monitor,
+		rpcSrv:   rpcSrv,
 		sessions: make(map[string]*sessionRecord),
 	}
 }
@@ -64,23 +67,25 @@ func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI t
 
 	sm.sessions[info.State.ResourceId] = r
 
+	sm.registerKillIngressSession(info.IngressId, info.State.ResourceId)
+
 	sm.monitor.IngressStarted(info)
 }
 
-func (sm *SessionManager) IngressEnded(info *livekit.IngressInfo) {
-	logger.Infow("ingress ended", "ingressID", info.IngressId, "resourceID", info.State.ResourceId)
-
+func (sm *SessionManager) IngressEnded(resourceID string) {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 
-	p := sm.sessions[info.State.ResourceId]
+	p := sm.sessions[resourceID]
 	if p != nil {
-		delete(sm.sessions, info.State.ResourceId)
+		logger.Infow("ingress ended", "ingressID", p.info.IngressId, "resourceID", resourceID)
+
+		sm.deregisterKillIngressSession(p.info.IngressId, resourceID)
+		delete(sm.sessions, p.info.State.ResourceId)
 		p.sessionAPI.CloseSession(context.Background())
 		p.mediaStats.Close()
+		sm.monitor.IngressEnded(p.info)
 	}
-
-	sm.monitor.IngressEnded(info)
 }
 
 func (sm *SessionManager) GetIngressSessionAPI(resourceId string) (types.SessionAPI, error) {
@@ -114,13 +119,25 @@ func (sm *SessionManager) IsIdle() bool {
 	return len(sm.sessions) == 0
 }
 
-func (sm *SessionManager) ListIngress() []string {
+func (sm *SessionManager) ListIngress() []*rpc.IngressSession {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 
-	ingressIDs := make([]string, 0, len(sm.sessions))
+	ingressIDs := make([]*rpc.IngressSession, 0, len(sm.sessions))
 	for _, r := range sm.sessions {
-		ingressIDs = append(ingressIDs, r.info.IngressId)
+		var resourceID string
+		if r.info.State != nil {
+			resourceID = r.info.State.ResourceId
+		}
+		ingressIDs = append(ingressIDs, &rpc.IngressSession{IngressId: r.info.IngressId, ResourceId: resourceID})
 	}
 	return ingressIDs
+}
+
+func (sm *SessionManager) registerKillIngressSession(ingressId string, resourceID string) error {
+	return sm.rpcSrv.RegisterKillIngressSessionTopic(ingressId, resourceID)
+}
+
+func (sm *SessionManager) deregisterKillIngressSession(ingressId string, resourceID string) {
+	sm.rpcSrv.DeregisterKillIngressSessionTopic(ingressId, resourceID)
 }
