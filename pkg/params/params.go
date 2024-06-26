@@ -395,6 +395,8 @@ func (p *Params) SetInputVideoStats(st *ipc.TrackStats) {
 func (p *Params) SendStateUpdate(ctx context.Context) {
 	info := p.CopyInfo()
 
+	fmt.Println("STATE UPDATE", info)
+
 	info.State.UpdatedAt = time.Now().UnixNano()
 
 	_, err := p.psrpcClient.UpdateIngressState(ctx, &rpc.UpdateIngressStateRequest{
