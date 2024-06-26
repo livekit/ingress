@@ -342,6 +342,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 
 	sdpResponse, err := h.Init(ctx, p, sdpOffer)
 	if err != nil {
+		ready(nil, err)
 		return "", "", err
 	}
 
