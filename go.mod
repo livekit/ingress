@@ -8,8 +8,8 @@ require (
 	github.com/Eyevinn/mp4ff v0.44.0
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
 	github.com/frostbyte73/core v0.0.10
-	github.com/go-gst/go-glib v0.0.0-20231207075824-6d6aaf082c65
-	github.com/go-gst/go-gst v0.0.0-20240207190302-04ec17f96d71
+	github.com/go-gst/go-glib v1.1.0
+	github.com/go-gst/go-gst v1.1.0
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
@@ -20,7 +20,8 @@ require (
 	github.com/pion/dtls/v2 v2.2.11
 	github.com/pion/interceptor v0.1.29
 	github.com/pion/rtcp v1.2.14
-	github.com/pion/rtp v1.8.6
+	github.com/pion/rtp v1.8.5
+	github.com/pion/rtp/v2 v2.0.0
 	github.com/pion/sdp/v3 v3.0.9
 	github.com/pion/webrtc/v3 v3.2.40
 	github.com/prometheus/client_golang v1.19.1
