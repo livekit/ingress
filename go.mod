@@ -2,10 +2,10 @@ module github.com/livekit/ingress
 
 go 1.22
 
-toolchain go1.22.3
+toolchain go1.22.4
 
 require (
-	github.com/Eyevinn/mp4ff v0.44.0
+	github.com/Eyevinn/mp4ff v0.45.0
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
 	github.com/frostbyte73/core v0.0.10
 	github.com/go-gst/go-glib v0.0.0-20231207075824-6d6aaf082c65
@@ -22,7 +22,7 @@ require (
 	github.com/pion/rtcp v1.2.14
 	github.com/pion/rtp v1.8.6
 	github.com/pion/sdp/v3 v3.0.9
-	github.com/pion/webrtc/v3 v3.2.40
+	github.com/pion/webrtc/v3 v3.2.43
 	github.com/prometheus/client_golang v1.19.1
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
@@ -31,7 +31,7 @@ require (
 	go.uber.org/atomic v1.11.0
 	golang.org/x/image v0.18.0
 	google.golang.org/grpc v1.64.0
-	google.golang.org/protobuf v1.34.1
+	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 
