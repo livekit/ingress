@@ -63,6 +63,15 @@ func (w *Watchdog) TrackUnbound() {
 	w.updateTimer()
 }
 
+func (w *Watchdog) Stop() {
+	w.trackLock.Lock()
+	defer w.trackLock.Unlock()
+
+	if w.timer != nil {
+		w.timer.Stop()
+	}
+}
+
 // Must be called locked
 func (w *Watchdog) updateTimer() {
 	timerMustBeActive := w.boundTrackCount < w.expectedTrackCount
