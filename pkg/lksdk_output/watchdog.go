@@ -27,12 +27,14 @@ type Watchdog struct {
 	expectedTrackCount int
 	boundTrackCount    int
 	timer              *time.Timer
+	started            bool
 }
 
 func NewWatchdog(onFire func(), deadline time.Duration) *Watchdog {
 	return &Watchdog{
 		onFire:   onFire,
 		deadline: deadline,
+		started:  true,
 	}
 }
 
@@ -67,14 +69,14 @@ func (w *Watchdog) Stop() {
 	w.trackLock.Lock()
 	defer w.trackLock.Unlock()
 
-	if w.timer != nil {
-		w.timer.Stop()
-	}
+	w.started = false
+
+	w.updateTimer()
 }
 
 // Must be called locked
 func (w *Watchdog) updateTimer() {
-	timerMustBeActive := w.boundTrackCount < w.expectedTrackCount
+	timerMustBeActive := w.started && w.boundTrackCount < w.expectedTrackCount
 
 	if w.timer == nil && timerMustBeActive {
 		w.timer = time.AfterFunc(w.deadline, w.onFire)
