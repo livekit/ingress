@@ -306,6 +306,10 @@ func (s *LKSDKOutput) closeOutput() {
 	// only close the outputs once
 	s.outputs = nil
 
+	if s.watchdog != nil {
+		s.watchdog.Stop()
+	}
+
 	if s.room != nil {
 		s.room.Disconnect()
 	}
