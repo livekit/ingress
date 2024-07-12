@@ -5,7 +5,7 @@ go 1.22
 toolchain go1.22.5
 
 require (
-	github.com/Eyevinn/mp4ff v0.45.0
+	github.com/Eyevinn/mp4ff v0.45.1
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
 	github.com/frostbyte73/core v0.0.10
 	github.com/go-gst/go-glib v1.1.0

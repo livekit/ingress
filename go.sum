@@ -1,7 +1,7 @@
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.33.0-20240401165935-b983156c5e99.1 h1:2IGhRovxlsOIQgx2ekZWo4wTPAYpck41+18ICxs37is=
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.33.0-20240401165935-b983156c5e99.1/go.mod h1:Tgn5bgL220vkFOI0KPStlcClPeOJzAv4uT+V8JXGUnw=
-github.com/Eyevinn/mp4ff v0.45.0 h1:Wg172GbrEGczvGFHAqhrUwhNahmD+ezYL1Z+7mQHoZw=
-github.com/Eyevinn/mp4ff v0.45.0/go.mod h1:hJNUUqOBryLAzUW9wpCJyw2HaI+TCd2rUPhafoS5lgg=
+github.com/Eyevinn/mp4ff v0.45.1 h1:Hlx8ZUu8agN7XrHVcZAGIa+dVZ0UW/g/SLv63Pm/+w0=
+github.com/Eyevinn/mp4ff v0.45.1/go.mod h1:hJNUUqOBryLAzUW9wpCJyw2HaI+TCd2rUPhafoS5lgg=
 github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 h1:xlwdaKcTNVW4PtpQb8aKA4Pjy0CdJHEqvFbAnvR5m2g=
 github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794/go.mod h1:7e+I0LQFUI9AXWxOfsQROs9xPhoJtbsyWcjJqDd4KPY=
 github.com/antlr4-go/antlr/v4 v4.13.0 h1:lxCg3LAv+EUK6t1i0y1V6/SLeUi0eKEKdhQAlS8TVTI=
