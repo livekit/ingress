@@ -1,7 +1,7 @@
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.33.0-20240401165935-b983156c5e99.1 h1:2IGhRovxlsOIQgx2ekZWo4wTPAYpck41+18ICxs37is=
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.33.0-20240401165935-b983156c5e99.1/go.mod h1:Tgn5bgL220vkFOI0KPStlcClPeOJzAv4uT+V8JXGUnw=
-github.com/Eyevinn/mp4ff v0.45.1 h1:Hlx8ZUu8agN7XrHVcZAGIa+dVZ0UW/g/SLv63Pm/+w0=
-github.com/Eyevinn/mp4ff v0.45.1/go.mod h1:hJNUUqOBryLAzUW9wpCJyw2HaI+TCd2rUPhafoS5lgg=
+github.com/Eyevinn/mp4ff v0.46.0 h1:A8oJA4A3C9fDbX38jEw/26utjNdvmRmrO37tVI5pDk0=
+github.com/Eyevinn/mp4ff v0.46.0/go.mod h1:hJNUUqOBryLAzUW9wpCJyw2HaI+TCd2rUPhafoS5lgg=
 github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 h1:xlwdaKcTNVW4PtpQb8aKA4Pjy0CdJHEqvFbAnvR5m2g=
 github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794/go.mod h1:7e+I0LQFUI9AXWxOfsQROs9xPhoJtbsyWcjJqDd4KPY=
 github.com/antlr4-go/antlr/v4 v4.13.0 h1:lxCg3LAv+EUK6t1i0y1V6/SLeUi0eKEKdhQAlS8TVTI=
@@ -37,8 +37,8 @@ github.com/envoyproxy/protoc-gen-validate v1.0.4 h1:gVPz/FMfvh57HdSJQyvBtF00j8JU
 github.com/envoyproxy/protoc-gen-validate v1.0.4/go.mod h1:qys6tmnRsYrQqIhm2bvKZH4Blx/1gTIZ2UKVY1M+Yew=
 github.com/fortytw2/leaktest v1.2.0 h1:cj6GCiwJDH7l3tMHLjZDo0QqPtrXJiWSI9JgpeQKw+Q=
 github.com/fortytw2/leaktest v1.2.0/go.mod h1:jDsjWgpAGjm2CA7WthBh/CdZYEPF31XHquHwclZch5g=
-github.com/frostbyte73/core v0.0.10 h1:D4DQXdPb8ICayz0n75rs4UYTXrUSdxzUfeleuNJORsU=
-github.com/frostbyte73/core v0.0.10/go.mod h1:XsOGqrqe/VEV7+8vJ+3a8qnCIXNbKsoEiu/czs7nrcU=
+github.com/frostbyte73/core v0.0.12 h1:kySA8+Os6eqnPFoExD2T7cehjSAY1MRyIViL0yTy2uc=
+github.com/frostbyte73/core v0.0.12/go.mod h1:XsOGqrqe/VEV7+8vJ+3a8qnCIXNbKsoEiu/czs7nrcU=
 github.com/fsnotify/fsnotify v1.7.0 h1:8JEhPFa5W2WU7YfeZzPNqzMP6Lwt7L2715Ggo0nosvA=
 github.com/fsnotify/fsnotify v1.7.0/go.mod h1:40Bi/Hjc2AVfZrqy+aj+yEI+/bRxZnMJyTJwOpGvigM=
 github.com/gammazero/deque v0.2.1 h1:qSdsbG6pgp6nL7A0+K/B7s12mcCY/5l5SIUpMOl+dC0=
