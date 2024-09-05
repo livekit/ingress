@@ -2,14 +2,14 @@ module github.com/livekit/ingress
 
 go 1.22
 
-toolchain go1.23.0
+toolchain go1.23.1
 
 require (
 	github.com/Eyevinn/mp4ff v0.46.0
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
 	github.com/frostbyte73/core v0.0.12
-	github.com/go-gst/go-glib v1.2.0
-	github.com/go-gst/go-gst v1.2.0
+	github.com/go-gst/go-glib v1.2.1
+	github.com/go-gst/go-gst v1.2.1
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
@@ -18,21 +18,19 @@ require (
 	github.com/livekit/psrpc v0.5.3-0.20240616012458-ac39c8549a0a
 	github.com/livekit/server-sdk-go/v2 v2.2.0
 	github.com/pion/dtls/v2 v2.2.12
-	github.com/pion/dtls/v3 v3.0.2
 	github.com/pion/interceptor v0.1.30
 	github.com/pion/rtcp v1.2.14
-	github.com/pion/rtp v1.8.8
-	github.com/pion/rtp/v2 v2.0.0
+	github.com/pion/rtp v1.8.9
 	github.com/pion/sdp/v3 v3.0.9
 	github.com/pion/webrtc/v3 v3.3.0
-	github.com/prometheus/client_golang v1.20.2
+	github.com/prometheus/client_golang v1.20.3
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.9.0
 	github.com/urfave/cli/v2 v2.27.4
 	github.com/yutopp/go-flv v0.3.1
 	go.uber.org/atomic v1.11.0
-	golang.org/x/image v0.19.0
-	google.golang.org/grpc v1.65.0
+	golang.org/x/image v0.20.0
+	google.golang.org/grpc v1.66.0
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -105,7 +103,7 @@ require (
 	golang.org/x/net v0.27.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
 	golang.org/x/sys v0.22.0 // indirect
-	golang.org/x/text v0.17.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240528184218-531527333157 // indirect
+	golang.org/x/text v0.18.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240604185151-ef581f913117 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240617180043-68d350f18fd4 // indirect
 )
