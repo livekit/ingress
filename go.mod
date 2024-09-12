@@ -4,11 +4,6 @@ go 1.22
 
 toolchain go1.23.1
 
-// Pin go-gst until https://github.com/go-gst/go-gst/issues/123 is fixed
-replace github.com/go-gst/go-glib => github.com/go-gst/go-glib v1.3.0
-
-replace github.com/go-gst/go-gst => github.com/go-gst/go-gst v1.3.0
-
 require (
 	github.com/Eyevinn/mp4ff v0.46.0
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
