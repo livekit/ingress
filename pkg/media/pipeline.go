@@ -48,8 +48,10 @@ type Pipeline struct {
 	sink     *WebRTCSink
 	input    *Input
 
-	closed core.Fuse
-	cancel atomic.Pointer[context.CancelFunc]
+	audioSinkCreated atomic.Bool
+	videoSinkCreated atomic.Bool
+	closed           core.Fuse
+	cancel           atomic.Pointer[context.CancelFunc]
 
 	pipelineErr chan error
 }
@@ -119,6 +121,19 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 }
 
 func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad, param *glib.ParamSpec) {
+	// Keep track of whether we've already created audio/video outputs, and skip
+	// adding more if so
+	switch kind {
+	case types.Audio:
+		if !p.audioSinkCreated.CompareAndSwap(false, true) {
+			return
+		}
+	case types.Video:
+		if !p.videoSinkCreated.CompareAndSwap(false, true) {
+			return
+		}
+	}
+
 	var err error
 
 	// TODO fix go-gst to not create non nil gst.Caps for a NULL native caps pointer?
@@ -139,7 +154,7 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad, para
 		p.SendStateUpdate(context.Background())
 	}()
 
-	bin, err := p.sink.AddTrack(kind, caps.(*gst.Caps))
+	bin, err := p.sink.AddTrack(kind, caps.(*gst.Caps), p.Params)
 	if err != nil {
 		return
 	}

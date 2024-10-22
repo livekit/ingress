@@ -198,7 +198,7 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 	return outputs, nil
 }
 
-func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps) (*gst.Bin, error) {
+func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps, p *params.Params) (*gst.Bin, error) {
 	var bin *gst.Bin
 
 	switch kind {
@@ -218,6 +218,20 @@ func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps) (*gst.Bin, 
 		}
 
 		logger.Infow("source resolution parsed", "width", w, "height", h)
+		// In cases like multi-variant HLS, the initial source resolution may be very low
+		// (e.g. 320x180). Since the input capsfilter element in the output bin will maintain this
+		// resolution, upscale to the highest layer's dimensions to prevent downscaling if we
+		// get a higher resolution variant later.
+		if len(p.VideoEncodingOptions.GetLayers()) > 0 {
+			layerHigh := p.VideoEncodingOptions.GetLayers()[0]
+			lw := int(layerHigh.GetWidth())
+			lh := int(layerHigh.GetHeight())
+			if lw > w || lh > h {
+				w = lw
+				h = lh
+				logger.Infow("max layer resolution greater than source, sizing up", "width", w, "height", h)
+			}
+		}
 
 		outputs, err := s.addVideoTrack(w, h)
 		if err != nil {
