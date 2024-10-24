@@ -180,7 +180,12 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 			var tracks []*lksdk.LocalTrack
 			var pliHandlers []*lksdk_output.RTCPHandler
 
-			tracks, pliHandlers, err = sdkOut.AddVideoTrack(sortedLayers, putils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
+			layers := make([]*livekit.VideoLayer, 0, len(sortedLayers))
+			for _, l := range sortedLayers {
+				layers = append(layers, l.VideoLayer)
+			}
+
+			tracks, pliHandlers, err = sdkOut.AddVideoTrack(layers, putils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))
 			if err != nil {
 				return
 			}
@@ -198,7 +203,7 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 	return outputs, nil
 }
 
-func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps) (*gst.Bin, error) {
+func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps, p *params.Params) (*gst.Bin, error) {
 	var bin *gst.Bin
 
 	switch kind {
@@ -279,29 +284,30 @@ func getResolution(caps *gst.Caps) (w int, h int, err error) {
 	return wObj.(int), hObj.(int), nil
 }
 
-func filterAndSortLayersByQuality(layers []*livekit.VideoLayer, sourceW, sourceH int) []*livekit.VideoLayer {
-	layersByQuality := make(map[livekit.VideoQuality]*livekit.VideoLayer)
+type ScaledVideoLayer struct {
+	*livekit.VideoLayer
+
+	MaxW uint32
+	MaxH uint32
+}
+
+func filterAndSortLayersByQuality(layers []*livekit.VideoLayer, sourceW, sourceH int) []*ScaledVideoLayer {
+	layersByQuality := make(map[livekit.VideoQuality]*ScaledVideoLayer)
 
 	for _, layer := range layers {
-		layersByQuality[layer.Quality] = layer
+		layersByQuality[layer.Quality] = &ScaledVideoLayer{VideoLayer: layer, MaxW: layer.Width, MaxH: layer.Height}
 	}
 
-	var ret []*livekit.VideoLayer
+	var ret []*ScaledVideoLayer
 	for q := livekit.VideoQuality_LOW; q <= livekit.VideoQuality_HIGH; q++ {
 		layer, ok := layersByQuality[q]
 		if !ok {
 			continue
 		}
 
-		applyResolutionToLayer(layer, sourceW, sourceH)
+		applyResolutionToLayer(layer.VideoLayer, sourceW, sourceH)
 
 		ret = append(ret, layer)
-
-		if layer.Width >= uint32(sourceW) && layer.Height >= uint32(sourceH) {
-			// Next quality layer would be duplicate of current one
-			break
-		}
-
 	}
 	return ret
 }
@@ -320,7 +326,7 @@ func applyResolutionToLayer(layer *livekit.VideoLayer, sourceW, sourceH int) {
 		w = uint32((int64(h) * int64(sourceW)) / int64(sourceH))
 	}
 
-	// Roubd up to the next even dimension
+	// Round up to the next even dimension
 	w = ((w + 1) >> 1) << 1
 	h = ((h + 1) >> 1) << 1
 
