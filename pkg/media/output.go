@@ -24,6 +24,7 @@ import (
 	"github.com/go-gst/go-gst/gst"
 	"github.com/go-gst/go-gst/gst/app"
 	"github.com/pion/webrtc/v3/pkg/media"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/stats"
@@ -76,7 +77,7 @@ type AudioOutput struct {
 	codec livekit.AudioCodec
 }
 
-func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *utils.TrackOutputSynchronizer, statsGatherer *stats.LocalMediaStatsGatherer) (*VideoOutput, error) {
+func NewVideoOutput(codec livekit.VideoCodec, layer *ScaledVideoLayer, outputSync *utils.TrackOutputSynchronizer, statsGatherer *stats.LocalMediaStatsGatherer) (*VideoOutput, error) {
 	e, err := newVideoOutput(codec, outputSync)
 	if err != nil {
 		return nil, err
@@ -86,7 +87,7 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 
 	e.trackStatsGatherer = statsGatherer.RegisterTrackStats(fmt.Sprintf("%s.%s", stats.OutputVideo, layer.Quality.String()))
 
-	threadCount := getVideoEncoderThreadCount(layer)
+	threadCount := getVideoEncoderThreadCount(layer.VideoLayer)
 
 	e.logger.Infow("video layer", "width", layer.Width, "height", layer.Height, "threads", threadCount)
 
@@ -131,6 +132,33 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 	if err != nil {
 		return nil, err
 	}
+
+	queueIn.GetStaticPad("sink").AddProbe(gst.PadProbeTypeEventDownstream, func(self *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+		ev := info.GetEvent()
+		if ev.Type() != gst.EventTypeCaps {
+			return gst.PadProbeOK
+		}
+
+		caps := ev.ParseCaps()
+		w, h, err := getResolution(caps)
+		if err != nil {
+			logger.Errorw("input queue caps failed to get resolution", err)
+		}
+
+		l := proto.Clone(layer.VideoLayer).(*livekit.VideoLayer)
+		l.Width = layer.MaxW
+		l.Height = layer.MaxH
+		applyResolutionToLayer(l, w, h)
+
+		err = inputCaps.SetProperty("caps", gst.NewCapsFromString(
+			fmt.Sprintf("video/x-raw,width=%d,height=%d", l.Width, l.Height),
+		))
+		if err != nil {
+			logger.Errorw("failed to set input capsfilter caps", err)
+		}
+
+		return gst.PadProbeOK
+	})
 
 	queueEnc, err := gst.NewElementWithName("queue", fmt.Sprintf("video_%s_enc", layer.Quality.String()))
 	if err != nil {
