@@ -30,7 +30,7 @@ import (
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 type whipAppSource struct {
