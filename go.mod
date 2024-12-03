@@ -1,15 +1,15 @@
 module github.com/livekit/ingress
 
-go 1.23
+go 1.23.1
 
-toolchain go1.23.1
+toolchain go1.23.4
 
 require (
-	github.com/Eyevinn/mp4ff v0.46.0
-	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
+	github.com/Eyevinn/mp4ff v0.47.0
+	github.com/aclements/go-moremath v0.0.0-20241023150245-c8bbc672ef66
 	github.com/frostbyte73/core v0.0.13
-	github.com/go-gst/go-glib v1.3.0
-	github.com/go-gst/go-gst v1.3.0
+	github.com/go-gst/go-glib v1.4.0
+	github.com/go-gst/go-gst v1.4.0
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
@@ -29,7 +29,7 @@ require (
 	github.com/urfave/cli/v2 v2.27.4
 	github.com/yutopp/go-flv v0.3.1
 	go.uber.org/atomic v1.11.0
-	golang.org/x/image v0.20.0
+	golang.org/x/image v0.22.0
 	google.golang.org/grpc v1.68.0
 	google.golang.org/protobuf v1.35.2
 	gopkg.in/yaml.v3 v3.0.1
@@ -44,7 +44,7 @@ require (
 	github.com/bep/debounce v1.2.1 // indirect
 	github.com/bufbuild/protovalidate-go v0.6.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
