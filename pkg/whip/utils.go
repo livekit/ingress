@@ -10,7 +10,7 @@ import (
 	"github.com/pion/rtp"
 	"github.com/pion/rtp/codecs"
 	"github.com/pion/sdp/v3"
-	"github.com/pion/webrtc/v3"
+	"github.com/pion/webrtc/v4"
 )
 
 func createDepacketizer(track *webrtc.TrackRemote) (rtp.Depacketizer, error) {
