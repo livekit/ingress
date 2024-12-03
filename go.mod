@@ -1,15 +1,15 @@
 module github.com/livekit/ingress
 
-go 1.22
+go 1.23.1
 
-toolchain go1.23.1
+toolchain go1.23.4
 
 require (
-	github.com/Eyevinn/mp4ff v0.46.0
-	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794
+	github.com/Eyevinn/mp4ff v0.47.0
+	github.com/aclements/go-moremath v0.0.0-20241023150245-c8bbc672ef66
 	github.com/frostbyte73/core v0.0.13
-	github.com/go-gst/go-glib v1.3.0
-	github.com/go-gst/go-gst v1.3.0
+	github.com/go-gst/go-glib v1.4.0
+	github.com/go-gst/go-gst v1.4.0
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
@@ -18,20 +18,20 @@ require (
 	github.com/livekit/psrpc v0.5.3-0.20240616012458-ac39c8549a0a
 	github.com/livekit/server-sdk-go/v2 v2.2.1
 	github.com/pion/dtls/v2 v2.2.12
-	github.com/pion/interceptor v0.1.30
+	github.com/pion/interceptor v0.1.37
 	github.com/pion/rtcp v1.2.14
 	github.com/pion/rtp v1.8.9
 	github.com/pion/sdp/v3 v3.0.9
-	github.com/pion/webrtc/v3 v3.3.3
-	github.com/prometheus/client_golang v1.20.4
+	github.com/pion/webrtc/v3 v3.3.4
+	github.com/prometheus/client_golang v1.20.5
 	github.com/sirupsen/logrus v1.9.3
-	github.com/stretchr/testify v1.9.0
-	github.com/urfave/cli/v2 v2.27.4
+	github.com/stretchr/testify v1.10.0
+	github.com/urfave/cli/v2 v2.27.5
 	github.com/yutopp/go-flv v0.3.1
 	go.uber.org/atomic v1.11.0
-	golang.org/x/image v0.20.0
-	google.golang.org/grpc v1.66.2
-	google.golang.org/protobuf v1.34.2
+	golang.org/x/image v0.22.0
+	google.golang.org/grpc v1.68.0
+	google.golang.org/protobuf v1.35.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 
@@ -44,7 +44,7 @@ require (
 	github.com/bufbuild/protovalidate-go v0.6.1 // indirect
 	github.com/bufbuild/protoyaml-go v0.1.9 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
-	github.com/cpuguy83/go-md2man/v2 v2.0.4 // indirect
+	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/eapache/channels v1.1.0 // indirect
@@ -72,7 +72,7 @@ require (
 	github.com/nats-io/nkeys v0.4.7 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pion/datachannel v1.5.8 // indirect
-	github.com/pion/ice/v2 v2.3.35 // indirect
+	github.com/pion/ice/v2 v2.3.36 // indirect
 	github.com/pion/logging v0.2.2 // indirect
 	github.com/pion/mdns v0.0.12 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
@@ -98,12 +98,12 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	go.uber.org/zap/exp v0.2.0 // indirect
-	golang.org/x/crypto v0.25.0 // indirect
-	golang.org/x/exp v0.0.0-20240808152545-0cdaa3abc0fa // indirect
-	golang.org/x/net v0.27.0 // indirect
-	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.22.0 // indirect
-	golang.org/x/text v0.18.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240604185151-ef581f913117 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240725223205-93522f1f2a9f // indirect
+	golang.org/x/crypto v0.27.0 // indirect
+	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0 // indirect
+	golang.org/x/net v0.29.0 // indirect
+	golang.org/x/sync v0.9.0 // indirect
+	golang.org/x/sys v0.25.0 // indirect
+	golang.org/x/text v0.20.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240903143218-8af14fe29dc1 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect
 )
