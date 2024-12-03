@@ -89,6 +89,10 @@ func (s *ioServer) GetSIPTrunkAuthentication(context.Context, *rpc.GetSIPTrunkAu
 	return nil, nil
 }
 
+func (s *ioServer) UpdateSIPCallState(context.Context, *rpc.UpdateSIPCallStateRequest) (*emptypb.Empty, error) {
+	return nil, nil
+}
+
 func GetDefaultConfig(t *testing.T) *TestConfig {
 	tc := &TestConfig{
 		Config: &config.Config{
