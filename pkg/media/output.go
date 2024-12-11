@@ -36,7 +36,7 @@ import (
 const (
 	opusFrameSize = 20
 
-	pixelsPerEncoderThread = 640 * 480
+	pixelsPerEncoderThread = 640 * 240
 )
 
 // Output manages GStreamer elements that converts & encodes video to the specification that's
