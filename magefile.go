@@ -107,8 +107,7 @@ func Build() error {
 		gopath = build.Default.GOPATH
 	}
 
-	// return run(fmt.Sprintf("go build -a -o %s/bin/ingress ./cmd/server", gopath))
-	return run(fmt.Sprintf("go build -o %s/bin/ingress ./cmd/server", gopath))
+	return run(fmt.Sprintf("go build -a -o %s/bin/ingress ./cmd/server", gopath))
 }
 
 func Test() error {
