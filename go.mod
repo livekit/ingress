@@ -21,7 +21,7 @@ require (
 	github.com/pion/interceptor v0.1.37
 	github.com/pion/rtcp v1.2.15
 	github.com/pion/rtp v1.8.10
-	github.com/pion/sdp/v3 v3.0.9
+	github.com/pion/sdp/v3 v3.0.10
 	github.com/pion/webrtc/v4 v4.0.7
 	github.com/prometheus/client_golang v1.20.5
 	github.com/sirupsen/logrus v1.9.3
@@ -30,8 +30,8 @@ require (
 	github.com/yutopp/go-flv v0.3.1
 	go.uber.org/atomic v1.11.0
 	golang.org/x/image v0.23.0
-	google.golang.org/grpc v1.69.2
-	google.golang.org/protobuf v1.36.1
+	google.golang.org/grpc v1.69.4
+	google.golang.org/protobuf v1.36.2
 	gopkg.in/yaml.v3 v3.0.1
 )
 
