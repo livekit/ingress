@@ -16,6 +16,7 @@ require (
 	github.com/livekit/mediatransportutil v0.0.0-20241220010243-a2bdee945564
 	github.com/livekit/protocol v1.31.0
 	github.com/livekit/psrpc v0.6.1-0.20241018124827-1efff3d113a8
+	github.com/livekit/server-sdk-go v1.1.8
 	github.com/livekit/server-sdk-go/v2 v2.4.1
 	github.com/pion/dtls/v3 v3.0.4
 	github.com/pion/interceptor v0.1.37
@@ -70,12 +71,15 @@ require (
 	github.com/nats-io/nkeys v0.4.9 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pion/datachannel v1.5.10 // indirect
+	github.com/pion/dtls/v2 v2.2.9 // indirect
+	github.com/pion/ice/v2 v2.3.11 // indirect
 	github.com/pion/ice/v4 v4.0.3 // indirect
 	github.com/pion/logging v0.2.2 // indirect
 	github.com/pion/mdns v0.0.9 // indirect
 	github.com/pion/mdns/v2 v2.0.7 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/pion/sctp v1.8.35 // indirect
+	github.com/pion/srtp/v2 v2.0.18 // indirect
 	github.com/pion/srtp/v3 v3.0.4 // indirect
 	github.com/pion/stun v0.6.1 // indirect
 	github.com/pion/stun/v3 v3.0.0 // indirect
