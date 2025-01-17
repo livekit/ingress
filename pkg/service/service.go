@@ -332,6 +332,10 @@ func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inp
 		ResourceId: resourceId,
 	}
 
+	if info.Enabled != nil && !*info.Enabled {
+		return nil, ingress.ErrIngressDisabled
+	}
+
 	s.confLock.Lock()
 	conf := s.conf
 	s.confLock.Unlock()
