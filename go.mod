@@ -2,7 +2,7 @@ module github.com/livekit/ingress
 
 go 1.23.1
 
-toolchain go1.23.4
+toolchain go1.23.5
 
 require (
 	github.com/Eyevinn/mp4ff v0.47.0
