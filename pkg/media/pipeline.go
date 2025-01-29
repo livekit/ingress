@@ -16,6 +16,7 @@ package media
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -241,7 +242,35 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 	case gst.MessageStreamCollection:
 		p.handleStreamCollectionMessage(msg)
 
-	case gst.MessageTag, gst.MessageStateChanged, gst.MessageLatency, gst.MessageAsyncDone, gst.MessageStreamStatus, gst.MessageElement:
+	case gst.MessageElement:
+		str := msg.GetStructure()
+		if str.Name() != "scte-sit" {
+			return true
+		}
+
+		ts := msg.ParseMpegtsSection()
+		if ts == nil {
+			return true
+		}
+		if ts.SectionType() != gst.MpegtsSectionSCTESIT {
+			return true
+		}
+
+		scteSit := ts.GetSCTESIT()
+		if scteSit == nil {
+			return true
+		}
+
+		if scteSit.SpliceCommandType() != gst.MpegtsSCTESpliceCommandInsert && scteSit.SpliceCommandType() != gst.MpegtsSCTESpliceCommandSchedule {
+			return true
+		}
+
+		splices := scteSit.Splices()
+		for _, sp := range splices {
+			fmt.Println("SPLICE", sp.SpliceEventId(), sp.ProgramSpliceFlag(), sp.OutOfNetworkIndicator(), sp.SpliceImmediateFlag(), sp.ProgramSpliceTime(), sp.ProgramSpliceTimeSpecified(), scteSit.SpliceCommandType())
+		}
+
+	case gst.MessageTag, gst.MessageStateChanged, gst.MessageLatency, gst.MessageAsyncDone, gst.MessageStreamStatus:
 		// ignore
 
 	default:
