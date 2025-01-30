@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/go-gst/go-gst/gst"
@@ -288,6 +289,8 @@ type Splice struct {
 	Immediate             bool
 	OutOfNetworkIndicator bool
 	EventId               uint32
+	EventCancelIndicator  bool
+	RunningTime           time.Duration
 }
 
 func getSplices(ev *gst.Event) []*Splice {
@@ -308,17 +311,35 @@ func getSplices(ev *gst.Event) []*Splice {
 		return nil
 	}
 
-	if scteSit.SpliceCommandType() != gst.MpegtsSCTESpliceCommandInsert && scteSit.SpliceCommandType() != gst.MpegtsSCTESpliceCommandSchedule {
+	if scteSit.SpliceCommandType() != gst.MpegtsSCTESpliceCommandInsert {
 		return nil
 	}
+
+	str, _ := ev.Copy().GetStructure().GetValue("running-time-map")
+	rMap, _ := str.(*gst.Structure)
 
 	ret := []*Splice{}
 	splices := scteSit.Splices()
 	for _, sp := range splices {
+		var rTime time.Duration
+
+		if !sp.SpliceImmediateFlag() {
+			if rMap != nil {
+				val, _ := rMap.GetValue(fmt.Sprintf("event-%d-splice-time", sp.SpliceEventId()))
+				rTime = time.Duration(val.(uint64))
+			}
+			if rTime == 0 && scteSit.SpliceTimeSpecified() {
+				val, _ := rMap.GetValue("splice-time")
+				rTime = time.Duration(val.(uint64))
+			}
+		}
+
 		ret = append(ret, &Splice{
 			Immediate:             sp.SpliceImmediateFlag(),
 			OutOfNetworkIndicator: sp.OutOfNetworkIndicator(),
 			EventId:               sp.SpliceEventId(),
+			EventCancelIndicator:  sp.SpliceEventCancelIndicator(),
+			RunningTime:           time.Duration(rTime),
 		})
 	}
 	fmt.Println("SPLICES", *ret[0])
@@ -326,8 +347,6 @@ func getSplices(ev *gst.Event) []*Splice {
 }
 
 func (s *WebRTCSink) addSpliceProbe(bin *gst.Bin) {
-	fmt.Println("PROBE", bin)
-
 	pad := bin.GetStaticPad("sink")
 	if pad == nil {
 		logger.Infow("No sink pad on output bin")
