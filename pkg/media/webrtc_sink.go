@@ -16,6 +16,7 @@ package media
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/frostbyte73/core"
@@ -38,10 +39,11 @@ type WebRTCSink struct {
 	params    *params.Params
 	onFailure func()
 
-	lock     sync.Mutex
-	sdkReady core.Fuse
-	closed   core.Fuse
-	errChan  chan error
+	lock             sync.Mutex
+	sdkReady         core.Fuse
+	closed           core.Fuse
+	errChan          chan error
+	spliceProbeAdded bool
 
 	sdkOut        *lksdk_output.LKSDKOutput
 	outputSync    *utils.OutputSynchronizer
@@ -234,6 +236,9 @@ func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps) (*gst.Bin, 
 		bin = pp.GetBin()
 	}
 
+	if !s.spliceProbeAdded {
+		s.addSpliceProbe(bin)
+	}
 	return bin, nil
 }
 
@@ -277,6 +282,65 @@ func getResolution(caps *gst.Caps) (w int, h int, err error) {
 	}
 
 	return wObj.(int), hObj.(int), nil
+}
+
+type Splice struct {
+	Immediate             bool
+	OutOfNetworkIndicator bool
+	EventId               uint32
+}
+
+func getSplices(ev *gst.Event) []*Splice {
+	if !ev.HasName("scte-sit") {
+		return nil
+	}
+
+	ts := ev.ParseMpegtsSection()
+	if ts == nil {
+		return nil
+	}
+	if ts.SectionType() != gst.MpegtsSectionSCTESIT {
+		return nil
+	}
+
+	scteSit := ts.GetSCTESIT()
+	if scteSit == nil {
+		return nil
+	}
+
+	if scteSit.SpliceCommandType() != gst.MpegtsSCTESpliceCommandInsert && scteSit.SpliceCommandType() != gst.MpegtsSCTESpliceCommandSchedule {
+		return nil
+	}
+
+	ret := []*Splice{}
+	splices := scteSit.Splices()
+	for _, sp := range splices {
+		ret = append(ret, &Splice{
+			Immediate:             sp.SpliceImmediateFlag(),
+			OutOfNetworkIndicator: sp.OutOfNetworkIndicator(),
+			EventId:               sp.SpliceEventId(),
+		})
+	}
+	fmt.Println("SPLICES", *ret[0])
+	return ret
+}
+
+func (s *WebRTCSink) addSpliceProbe(bin *gst.Bin) {
+	fmt.Println("PROBE", bin)
+
+	pad := bin.GetStaticPad("sink")
+	if pad == nil {
+		logger.Infow("No sink pad on output bin")
+		return
+	}
+
+	pad.SetEventFunction(func(self *gst.Pad, parent *gst.Object, event *gst.Event) bool {
+		_ = getSplices(event)
+
+		return pad.EventDefault(parent, event)
+	})
+
+	s.spliceProbeAdded = true
 }
 
 func filterAndSortLayersByQuality(layers []*livekit.VideoLayer, sourceW, sourceH int) []*livekit.VideoLayer {
