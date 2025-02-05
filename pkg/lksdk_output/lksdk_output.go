@@ -332,6 +332,10 @@ func (s *LKSDKOutput) WriteRTCP(pkts []rtcp.Packet) error {
 	return pc.WriteRTCP(pkts)
 }
 
+func (s *LKSDKOutput) UpdateLocalParticipantAttributes(attributes map[string]string) {
+	s.room.LocalParticipant.SetAttributes(attributes)
+}
+
 func (s *LKSDKOutput) Close() error {
 	s.closeOutput()
 

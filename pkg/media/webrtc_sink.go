@@ -46,9 +46,10 @@ type WebRTCSink struct {
 	errChan          chan error
 	spliceProbeAdded bool
 
-	sdkOut        *lksdk_output.LKSDKOutput
-	outputSync    *utils.OutputSynchronizer
-	statsGatherer *stats.LocalMediaStatsGatherer
+	sdkOut          *lksdk_output.LKSDKOutput
+	outputSync      *utils.OutputSynchronizer
+	spliceProcessor *SpliceProcessor
+	statsGatherer   *stats.LocalMediaStatsGatherer
 }
 
 func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), statsGatherer *stats.LocalMediaStatsGatherer) (*WebRTCSink, error) {
@@ -86,6 +87,7 @@ func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), stat
 
 		s.lock.Lock()
 		s.sdkOut = sdkOut
+		s.spliceProcessor = NewSpliceProcessor(sdkOut, s.outputSync)
 		s.lock.Unlock()
 	}()
 
@@ -250,6 +252,10 @@ func (s *WebRTCSink) Close() error {
 
 	var err error
 	s.lock.Lock()
+	if s.spliceProcessor != nil {
+		s.spliceProcessor.Close()
+	}
+
 	if s.sdkOut != nil {
 		err = s.sdkOut.Close()
 	}
@@ -285,14 +291,6 @@ func getResolution(caps *gst.Caps) (w int, h int, err error) {
 	return wObj.(int), hObj.(int), nil
 }
 
-type Splice struct {
-	Immediate             bool
-	OutOfNetworkIndicator bool
-	EventId               uint32
-	EventCancelIndicator  bool
-	RunningTime           time.Duration
-}
-
 func getSplices(ev *gst.Event) []*Splice {
 	if !ev.HasName("scte-sit") {
 		return nil
@@ -315,7 +313,7 @@ func getSplices(ev *gst.Event) []*Splice {
 		return nil
 	}
 
-	str, _ := ev.Copy().GetStructure().GetValue("running-time-map")
+	str, _ := ev.GetStructure().GetValue("running-time-map")
 	rMap, _ := str.(*gst.Structure)
 
 	ret := []*Splice{}
@@ -354,7 +352,23 @@ func (s *WebRTCSink) addSpliceProbe(bin *gst.Bin) {
 	}
 
 	pad.SetEventFunction(func(self *gst.Pad, parent *gst.Object, event *gst.Event) bool {
-		_ = getSplices(event)
+		sps := getSplices(event)
+
+		s.lock.Lock()
+		p := s.spliceProcessor
+		s.lock.Unlock()
+
+		if p != nil {
+			for _, sp := range sps {
+				err := p.ProcessSplice(sp)
+				if err != nil {
+					logger.Infow("failed processing media splice", "error", err)
+				}
+			}
+		} else {
+			// TODO store events and process them after connection
+			logger.Infow("unable to process media splice before room is connected")
+		}
 
 		return pad.EventDefault(parent, event)
 	})

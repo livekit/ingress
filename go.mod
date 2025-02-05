@@ -4,6 +4,8 @@ go 1.23.2
 
 replace github.com/go-gst/go-gst => ../../go-gst/go-gst
 
+replace github.com/livekit/protocol => ../protocol
+
 toolchain go1.23.4
 
 require (
@@ -48,6 +50,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cpuguy83/go-md2man/v2 v2.0.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/dennwc/iters v1.0.1 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/gammazero/deque v1.0.0 // indirect
