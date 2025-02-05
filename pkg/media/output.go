@@ -411,8 +411,6 @@ func (e *Output) linkElements() error {
 	}
 
 	binSink := gst.NewGhostPad("sink", e.elements[0].GetStaticPad("sink"))
-	// Add a probe for splice event on any of the pads, but only once
-
 	if !e.bin.AddPad(binSink.Pad) {
 		return errors.ErrUnableToAddPad
 	}

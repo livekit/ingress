@@ -340,7 +340,6 @@ func getSplices(ev *gst.Event) []*Splice {
 			RunningTime:           time.Duration(rTime),
 		})
 	}
-	fmt.Println("SPLICES", *ret[0])
 	return ret
 }
 

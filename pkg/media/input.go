@@ -187,7 +187,6 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 			ghostPad = gst.NewGhostPad("video", pad)
 		}
 	}
-
 	i.lock.Unlock()
 
 	// don't need this pad, link to fakesink
@@ -202,7 +201,6 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 			// Gather bitrate stats from pipeline itself
 			i.addBitrateProbe(kind)
 		}
-
 	} else {
 		var sink *gst.Element
 
