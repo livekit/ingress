@@ -354,20 +354,22 @@ func (s *WebRTCSink) addSpliceProbe(bin *gst.Bin) {
 	pad.SetEventFunction(func(self *gst.Pad, parent *gst.Object, event *gst.Event) bool {
 		sps := getSplices(event)
 
-		s.lock.Lock()
-		p := s.spliceProcessor
-		s.lock.Unlock()
+		if len(sps) != 0 {
+			s.lock.Lock()
+			p := s.spliceProcessor
+			s.lock.Unlock()
 
-		if p != nil {
-			for _, sp := range sps {
-				err := p.ProcessSplice(sp)
-				if err != nil {
-					logger.Infow("failed processing media splice", "error", err)
+			if p != nil {
+				for _, sp := range sps {
+					err := p.ProcessSplice(sp)
+					if err != nil {
+						logger.Infow("failed processing media splice", "error", err)
+					}
 				}
+			} else {
+				// TODO store events and process them after connection
+				logger.Infow("unable to process media splice before room is connected")
 			}
-		} else {
-			// TODO store events and process them after connection
-			logger.Infow("unable to process media splice before room is connected")
 		}
 
 		return pad.EventDefault(parent, event)
