@@ -16,9 +16,7 @@ package media
 
 import (
 	"context"
-	"fmt"
 	"sync"
-	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/go-gst/go-gst/gst"
@@ -291,58 +289,6 @@ func getResolution(caps *gst.Caps) (w int, h int, err error) {
 	return wObj.(int), hObj.(int), nil
 }
 
-func getSplices(ev *gst.Event) []*Splice {
-	if !ev.HasName("scte-sit") {
-		return nil
-	}
-
-	ts := ev.ParseMpegtsSection()
-	if ts == nil {
-		return nil
-	}
-	if ts.SectionType() != gst.MpegtsSectionSCTESIT {
-		return nil
-	}
-
-	scteSit := ts.GetSCTESIT()
-	if scteSit == nil {
-		return nil
-	}
-
-	if scteSit.SpliceCommandType() != gst.MpegtsSCTESpliceCommandInsert {
-		return nil
-	}
-
-	str, _ := ev.GetStructure().GetValue("running-time-map")
-	rMap, _ := str.(*gst.Structure)
-
-	ret := []*Splice{}
-	splices := scteSit.Splices()
-	for _, sp := range splices {
-		var rTime time.Duration
-
-		if !sp.SpliceImmediateFlag() {
-			if rMap != nil {
-				val, _ := rMap.GetValue(fmt.Sprintf("event-%d-splice-time", sp.SpliceEventId()))
-				rTime = time.Duration(val.(uint64))
-			}
-			if rTime == 0 && scteSit.SpliceTimeSpecified() {
-				val, _ := rMap.GetValue("splice-time")
-				rTime = time.Duration(val.(uint64))
-			}
-		}
-
-		ret = append(ret, &Splice{
-			Immediate:             sp.SpliceImmediateFlag(),
-			OutOfNetworkIndicator: sp.OutOfNetworkIndicator(),
-			EventId:               sp.SpliceEventId(),
-			EventCancelIndicator:  sp.SpliceEventCancelIndicator(),
-			RunningTime:           time.Duration(rTime),
-		})
-	}
-	return ret
-}
-
 func (s *WebRTCSink) addSpliceProbe(bin *gst.Bin) {
 	pad := bin.GetStaticPad("sink")
 	if pad == nil {
@@ -351,19 +297,15 @@ func (s *WebRTCSink) addSpliceProbe(bin *gst.Bin) {
 	}
 
 	pad.SetEventFunction(func(self *gst.Pad, parent *gst.Object, event *gst.Event) bool {
-		sps := getSplices(event)
-
-		if len(sps) != 0 {
+		if event.HasName("scte-sit") {
 			s.lock.Lock()
 			p := s.spliceProcessor
 			s.lock.Unlock()
 
 			if p != nil {
-				for _, sp := range sps {
-					err := p.ProcessSplice(sp)
-					if err != nil {
-						logger.Infow("failed processing media splice", "error", err)
-					}
+				err := p.ProcessSpliceEvent(event)
+				if err != nil {
+					logger.Infow("failed processing splice event", "error", err)
 				}
 			} else {
 				// TODO store events and process them after connection
