@@ -85,11 +85,15 @@ func (su *SpliceProcessor) ProcessSpliceEvent(ev *gst.Event) error {
 		if !sp.SpliceImmediateFlag() {
 			if rMap != nil {
 				val, _ := rMap.GetValue(fmt.Sprintf("event-%d-splice-time", sp.SpliceEventId()))
-				rTime = time.Duration(val.(uint64))
+				if val != nil {
+					rTime = time.Duration(val.(uint64))
+				}
 			}
 			if rTime == 0 && scteSit.SpliceTimeSpecified() {
 				val, _ := rMap.GetValue("splice-time")
-				rTime = time.Duration(val.(uint64))
+				if val != nil {
+					rTime = time.Duration(val.(uint64))
+				}
 			}
 		}
 
