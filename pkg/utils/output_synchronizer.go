@@ -15,11 +15,13 @@
 package utils
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/psrpc"
 )
 
 const (
@@ -42,6 +44,30 @@ func NewOutputSynchronizer() *OutputSynchronizer {
 	return &OutputSynchronizer{}
 }
 
+func (os *OutputSynchronizer) ScheduleEvent(ctx context.Context, pts time.Duration, event func()) error {
+	os.lock.Lock()
+
+	if os.zeroTime.IsZero() {
+		os.lock.Unlock()
+		return psrpc.NewErrorf(psrpc.OutOfRange, "trying to schedule an event before output synchtonizer timeline was set")
+	}
+
+	waitTime := computeWaitDuration(pts, os.zeroTime, time.Now())
+
+	os.lock.Unlock()
+
+	go func() {
+		select {
+		case <-time.After(waitTime):
+			event()
+		case <-ctx.Done():
+			return
+		}
+	}()
+
+	return nil
+}
+
 func (os *OutputSynchronizer) AddTrack() *TrackOutputSynchronizer {
 	return newTrackOutputSynchronizer(os)
 }
@@ -50,10 +76,8 @@ func (os *OutputSynchronizer) getWaitDuration(pts time.Duration, firstSampleSent
 	os.lock.Lock()
 	defer os.lock.Unlock()
 
-	mediaTime := os.zeroTime.Add(pts)
 	now := time.Now()
-
-	waitTime := mediaTime.Sub(now)
+	waitTime := computeWaitDuration(pts, os.zeroTime, now)
 
 	if os.zeroTime.IsZero() || (waitTime < -leeway && firstSampleSent) {
 		// Reset zeroTime if the earliest track is late
@@ -89,4 +113,10 @@ func (ost *TrackOutputSynchronizer) WaitForMediaTime(pts time.Duration) (bool, e
 	case <-ost.closed.Watch():
 		return false, errors.ErrIngressClosing
 	}
+}
+
+func computeWaitDuration(pts time.Duration, zeroTime time.Time, now time.Time) time.Duration {
+	mediaTime := zeroTime.Add(pts)
+
+	return mediaTime.Sub(now)
 }

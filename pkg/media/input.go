@@ -158,6 +158,15 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 		}
 	}
 
+	// Make sure we emit scte35 markers if available
+	tsparser, _ := i.bin.GetElementByName("tsdemux0")
+	if tsparser != nil {
+		err := tsparser.SetProperty("send-scte35-events", true)
+		if err != nil {
+			logger.Errorw("failed setting `send-scte35-events` property", err)
+		}
+	}
+
 	// surface callback for first audio and video pads, plug in fakesink on the rest
 	i.lock.Lock()
 	newPad := false

@@ -38,14 +38,16 @@ type WebRTCSink struct {
 	params    *params.Params
 	onFailure func()
 
-	lock     sync.Mutex
-	sdkReady core.Fuse
-	closed   core.Fuse
-	errChan  chan error
+	lock             sync.Mutex
+	sdkReady         core.Fuse
+	closed           core.Fuse
+	errChan          chan error
+	spliceProbeAdded bool
 
-	sdkOut        *lksdk_output.LKSDKOutput
-	outputSync    *utils.OutputSynchronizer
-	statsGatherer *stats.LocalMediaStatsGatherer
+	sdkOut          *lksdk_output.LKSDKOutput
+	outputSync      *utils.OutputSynchronizer
+	spliceProcessor *SpliceProcessor
+	statsGatherer   *stats.LocalMediaStatsGatherer
 }
 
 func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), statsGatherer *stats.LocalMediaStatsGatherer) (*WebRTCSink, error) {
@@ -83,6 +85,7 @@ func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), stat
 
 		s.lock.Lock()
 		s.sdkOut = sdkOut
+		s.spliceProcessor = NewSpliceProcessor(sdkOut, s.outputSync)
 		s.lock.Unlock()
 	}()
 
@@ -234,6 +237,9 @@ func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps) (*gst.Bin, 
 		bin = pp.GetBin()
 	}
 
+	if !s.spliceProbeAdded {
+		s.addSpliceProbe(bin)
+	}
 	return bin, nil
 }
 
@@ -244,6 +250,10 @@ func (s *WebRTCSink) Close() error {
 
 	var err error
 	s.lock.Lock()
+	if s.spliceProcessor != nil {
+		s.spliceProcessor.Close()
+	}
+
 	if s.sdkOut != nil {
 		err = s.sdkOut.Close()
 	}
@@ -277,6 +287,36 @@ func getResolution(caps *gst.Caps) (w int, h int, err error) {
 	}
 
 	return wObj.(int), hObj.(int), nil
+}
+
+func (s *WebRTCSink) addSpliceProbe(bin *gst.Bin) {
+	pad := bin.GetStaticPad("sink")
+	if pad == nil {
+		logger.Infow("No sink pad on output bin")
+		return
+	}
+
+	pad.SetEventFunction(func(self *gst.Pad, parent *gst.Object, event *gst.Event) bool {
+		if event.HasName("scte-sit") {
+			s.lock.Lock()
+			p := s.spliceProcessor
+			s.lock.Unlock()
+
+			if p != nil {
+				err := p.ProcessSpliceEvent(event)
+				if err != nil {
+					logger.Infow("failed processing splice event", "error", err)
+				}
+			} else {
+				// TODO store events and process them after connection
+				logger.Infow("unable to process media splice before room is connected")
+			}
+		}
+
+		return pad.EventDefault(parent, event)
+	})
+
+	s.spliceProbeAdded = true
 }
 
 func filterAndSortLayersByQuality(layers []*livekit.VideoLayer, sourceW, sourceH int) []*livekit.VideoLayer {
