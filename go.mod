@@ -4,13 +4,13 @@ go 1.23.2
 
 replace github.com/go-gst/go-gst => github.com/livekit/go-gst v0.2.34-0.20250205234446-03e3e98e7c6f
 
-toolchain go1.23.6
+toolchain go1.24.0
 
 require (
 	github.com/Eyevinn/mp4ff v0.47.0
 	github.com/aclements/go-moremath v0.0.0-20241023150245-c8bbc672ef66
-	github.com/frostbyte73/core v0.1.0
-	github.com/go-gst/go-glib v1.4.1-0.20241209142714-f53cebf18559
+	github.com/frostbyte73/core v0.1.1
+	github.com/go-gst/go-glib v1.4.1-0.20241218143927-ca07c1459298
 	github.com/go-gst/go-gst v1.4.0
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
@@ -24,7 +24,7 @@ require (
 	github.com/pion/rtcp v1.2.15
 	github.com/pion/rtp v1.8.11
 	github.com/pion/sdp/v3 v3.0.10
-	github.com/pion/webrtc/v4 v4.0.8
+	github.com/pion/webrtc/v4 v4.0.9
 	github.com/prometheus/client_golang v1.20.5
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
@@ -74,7 +74,7 @@ require (
 	github.com/nats-io/nkeys v0.4.9 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/pion/datachannel v1.5.10 // indirect
-	github.com/pion/ice/v4 v4.0.5 // indirect
+	github.com/pion/ice/v4 v4.0.6 // indirect
 	github.com/pion/logging v0.2.3 // indirect
 	github.com/pion/mdns/v2 v2.0.7 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
