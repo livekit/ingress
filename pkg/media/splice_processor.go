@@ -76,7 +76,13 @@ func (su *SpliceProcessor) ProcessSpliceEvent(ev *gst.Event) error {
 	}
 
 	str, _ := ev.GetStructure().GetValue("running-time-map")
-	rMap, _ := str.(*gst.Structure)
+	if str == nil {
+		return nil
+	}
+	rMap, ok := str.(*gst.Structure)
+	if !ok {
+		return nil
+	}
 
 	splices := scteSit.Splices()
 	for _, sp := range splices {
