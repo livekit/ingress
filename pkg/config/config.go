@@ -23,6 +23,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/logger/medialogutils"
 	"github.com/livekit/protocol/redis"
 	"github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
@@ -164,7 +165,7 @@ func (c *Config) InitLogger(values ...interface{}) error {
 	values = append(c.getLoggerValues(), values...)
 	l := zl.WithValues(values...)
 	logger.SetLogger(l, c.ServiceName)
-	lksdk.SetLogger(l)
+	lksdk.SetLogger(medialogutils.NewOverrideLogger())
 
 	return nil
 }

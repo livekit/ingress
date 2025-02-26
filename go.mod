@@ -2,6 +2,8 @@ module github.com/livekit/ingress
 
 go 1.23.2
 
+replace github.com/livekit/protocol => ../protocol
+
 replace github.com/go-gst/go-gst => github.com/livekit/go-gst v0.2.34-0.20250213212803-e8b19bcbb3e9
 
 toolchain go1.23.6
@@ -9,7 +11,7 @@ toolchain go1.23.6
 require (
 	github.com/Eyevinn/mp4ff v0.47.0
 	github.com/aclements/go-moremath v0.0.0-20241023150245-c8bbc672ef66
-	github.com/frostbyte73/core v0.1.0
+	github.com/frostbyte73/core v0.1.1
 	github.com/go-gst/go-glib v1.4.1-0.20241209142714-f53cebf18559
 	github.com/go-gst/go-gst v1.4.0
 	github.com/gorilla/mux v1.8.1
