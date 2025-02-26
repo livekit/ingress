@@ -2,8 +2,6 @@ module github.com/livekit/ingress
 
 go 1.23.2
 
-replace github.com/livekit/protocol => ../protocol
-
 replace github.com/go-gst/go-gst => github.com/livekit/go-gst v0.2.34-0.20250213212803-e8b19bcbb3e9
 
 toolchain go1.23.6
