@@ -29,6 +29,7 @@ import (
 	"github.com/livekit/mediatransportutil/pkg/pacer"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/logger/medialogutils"
 	"github.com/livekit/protocol/tracer"
 	lksdk "github.com/livekit/server-sdk-go/v2"
 )
@@ -170,12 +171,10 @@ func NewLKSDKOutput(ctx context.Context, onDisconnected func(), p *params.Params
 		}
 	}
 
-	room, err := lksdk.ConnectToRoomWithToken(
-		p.WsUrl,
-		p.Token,
-		cb,
-		opts...,
-	)
+	room := lksdk.NewRoom(cb)
+	room.SetLogger(medialogutils.NewOverrideLogger(p.GetLogger()))
+
+	err := room.JoinWithToken(p.WsUrl, p.Token, opts...)
 	if err != nil {
 		return nil, err
 	}

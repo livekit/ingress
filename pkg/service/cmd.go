@@ -17,7 +17,6 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"os/exec"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -25,6 +24,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/logger/medialogutils"
 )
 
 func NewCmd(ctx context.Context, p *params.Params) (*exec.Cmd, error) {
@@ -84,8 +84,9 @@ func NewCmd(ctx context.Context, p *params.Params) (*exec.Cmd, error) {
 	)
 
 	cmd.Dir = "/"
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	l := medialogutils.NewHandlerLogger("resourceID", p.State.ResourceId, "ingressID", p.IngressId)
+	cmd.Stdout = l
+	cmd.Stderr = l
 
 	return cmd, nil
 }
