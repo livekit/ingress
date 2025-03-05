@@ -307,10 +307,10 @@ func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceI
 				}
 				return
 			}
-		} else {
-			// TODO send update even for URL ingress. We cannot do this now for backward compatibility with older livekit-server
-			s.sendUpdate(ctx, info, err)
 		}
+
+		// Send update for URL ingress as well to make sure the state gets updated even if CreateIngress fails because the ingress already exists
+		s.sendUpdate(ctx, info, err)
 
 		if info != nil {
 			logger.Infow("received ingress info", "ingressID", info.IngressId, "streamKey", info.StreamKey, "resourceID", info.State.ResourceId, "ingressInfo", params.CopyRedactedIngressInfo(info))
