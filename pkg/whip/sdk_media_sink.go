@@ -40,7 +40,6 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/psrpc"
-	lksdk "github.com/livekit/server-sdk-go/v2"
 )
 
 var (
@@ -52,7 +51,7 @@ type SDKMediaSinkTrack struct {
 	width, height uint
 
 	trackStatsGatherer *stats.MediaTrackStatGatherer
-	localTrack         *lksdk.LocalTrack
+	localTrack         *lksdk_output.LocalTrack
 
 	stateLock        sync.Mutex
 	sendRTCPUpStream func(pkt rtcp.Packet)

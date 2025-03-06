@@ -31,7 +31,6 @@ import (
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 	putils "github.com/livekit/protocol/utils"
-	lksdk "github.com/livekit/server-sdk-go/v2"
 )
 
 type WebRTCSink struct {
@@ -124,7 +123,7 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 		}
 
 		if sdkOut != nil {
-			var track *lksdk.LocalTrack
+			var track *lksdk_output.LocalTrack
 			track, err = sdkOut.AddAudioTrack(putils.GetMimeTypeForAudioCodec(s.params.AudioEncodingOptions.AudioCodec), s.params.AudioEncodingOptions.DisableDtx, s.params.AudioEncodingOptions.Channels > 1)
 			if err != nil {
 				return
@@ -180,7 +179,7 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 		}
 
 		if sdkOut != nil {
-			var tracks []*lksdk.LocalTrack
+			var tracks []*lksdk_output.LocalTrack
 			var pliHandlers []*lksdk_output.RTCPHandler
 
 			tracks, pliHandlers, err = sdkOut.AddVideoTrack(sortedLayers, putils.GetMimeTypeForVideoCodec(s.params.VideoEncodingOptions.VideoCodec))

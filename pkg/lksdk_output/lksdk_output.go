@@ -22,7 +22,9 @@ import (
 
 	"github.com/pion/interceptor"
 	"github.com/pion/rtcp"
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
+	"github.com/pion/webrtc/v4/pkg/media"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
@@ -47,6 +49,24 @@ type KeyFrameEmitter interface {
 
 type PacketSink interface {
 	HandleRTCPPacket(pkt rtcp.Packet) error
+}
+
+type LocalTrack struct {
+	*lksdk.LocalTrack
+
+	w *MediaWatchdog
+}
+
+func (s *LocalTrack) WriteRTP(p *rtp.Packet, opts *lksdk.SampleWriteOptions) error {
+	s.w.MediaReceived(int64(len(p.Payload)))
+
+	return s.LocalTrack.WriteRTP(p, opts)
+}
+
+func (s *LocalTrack) WriteSample(sample media.Sample, opts *lksdk.SampleWriteOptions) error {
+	s.w.MediaReceived(int64(len(sample.Data)))
+
+	return s.LocalTrack.WriteSample(sample, opts)
 }
 
 type RTCPHandler struct {
@@ -89,6 +109,7 @@ type LKSDKOutput struct {
 
 	errChan       chan error
 	trackWatchdog *TrackWatchdog
+	mediaWatchdog *MediaWatchdog
 
 	lock    sync.Mutex
 	outputs []SampleProvider
@@ -109,6 +130,17 @@ func NewLKSDKOutput(ctx context.Context, onDisconnected func(), p *params.Params
 
 		select {
 		case s.errChan <- errors.ErrRoomDisconnectedUnexpectedly:
+		default:
+		}
+
+		s.closeOutput()
+	}, watchdogDeadline)
+
+	s.mediaWatchdog = NewMediaWatchdog(func() {
+		s.logger.Infow("no media recieved after timeout", errors.ErrSourceNotReady)
+
+		select {
+		case s.errChan <- errors.ErrSourceNotReady:
 		default:
 		}
 
@@ -189,7 +221,7 @@ func NewLKSDKOutput(ctx context.Context, onDisconnected func(), p *params.Params
 	return s, nil
 }
 
-func (s *LKSDKOutput) AddAudioTrack(mimeType string, disableDTX bool, stereo bool) (*lksdk.LocalTrack, error) {
+func (s *LKSDKOutput) AddAudioTrack(mimeType string, disableDTX bool, stereo bool) (*LocalTrack, error) {
 	opts := &lksdk.TrackPublicationOptions{
 		Name:       s.params.Audio.Name,
 		Source:     s.params.Audio.Source,
@@ -221,10 +253,15 @@ func (s *LKSDKOutput) AddAudioTrack(mimeType string, disableDTX bool, stereo boo
 
 	s.trackWatchdog.TrackAdded()
 
-	return track, nil
+	wrappedTrack := &LocalTrack{
+		LocalTrack: track,
+		w:          s.mediaWatchdog,
+	}
+
+	return wrappedTrack, nil
 }
 
-func (s *LKSDKOutput) AddVideoTrack(layers []*livekit.VideoLayer, mimeType string) ([]*lksdk.LocalTrack, []*RTCPHandler, error) {
+func (s *LKSDKOutput) AddVideoTrack(layers []*livekit.VideoLayer, mimeType string) ([]*LocalTrack, []*RTCPHandler, error) {
 	opts := &lksdk.TrackPublicationOptions{
 		Name:        s.params.Video.Name,
 		Source:      s.params.Video.Source,
@@ -234,7 +271,7 @@ func (s *LKSDKOutput) AddVideoTrack(layers []*livekit.VideoLayer, mimeType strin
 
 	var err error
 
-	tracks := make([]*lksdk.LocalSampleTrack, 0)
+	tracks := make([]*lksdk.LocalTrack, 0)
 	rtcpHandlers := make([]*RTCPHandler, 0)
 	for _, layer := range layers {
 		rtcpHandler := &RTCPHandler{}
@@ -284,7 +321,15 @@ func (s *LKSDKOutput) AddVideoTrack(layers []*livekit.VideoLayer, mimeType strin
 
 	s.logger.Debugw("published video track")
 
-	return tracks, rtcpHandlers, nil
+	wrappedTracks := make([]*LocalTrack, 0)
+	for _, track := range tracks {
+		wrappedTracks = append(wrappedTracks, &LocalTrack{
+			LocalTrack: track,
+			w:          s.mediaWatchdog,
+		})
+	}
+
+	return wrappedTracks, rtcpHandlers, nil
 }
 
 func (s *LKSDKOutput) AddOutputs(o ...SampleProvider) {
