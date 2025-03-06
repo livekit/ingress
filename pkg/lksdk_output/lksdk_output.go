@@ -87,8 +87,8 @@ type LKSDKOutput struct {
 	room   *lksdk.Room
 	params *params.Params
 
-	errChan  chan error
-	watchdog *Watchdog
+	errChan       chan error
+	trackWatchdog *TrackWatchdog
 
 	lock    sync.Mutex
 	outputs []SampleProvider
@@ -104,7 +104,7 @@ func NewLKSDKOutput(ctx context.Context, onDisconnected func(), p *params.Params
 		logger:  p.GetLogger(),
 	}
 
-	s.watchdog = NewWatchdog(func() {
+	s.trackWatchdog = NewTrackWatchdog(func() {
 		s.logger.Warnw("disconnection from room triggered by watchdog", errors.ErrRoomDisconnectedUnexpectedly)
 
 		select {
@@ -204,12 +204,12 @@ func (s *LKSDKOutput) AddAudioTrack(mimeType string, disableDTX bool, stereo boo
 	}
 
 	track.OnBind(func() {
-		s.watchdog.TrackBound()
+		s.trackWatchdog.TrackBound()
 		s.logger.Debugw("audio track bound")
 	})
 
 	track.OnUnbind(func() {
-		s.watchdog.TrackUnbound()
+		s.trackWatchdog.TrackUnbound()
 		s.logger.Debugw("audio track unbound")
 	})
 
@@ -219,7 +219,7 @@ func (s *LKSDKOutput) AddAudioTrack(mimeType string, disableDTX bool, stereo boo
 		return nil, err
 	}
 
-	s.watchdog.TrackAdded()
+	s.trackWatchdog.TrackAdded()
 
 	return track, nil
 }
@@ -263,17 +263,17 @@ func (s *LKSDKOutput) AddVideoTrack(layers []*livekit.VideoLayer, mimeType strin
 
 		localLayer := layer
 		track.OnBind(func() {
-			s.watchdog.TrackBound()
+			s.trackWatchdog.TrackBound()
 			s.logger.Debugw("video track bound", "layer", localLayer.Quality.String())
 		})
 		track.OnUnbind(func() {
-			s.watchdog.TrackUnbound()
+			s.trackWatchdog.TrackUnbound()
 			s.logger.Debugw("video track unbound", "layer", localLayer.Quality.String())
 		})
 
 		tracks = append(tracks, track)
 
-		s.watchdog.TrackAdded()
+		s.trackWatchdog.TrackAdded()
 	}
 
 	_, err = s.room.LocalParticipant.PublishSimulcastTrack(tracks, opts)
@@ -305,8 +305,8 @@ func (s *LKSDKOutput) closeOutput() {
 	// only close the outputs once
 	s.outputs = nil
 
-	if s.watchdog != nil {
-		s.watchdog.Stop()
+	if s.trackWatchdog != nil {
+		s.trackWatchdog.Stop()
 	}
 
 	if s.room != nil {
