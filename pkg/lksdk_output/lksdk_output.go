@@ -145,6 +145,11 @@ func NewLKSDKOutput(ctx context.Context, onDisconnected func(), p *params.Params
 		}
 
 		s.closeOutput()
+
+		if onDisconnected != nil {
+			onDisconnected()
+		}
+
 	}, watchdogDeadline)
 
 	cb := lksdk.NewRoomCallback()
@@ -352,6 +357,10 @@ func (s *LKSDKOutput) closeOutput() {
 
 	if s.trackWatchdog != nil {
 		s.trackWatchdog.Stop()
+	}
+
+	if s.mediaWatchdog != nil {
+		s.mediaWatchdog.Stop()
 	}
 
 	if s.room != nil {
