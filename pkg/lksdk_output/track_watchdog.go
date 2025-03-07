@@ -19,7 +19,7 @@ import (
 	"time"
 )
 
-type Watchdog struct {
+type TrackWatchdog struct {
 	deadline time.Duration
 	onFire   func()
 
@@ -30,15 +30,15 @@ type Watchdog struct {
 	started            bool
 }
 
-func NewWatchdog(onFire func(), deadline time.Duration) *Watchdog {
-	return &Watchdog{
+func NewTrackWatchdog(onFire func(), deadline time.Duration) *TrackWatchdog {
+	return &TrackWatchdog{
 		onFire:   onFire,
 		deadline: deadline,
 		started:  true,
 	}
 }
 
-func (w *Watchdog) TrackAdded() {
+func (w *TrackWatchdog) TrackAdded() {
 	w.trackLock.Lock()
 	defer w.trackLock.Unlock()
 
@@ -47,7 +47,7 @@ func (w *Watchdog) TrackAdded() {
 	w.updateTimer()
 }
 
-func (w *Watchdog) TrackBound() {
+func (w *TrackWatchdog) TrackBound() {
 	w.trackLock.Lock()
 	defer w.trackLock.Unlock()
 
@@ -56,7 +56,7 @@ func (w *Watchdog) TrackBound() {
 	w.updateTimer()
 }
 
-func (w *Watchdog) TrackUnbound() {
+func (w *TrackWatchdog) TrackUnbound() {
 	w.trackLock.Lock()
 	defer w.trackLock.Unlock()
 
@@ -65,7 +65,7 @@ func (w *Watchdog) TrackUnbound() {
 	w.updateTimer()
 }
 
-func (w *Watchdog) Stop() {
+func (w *TrackWatchdog) Stop() {
 	w.trackLock.Lock()
 	defer w.trackLock.Unlock()
 
@@ -75,7 +75,7 @@ func (w *Watchdog) Stop() {
 }
 
 // Must be called locked
-func (w *Watchdog) updateTimer() {
+func (w *TrackWatchdog) updateTimer() {
 	timerMustBeActive := w.started && w.boundTrackCount < w.expectedTrackCount
 
 	if w.timer == nil && timerMustBeActive {

@@ -26,12 +26,12 @@ import (
 	"github.com/pion/webrtc/v4/pkg/media"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/psrpc"
-	lksdk "github.com/livekit/server-sdk-go/v2"
 )
 
 const (
@@ -52,7 +52,7 @@ type Output struct {
 	outputSync         *utils.TrackOutputSynchronizer
 	trackStatsGatherer *stats.MediaTrackStatGatherer
 
-	localTrack   atomic.Pointer[lksdk.LocalTrack]
+	localTrack   atomic.Pointer[lksdk_output.LocalTrack]
 	stopDropping func()
 
 	closed core.Fuse
@@ -394,7 +394,7 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer) (*Output, error) {
 	return e, nil
 }
 
-func (o *Output) SinkReady(localTrack *lksdk.LocalTrack) {
+func (o *Output) SinkReady(localTrack *lksdk_output.LocalTrack) {
 	o.localTrack.Store(localTrack)
 
 	if o.stopDropping != nil {
