@@ -21,11 +21,12 @@ import (
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/protocol/logger"
 	"github.com/livekit/psrpc"
 )
 
 const (
-	leeway = 100 * time.Millisecond
+	leeway = 500 * time.Millisecond
 )
 
 type OutputSynchronizer struct {
@@ -81,6 +82,7 @@ func (os *OutputSynchronizer) getWaitDuration(pts time.Duration, firstSampleSent
 
 	if os.zeroTime.IsZero() || (waitTime < -leeway && firstSampleSent) {
 		// Reset zeroTime if the earliest track is late
+		logger.Debugw("resetting synchronizer zero time", "lateDuration", -waitTime)
 		os.zeroTime = now.Add(-pts)
 		waitTime = 0
 	}

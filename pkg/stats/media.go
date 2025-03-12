@@ -104,7 +104,7 @@ func (m *MediaStatsReporter) UpdateStats(ctx context.Context) {
 }
 
 func (m *MediaStatsReporter) runMediaStatsCollector() {
-	ticker := time.NewTicker(60 * time.Second)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
 	for {
