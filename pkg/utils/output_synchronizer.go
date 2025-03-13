@@ -35,15 +35,12 @@ type OutputSynchronizer struct {
 	lock sync.Mutex
 
 	zeroTime time.Time
-
-	tracks []*TrackOutputSynchronizer
 }
 
 type TrackOutputSynchronizer struct {
-	os               *OutputSynchronizer
-	closed           core.Fuse
-	firstSampleSent  atomic.Bool
-	lastWaitDuration atomic.Int64
+	os              *OutputSynchronizer
+	closed          core.Fuse
+	firstSampleSent atomic.Bool
 }
 
 func NewOutputSynchronizer() *OutputSynchronizer {
@@ -78,17 +75,16 @@ func (os *OutputSynchronizer) ScheduleEvent(ctx context.Context, pts time.Durati
 func (os *OutputSynchronizer) AddTrack() *TrackOutputSynchronizer {
 	t := newTrackOutputSynchronizer(os)
 
-	os.lock.Lock()
-	defer os.lock.Unlock()
-
-	os.tracks = append(os.tracks, t)
-
 	return t
 }
 
-func (os *OutputSynchronizer) getWaitDuration(pts time.Duration, firstSampleSent bool) time.Duration {
+func (os *OutputSynchronizer) getWaitDuration(pts time.Duration, firstSampleSent bool, zeroTimeAdjustment time.Duration) time.Duration {
 	os.lock.Lock()
 	defer os.lock.Unlock()
+
+	if !os.zeroTime.IsZero() && firstSampleSent {
+		os.zeroTime = os.zeroTime.Add(zeroTimeAdjustment)
+	}
 
 	now := time.Now()
 	waitDuration := computeWaitDuration(pts, os.zeroTime, now)
@@ -99,34 +95,7 @@ func (os *OutputSynchronizer) getWaitDuration(pts time.Duration, firstSampleSent
 		waitDuration = 0
 	}
 
-	waitDuration = os.handleWaitDurationTarget(firstSampleSent, waitDuration)
-
 	return waitDuration
-}
-
-// must be called with lock held
-func (os *OutputSynchronizer) handleWaitDurationTarget(firstSampleSent bool, currentWaitDuration time.Duration) time.Duration {
-	if !firstSampleSent {
-		return currentWaitDuration
-	}
-
-	minWaitDuration := currentWaitDuration
-	for _, t := range os.tracks {
-		d := time.Duration(t.lastWaitDuration.Load())
-		if d <= minWaitDuration {
-			minWaitDuration = d
-		}
-	}
-
-	if minWaitDuration > maxTargetWaitDuration {
-		for _, t := range os.tracks {
-			t.lastWaitDuration.Add(int64(-waitDurationAdjustmentAmount))
-		}
-	}
-
-	os.zeroTime = os.zeroTime.Add(-waitDurationAdjustmentAmount)
-
-	return currentWaitDuration - waitDurationAdjustmentAmount
 }
 
 func newTrackOutputSynchronizer(os *OutputSynchronizer) *TrackOutputSynchronizer {
@@ -139,26 +108,30 @@ func (ost *TrackOutputSynchronizer) Close() {
 	ost.closed.Break()
 }
 
-func (ost *TrackOutputSynchronizer) getWaitDurationForMediaTime(pts time.Duration) (time.Duration, bool, error) {
-	waitDuration := ost.os.getWaitDuration(pts, ost.firstSampleSent.Load())
+func (ost *TrackOutputSynchronizer) getWaitDurationForMediaTime(pts time.Duration, playingTooSlow bool) (time.Duration, bool) {
+	zeroTimeAdjustment := time.Duration(0)
 
-	ost.lastWaitDuration.Store(int64(waitDuration))
+	if playingTooSlow {
+		zeroTimeAdjustment = -waitDurationAdjustmentAmount
+	}
+
+	waitDuration := ost.os.getWaitDuration(pts, ost.firstSampleSent.Load(), zeroTimeAdjustment)
 
 	if waitDuration < -leeway {
-		return 0, true, nil
+		return 0, true
 	}
 
 	waitDuration = max(waitDuration, 0)
 
 	ost.firstSampleSent.Store(true)
 
-	return waitDuration, false, nil
+	return waitDuration, false
 }
 
-func (ost *TrackOutputSynchronizer) WaitForMediaTime(pts time.Duration) (bool, error) {
-	waitDuration, drop, err := ost.getWaitDurationForMediaTime(pts)
-	if err != nil || drop {
-		return drop, err
+func (ost *TrackOutputSynchronizer) WaitForMediaTime(pts time.Duration, playingTooSlow bool) (bool, error) {
+	waitDuration, drop := ost.getWaitDurationForMediaTime(pts, playingTooSlow)
+	if drop {
+		return drop, nil
 	}
 
 	select {
