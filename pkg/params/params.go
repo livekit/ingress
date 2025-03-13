@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,6 +51,7 @@ type Params struct {
 
 	AudioEncodingOptions *livekit.IngressAudioEncodingOptions
 	VideoEncodingOptions *livekit.IngressVideoEncodingOptions
+	Live                 bool
 
 	// connection info
 	WsUrl string
@@ -151,6 +153,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		Config:               conf,
 		AudioEncodingOptions: audioEncodingOptions,
 		VideoEncodingOptions: videoEncodingOptions,
+		Live:                 getLive(info),
 		Token:                token,
 		WsUrl:                wsUrl,
 		RelayToken:           relayToken,
@@ -177,6 +180,19 @@ func UpdateTranscodingEnabled(info *livekit.IngressInfo) {
 	default:
 		t := true
 		info.EnableTranscoding = &t
+	}
+}
+
+func getLive(info *livekit.IngressInfo) bool {
+	switch info.InputType {
+	case livekit.IngressInput_URL_INPUT:
+		if strings.HasPrefix(info.Url, "http://") || strings.HasPrefix(info.Url, "https://") {
+			return false
+		} else {
+			return true
+		}
+	default:
+		return true
 	}
 }
 

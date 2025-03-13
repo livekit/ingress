@@ -398,6 +398,8 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func(
 		isPlayingTooSlow: isPlayingTooSlow,
 	}
 
+	e.start()
+
 	return e, nil
 }
 
@@ -481,8 +483,7 @@ func (e *Output) writeSample(s *sample) error {
 	return nil
 }
 
-// TODO call Start, get min queue length
-func (e *Output) Start() {
+func (e *Output) start() {
 	go func() {
 		for {
 			s, err := e.queue.PopFront()

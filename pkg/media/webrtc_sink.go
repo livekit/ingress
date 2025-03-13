@@ -152,6 +152,11 @@ func (s *WebRTCSink) isPlayingTooSlow() bool {
 		return false
 	}
 
+	if !s.params.Live {
+		// output back pressure sets the play rate for VOD
+		return false
+	}
+
 	o := sdkOut.GetOutputs()
 	minQueueLength := math.MaxInt
 	for _, out := range o {
