@@ -301,6 +301,11 @@ func (t *SDKMediaSinkTrack) PushRTCP(pkts []rtcp.Packet) error {
 	return nil
 }
 
+func (sp *SDKMediaSinkTrack) QueueLength() int {
+	// No buffering
+	return 0
+}
+
 func (t *SDKMediaSinkTrack) Close() error {
 	return t.sink.Close()
 }

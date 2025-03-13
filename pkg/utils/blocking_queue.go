@@ -22,8 +22,8 @@ import (
 )
 
 type BlockingQueue[T any] struct {
-	queue chan T
-	size  atomic.Int32
+	queue  chan T
+	length atomic.Int32
 
 	closed core.Fuse
 }
@@ -38,7 +38,7 @@ func (b *BlockingQueue[T]) PushBack(item T) {
 	select {
 	case b.queue <- item:
 		// Small race here
-		b.size.Add(1)
+		b.length.Add(1)
 	case <-b.closed.Watch():
 	}
 }
@@ -47,11 +47,15 @@ func (b *BlockingQueue[T]) PopFront() (T, error) {
 	select {
 	case item := <-b.queue:
 		// Small race here
-		b.size.Add(-1)
+		b.length.Add(-1)
 		return item, nil
 	case <-b.closed.Watch():
 		return *new(T), errors.ErrIngressClosing
 	}
+}
+
+func (b *BlockingQueue[T]) QueueLength() int {
+	return int(b.length.Load())
 }
 
 func (b *BlockingQueue[T]) Close() {
