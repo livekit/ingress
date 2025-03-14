@@ -41,6 +41,7 @@ const (
 )
 
 type SampleProvider interface {
+	QueueLength() int
 	Close() error
 }
 type KeyFrameEmitter interface {
@@ -341,6 +342,15 @@ func (s *LKSDKOutput) AddOutputs(o ...SampleProvider) {
 	s.lock.Lock()
 	s.outputs = append(s.outputs, o...)
 	s.lock.Unlock()
+}
+
+func (s *LKSDKOutput) GetOutputs() []SampleProvider {
+	s.lock.Lock()
+	ret := make([]SampleProvider, len(s.outputs))
+	copy(ret, s.outputs)
+	s.lock.Unlock()
+
+	return ret
 }
 
 func (s *LKSDKOutput) closeOutput() {

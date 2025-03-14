@@ -16,6 +16,7 @@ package media
 
 import (
 	"context"
+	"math"
 	"sync"
 
 	"github.com/frostbyte73/core"
@@ -31,6 +32,10 @@ import (
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 	putils "github.com/livekit/protocol/utils"
+)
+
+const (
+	targetMinQueueLength = 2
 )
 
 type WebRTCSink struct {
@@ -92,7 +97,7 @@ func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), stat
 }
 
 func (s *WebRTCSink) addAudioTrack() (*Output, error) {
-	output, err := NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync.AddTrack(), s.statsGatherer)
+	output, err := NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync.AddTrack(), s.isPlayingTooSlow, s.statsGatherer)
 	if err != nil {
 		logger.Errorw("could not create output", err)
 		return nil, err
@@ -138,6 +143,34 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 	return output.Output, nil
 }
 
+func (s *WebRTCSink) isPlayingTooSlow() bool {
+	s.lock.Lock()
+	sdkOut := s.sdkOut
+	s.lock.Unlock()
+
+	if sdkOut == nil {
+		return false
+	}
+
+	if !s.params.Live {
+		// output back pressure sets the play rate for VOD
+		return false
+	}
+
+	o := sdkOut.GetOutputs()
+	minQueueLength := math.MaxInt
+	for _, out := range o {
+		minQueueLength = min(minQueueLength, out.QueueLength())
+	}
+
+	if minQueueLength > targetMinQueueLength {
+		logger.Debugw("playing too slow", "minQueueLength", minQueueLength)
+		return true
+	}
+
+	return false
+}
+
 func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 	outputs := make([]*Output, 0)
 	sbArray := make([]lksdk_output.SampleProvider, 0)
@@ -145,7 +178,7 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 	sortedLayers := filterAndSortLayersByQuality(s.params.VideoEncodingOptions.Layers, w, h)
 
 	for _, layer := range sortedLayers {
-		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, s.outputSync.AddTrack(), s.statsGatherer)
+		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, s.outputSync.AddTrack(), s.isPlayingTooSlow, s.statsGatherer)
 		if err != nil {
 			return nil, err
 		}
