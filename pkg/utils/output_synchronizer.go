@@ -27,7 +27,6 @@ import (
 
 const (
 	leeway                       = 100 * time.Millisecond
-	maxTargetWaitDuration        = 100 * time.Millisecond
 	waitDurationAdjustmentAmount = 10 * time.Millisecond
 )
 
