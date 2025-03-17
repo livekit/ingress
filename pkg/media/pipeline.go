@@ -139,7 +139,7 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad, para
 		p.SendStateUpdate(context.Background())
 	}()
 
-	bin, err := p.sink.AddTrack(kind, caps.(*gst.Caps))
+	bin, err := p.sink.AddTrack(kind, caps.(*gst.Caps), p.input.SinkReady)
 	if err != nil {
 		return
 	}

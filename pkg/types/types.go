@@ -21,7 +21,4 @@ const (
 	Video       StreamKind = "video"
 	Interleaved StreamKind = "interleaved"
 	Unknown     StreamKind = "unknown"
-
-	StopDroppingRequest  = "STOP_DROPPING_REQUEST"
-	StopDroppingResponse = "STOP_DROPPING_RESPONSE"
 )

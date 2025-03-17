@@ -16,10 +16,8 @@ package media
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/go-gst/go-gst/gst"
@@ -53,6 +51,8 @@ type Input struct {
 
 	audioOutput *gst.Pad
 	videoOutput *gst.Pad
+
+	decodeBinSinkPads []*gst.Pad
 
 	onOutputReady OutputReadyFunc
 	closeFuse     core.Fuse
@@ -95,14 +95,8 @@ func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGat
 		if err != nil {
 			return nil, err
 		}
-		for _, pad := range pads {
-			time.AfterFunc(5*time.Second, func() {
-				str := gst.NewStructure(types.StopDroppingResponse)
-				ev := gst.NewCustomEvent(gst.EventTypeCustomDownstream, str)
-				fmt.Println("SEND EVENT", pad.GetName())
-				pad.SendEvent(ev)
-			})
-		}
+
+		i.decodeBinSinkPads = append(i.decodeBinSinkPads, pads...)
 
 		if err := bin.AddMany(decodeBin, src); err != nil {
 			return nil, err
@@ -139,6 +133,16 @@ func (i *Input) OnOutputReady(f OutputReadyFunc) {
 
 func (i *Input) Start(ctx context.Context) error {
 	return i.source.Start(ctx)
+}
+
+func (i *Input) SinkReady() {
+	str := gst.NewStructure(stopDroppingMediaEvent)
+	ev := gst.NewCustomEvent(gst.EventTypeCustomDownstream, str)
+
+	for _, pad := range i.decodeBinSinkPads {
+		logger.Infow("sending stop dropping media event", "padName", pad.GetName())
+		pad.SendEvent(ev)
+	}
 }
 
 func (i *Input) Close() error {

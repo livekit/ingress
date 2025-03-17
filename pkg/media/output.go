@@ -28,7 +28,6 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/stats"
-	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -41,6 +40,8 @@ const (
 	pixelsPerEncoderThread = 640 * 480
 
 	queueCapacity = 5
+
+	stopDroppingMediaEvent = "STOP_DROPPING_MEDIA"
 )
 
 // Output manages GStreamer elements that converts & encodes video to the specification that's
@@ -57,8 +58,7 @@ type Output struct {
 	trackStatsGatherer *stats.MediaTrackStatGatherer
 	queue              *utils.BlockingQueue[*sample]
 
-	localTrack   atomic.Pointer[lksdk_output.LocalTrack]
-	stopDropping func()
+	localTrack atomic.Pointer[lksdk_output.LocalTrack]
 
 	closed      core.Fuse
 	pipelineErr atomic.Pointer[error]
@@ -386,10 +386,6 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func(
 
 func (o *Output) SinkReady(localTrack *lksdk_output.LocalTrack) {
 	o.localTrack.Store(localTrack)
-
-	if o.stopDropping != nil {
-		o.stopDropping()
-	}
 }
 
 func (e *Output) addPadProbes(elem *gst.Element) error {
@@ -410,32 +406,15 @@ func (e *Output) addPadProbes(elem *gst.Element) error {
 			return gst.PadProbeOK
 		}
 
-		if !ev.HasName(types.StopDroppingResponse) {
+		if !ev.HasName(stopDroppingMediaEvent) {
 			return gst.PadProbeOK
 		}
 
-		logger.Infow("stop dropping media since we got StopDroppingResponse")
+		e.logger.Infow("stop dropping media since we got stop dropping media event")
 		sinkPad.RemoveProbe(id)
 
-		return gst.PadProbeDrop
+		return gst.PadProbeRemove
 	})
-
-	srcPads, err := elem.GetSrcPads()
-	if err != nil {
-		return err
-	}
-	if len(srcPads) == 0 {
-		return psrpc.NewErrorf(psrpc.Internal, "no sink pad on element")
-	}
-	srcPad := srcPads[0]
-
-	e.stopDropping = func() {
-		logger.Infow("sending StopDroppingRequest upstream")
-		str := gst.NewStructure(types.StopDroppingRequest)
-		str.SetValue("stop-dropping", true)
-		ev := gst.NewCustomEvent(gst.EventTypeCustomUpstream, str)
-		srcPad.SendEvent(ev)
-	}
 
 	return nil
 }

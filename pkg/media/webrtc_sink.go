@@ -96,7 +96,7 @@ func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), stat
 	return s, nil
 }
 
-func (s *WebRTCSink) addAudioTrack() (*Output, error) {
+func (s *WebRTCSink) addAudioTrack(sinkReady func()) (*Output, error) {
 	output, err := NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync.AddTrack(), s.isPlayingTooSlow, s.statsGatherer)
 	if err != nil {
 		logger.Errorw("could not create output", err)
@@ -137,6 +137,10 @@ func (s *WebRTCSink) addAudioTrack() (*Output, error) {
 			output.SinkReady(track)
 
 			sdkOut.AddOutputs(output)
+
+			if sinkReady != nil {
+				sinkReady()
+			}
 		}
 	}()
 
@@ -171,7 +175,7 @@ func (s *WebRTCSink) isPlayingTooSlow() bool {
 	return false
 }
 
-func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
+func (s *WebRTCSink) addVideoTrack(w, h int, sinkReady func()) ([]*Output, error) {
 	outputs := make([]*Output, 0)
 	sbArray := make([]lksdk_output.SampleProvider, 0)
 
@@ -226,6 +230,10 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 			}
 
 			sdkOut.AddOutputs(sbArray...)
+
+			if sinkReady != nil {
+				sinkReady()
+			}
 		}
 
 	}()
@@ -233,12 +241,12 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 	return outputs, nil
 }
 
-func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps) (*gst.Bin, error) {
+func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps, sinkReady func()) (*gst.Bin, error) {
 	var bin *gst.Bin
 
 	switch kind {
 	case types.Audio:
-		output, err := s.addAudioTrack()
+		output, err := s.addAudioTrack(sinkReady)
 		if err != nil {
 			logger.Errorw("could not add audio track", err)
 			return nil, err
@@ -254,7 +262,7 @@ func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps) (*gst.Bin, 
 
 		logger.Infow("source resolution parsed", "width", w, "height", h)
 
-		outputs, err := s.addVideoTrack(w, h)
+		outputs, err := s.addVideoTrack(w, h, sinkReady)
 		if err != nil {
 			logger.Errorw("could not add video track", err)
 			return nil, err
