@@ -28,6 +28,7 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -103,19 +104,9 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 		return nil, err
 	}
 
-	pads, err := queueIn.GetSinkPads()
+	err = e.addPadProbes(queueIn)
 	if err != nil {
 		return nil, err
-	}
-	if len(pads) == 0 {
-		return nil, psrpc.NewErrorf(psrpc.Internal, "no sink pad on queue")
-	}
-	pad := pads[0]
-	id := pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
-		return gst.PadProbeDrop
-	})
-	e.stopDropping = func() {
-		pad.RemoveProbe(id)
 	}
 
 	videoScale, err := gst.NewElement("videoscale")
@@ -287,19 +278,9 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 		return nil, err
 	}
 
-	pads, err := queueEnc.GetSinkPads()
+	err = e.addPadProbes(queueEnc)
 	if err != nil {
 		return nil, err
-	}
-	if len(pads) == 0 {
-		return nil, psrpc.NewErrorf(psrpc.Internal, "no sink pad on queue")
-	}
-	pad := pads[0]
-	id := pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
-		return gst.PadProbeDrop
-	})
-	e.stopDropping = func() {
-		pad.RemoveProbe(id)
 	}
 
 	switch options.AudioCodec {
@@ -409,6 +390,53 @@ func (o *Output) SinkReady(localTrack *lksdk_output.LocalTrack) {
 	if o.stopDropping != nil {
 		o.stopDropping()
 	}
+}
+
+func (e *Output) addPadProbes(elem *gst.Element) error {
+	sinkPads, err := elem.GetSinkPads()
+	if err != nil {
+		return err
+	}
+	if len(sinkPads) == 0 {
+		return psrpc.NewErrorf(psrpc.Internal, "no sink pad on element")
+	}
+	sinkPad := sinkPads[0]
+	id := sinkPad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+		return gst.PadProbeDrop
+	})
+	sinkPad.AddProbe(gst.PadProbeTypeEventDownstream, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+		ev := info.GetEvent()
+		if ev == nil {
+			return gst.PadProbeOK
+		}
+
+		if !ev.HasName(types.StopDroppingResponse) {
+			return gst.PadProbeOK
+		}
+
+		logger.Infow("stop dropping media since we got StopDroppingResponse")
+		sinkPad.RemoveProbe(id)
+
+		return gst.PadProbeDrop
+	})
+
+	srcPads, err := elem.GetSrcPads()
+	if err != nil {
+		return err
+	}
+	if len(srcPads) == 0 {
+		return psrpc.NewErrorf(psrpc.Internal, "no sink pad on element")
+	}
+	srcPad := srcPads[0]
+
+	e.stopDropping = func() {
+		logger.Infow("sending StopDroppingRequest upstream")
+		str := gst.NewStructure(types.StopDroppingRequest)
+		ev := gst.NewCustomEvent(gst.EventTypeCustomUpstream, str)
+		srcPad.SendEvent(ev)
+	}
+
+	return nil
 }
 
 func (e *Output) linkElements() error {
