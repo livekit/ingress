@@ -432,6 +432,7 @@ func (e *Output) addPadProbes(elem *gst.Element) error {
 	e.stopDropping = func() {
 		logger.Infow("sending StopDroppingRequest upstream")
 		str := gst.NewStructure(types.StopDroppingRequest)
+		str.SetValue("stop-dropping", true)
 		ev := gst.NewCustomEvent(gst.EventTypeCustomUpstream, str)
 		srcPad.SendEvent(ev)
 	}

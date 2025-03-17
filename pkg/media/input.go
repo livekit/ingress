@@ -16,8 +16,10 @@ package media
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/go-gst/go-gst/gst"
@@ -87,6 +89,19 @@ func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGat
 		decodeBin, err := gst.NewElement("decodebin3")
 		if err != nil {
 			return nil, err
+		}
+
+		pads, err := decodeBin.GetSinkPads()
+		if err != nil {
+			return nil, err
+		}
+		for _, pad := range pads {
+			time.AfterFunc(5*time.Second, func() {
+				str := gst.NewStructure(types.StopDroppingResponse)
+				ev := gst.NewCustomEvent(gst.EventTypeCustomDownstream, str)
+				fmt.Println("SEND EVENT", pad.GetName())
+				pad.SendEvent(ev)
+			})
 		}
 
 		if err := bin.AddMany(decodeBin, src); err != nil {

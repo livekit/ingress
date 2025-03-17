@@ -26,10 +26,8 @@ import (
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
-	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
-	"github.com/livekit/psrpc"
 )
 
 const (
@@ -67,34 +65,6 @@ func NewRTMPRelaySource(ctx context.Context, p *params.Params) (*RTMPRelaySource
 
 	s.flvSrc = app.SrcFromElement(elem)
 	s.writer = newAppSrcWriter(s.flvSrc)
-
-	pads, err := s.flvSrc.GetSrcPads()
-	if err != nil {
-		return nil, err
-	}
-	if len(pads) == 0 {
-		return nil, psrpc.NewErrorf(psrpc.Internal, "no src pad on element")
-	}
-	pad := pads[0]
-
-	pad.AddProbe(gst.PadProbeTypeEventUpstream, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
-		ev := info.GetEvent()
-		if ev == nil {
-			return gst.PadProbeOK
-		}
-
-		if !ev.HasName(types.StopDroppingRequest) {
-			return gst.PadProbeOK
-		}
-
-		logger.Infow("recieved stopDroppingRequest")
-
-		str := gst.NewStructure(types.StopDroppingResponse)
-		ev = gst.NewCustomEvent(gst.EventTypeCustomDownstream, str)
-		pad.SendEvent(ev)
-
-		return gst.PadProbeRemove
-	})
 
 	return s, nil
 }

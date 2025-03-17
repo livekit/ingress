@@ -2,7 +2,8 @@ module github.com/livekit/ingress
 
 go 1.23.2
 
-replace github.com/go-gst/go-gst => github.com/livekit/go-gst v0.2.34-0.20250213212803-e8b19bcbb3e9
+//replace github.com/go-gst/go-gst => github.com/livekit/go-gst v0.2.34-0.20250213212803-e8b19bcbb3e9
+replace github.com/go-gst/go-gst => ../go-gst
 
 toolchain go1.23.6
 
@@ -68,6 +69,7 @@ require (
 	github.com/lithammer/shortuuid/v4 v4.2.0 // indirect
 	github.com/mackerelio/go-osstat v0.2.5 // indirect
 	github.com/magefile/mage v1.15.0 // indirect
+	github.com/mattn/go-pointer v0.0.1 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nats-io/nats.go v1.38.0 // indirect
@@ -92,6 +94,8 @@ require (
 	github.com/redis/go-redis/v9 v9.7.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/stoewer/go-strcase v1.3.0 // indirect
+	github.com/tinyzimmer/go-glib v0.0.25 // indirect
+	github.com/tinyzimmer/go-gst v0.2.33 // indirect
 	github.com/twitchtv/twirp v8.1.3+incompatible // indirect
 	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
@@ -102,7 +106,6 @@ require (
 	go.uber.org/zap/exp v0.3.0 // indirect
 	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/exp v0.0.0-20250128182459-e0ece0dbea4c // indirect
-	golang.org/x/mod v0.23.0 // indirect
 	golang.org/x/net v0.34.0 // indirect
 	golang.org/x/sync v0.11.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
