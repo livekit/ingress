@@ -192,7 +192,8 @@ func getLive(info *livekit.IngressInfo) bool {
 			return true
 		}
 	default:
-		return true
+		// TODO RTMP and WHIP should use the live mode but more work is needed on the pipeline sample timestamp fugding/dropping to avoid A/V sync issues
+		return false
 	}
 }
 
