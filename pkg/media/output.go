@@ -115,7 +115,9 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 		return gst.PadProbeDrop
 	})
 	e.stopDropping = func() {
-		pad.RemoveProbe(id)
+		time.AfterFunc(1000*time.Millisecond, func() {
+			pad.RemoveProbe(id)
+		})
 	}
 
 	videoScale, err := gst.NewElement("videoscale")
@@ -299,7 +301,9 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 		return gst.PadProbeDrop
 	})
 	e.stopDropping = func() {
-		pad.RemoveProbe(id)
+		time.AfterFunc(1000*time.Millisecond, func() {
+			pad.RemoveProbe(id)
+		})
 	}
 
 	switch options.AudioCodec {
