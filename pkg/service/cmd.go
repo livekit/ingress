@@ -23,8 +23,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/logger/medialogutils"
 )
 
 func NewCmd(ctx context.Context, p *params.Params) (*exec.Cmd, error) {
@@ -84,7 +84,7 @@ func NewCmd(ctx context.Context, p *params.Params) (*exec.Cmd, error) {
 	)
 
 	cmd.Dir = "/"
-	l := medialogutils.NewHandlerLogger("resourceID", p.State.ResourceId, "ingressID", p.IngressId)
+	l := utils.NewHandlerLogger(p.State.ResourceId, p.IngressId)
 	cmd.Stdout = l
 	cmd.Stderr = l
 
