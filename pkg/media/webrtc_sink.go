@@ -18,6 +18,8 @@ import (
 	"context"
 	"math"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/go-gst/go-gst/gst"
@@ -52,6 +54,10 @@ type WebRTCSink struct {
 	outputSync      *utils.OutputSynchronizer
 	spliceProcessor *SpliceProcessor
 	statsGatherer   *stats.LocalMediaStatsGatherer
+
+	// logging
+	tooSlowThrottle  core.Throttle
+	tooSlowLogEvents atomic.Int32
 }
 
 func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), statsGatherer *stats.LocalMediaStatsGatherer) (*WebRTCSink, error) {
@@ -59,11 +65,12 @@ func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), stat
 	defer span.End()
 
 	s := &WebRTCSink{
-		params:        p,
-		onFailure:     onFailure,
-		errChan:       make(chan error),
-		outputSync:    utils.NewOutputSynchronizer(),
-		statsGatherer: statsGatherer,
+		params:          p,
+		onFailure:       onFailure,
+		errChan:         make(chan error),
+		outputSync:      utils.NewOutputSynchronizer(),
+		statsGatherer:   statsGatherer,
+		tooSlowThrottle: core.NewThrottle(5 * time.Second),
 	}
 
 	go func() {
@@ -164,7 +171,12 @@ func (s *WebRTCSink) isPlayingTooSlow() bool {
 	}
 
 	if minQueueLength > targetMinQueueLength {
-		logger.Debugw("playing too slow", "minQueueLength", minQueueLength)
+		s.tooSlowLogEvents.Add(1)
+
+		s.tooSlowThrottle(func() {
+			logger.Debugw("playing too slow", "minQueueLength", minQueueLength, "eventCount", s.tooSlowLogEvents.Swap(0))
+		})
+
 		return true
 	}
 
