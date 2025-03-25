@@ -216,8 +216,8 @@ func (m *Monitor) checkCPUConfig() error {
 	return nil
 }
 
-func (m *Monitor) GetCPULoad() float64 {
-	return (float64(m.cpuStats.NumCPU()) - m.cpuStats.GetCPUIdle()) / float64(m.cpuStats.NumCPU()) * 100
+func (m *Monitor) GetAvailableCPU() float64 {
+	return m.getAvailable(m.cpuCostConfig.MinIdleRatio)
 }
 
 func (m *Monitor) CanAccept() bool {

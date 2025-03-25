@@ -438,6 +438,10 @@ func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err
 	}
 }
 
+func (s *Service) GetAvailableCPU() float64 {
+	return s.monitor.GetAvailableCPU()
+}
+
 func (s *Service) CanAccept() bool {
 	return s.monitor.CanAccept()
 }
