@@ -217,6 +217,11 @@ func NewLKSDKOutput(ctx context.Context, onDisconnected func(), p *params.Params
 		return nil, err
 	}
 
+	// The resourceID may not be available when the token is created
+	room.LocalParticipant.SetAttributes(map[string]string{
+		livekit.AttrIngressResourceID: p.State.ResourceId,
+	})
+
 	s.room = room
 	s.logger = p.GetLogger().WithValues("roomID", room.SID())
 
