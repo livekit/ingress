@@ -52,6 +52,14 @@ const (
 	maxRetryCount              = 3
 )
 
+var (
+	ignoredLogPrefixes = map[string][]string{
+		"ice": {
+			"Failed to ping without candidate pairs",
+		},
+	}
+)
+
 type WhipTrackHandler interface {
 	Start(onDone func(err error)) (err error)
 	Close()
@@ -297,7 +305,9 @@ func (h *whipHandler) updateSettings() {
 	se.DisableSRTCPReplayProtection(true)
 	se.SetDTLSRetransmissionInterval(dtlsRetransmissionInterval)
 
-	se.LoggerFactory = pionlogger.NewLoggerFactory(h.logger)
+	o := pionlogger.WithPrefixFilter(pionlogger.NewPrefixFilter(ignoredLogPrefixes))
+
+	se.LoggerFactory = pionlogger.NewLoggerFactory(h.logger, o)
 }
 
 func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnection, error) {
