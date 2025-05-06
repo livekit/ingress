@@ -37,6 +37,7 @@ import (
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/logger/pionlogger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
 	putils "github.com/livekit/protocol/utils"
@@ -49,6 +50,14 @@ const (
 
 	dtlsRetransmissionInterval = 100 * time.Millisecond
 	maxRetryCount              = 3
+)
+
+var (
+	ignoredLogPrefixes = map[string][]string{
+		"ice": {
+			"Failed to ping without candidate pairs",
+		},
+	}
 )
 
 type WhipTrackHandler interface {
@@ -295,6 +304,10 @@ func (h *whipHandler) updateSettings() {
 	se.DisableSRTPReplayProtection(true)
 	se.DisableSRTCPReplayProtection(true)
 	se.SetDTLSRetransmissionInterval(dtlsRetransmissionInterval)
+
+	o := pionlogger.WithPrefixFilter(pionlogger.NewPrefixFilter(ignoredLogPrefixes))
+
+	se.LoggerFactory = pionlogger.NewLoggerFactory(h.logger, o)
 }
 
 func (h *whipHandler) createPeerConnection(api *webrtc.API) (*webrtc.PeerConnection, error) {
