@@ -23,14 +23,12 @@ require (
 	github.com/pion/interceptor v0.1.37
 	github.com/pion/rtcp v1.2.15
 	github.com/pion/rtp v1.8.11
-	github.com/pion/rtp/v2 v2.0.0
 	github.com/pion/sdp/v3 v3.0.10
 	github.com/pion/webrtc/v4 v4.0.8
 	github.com/prometheus/client_golang v1.20.5
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.10.0
 	github.com/urfave/cli/v2 v2.27.6
-	github.com/urfave/cli/v3 v3.3.3
 	github.com/yutopp/go-flv v0.3.1
 	go.uber.org/atomic v1.11.0
 	golang.org/x/image v0.24.0
@@ -102,7 +100,7 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	go.uber.org/zap/exp v0.3.0 // indirect
-	golang.org/x/crypto v0.32.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/exp v0.0.0-20250128182459-e0ece0dbea4c // indirect
 	golang.org/x/net v0.34.0 // indirect
 	golang.org/x/sync v0.11.0 // indirect
