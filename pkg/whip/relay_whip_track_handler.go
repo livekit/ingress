@@ -23,16 +23,17 @@ import (
 	"time"
 
 	"github.com/frostbyte73/core"
-	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/ingress/pkg/stats"
-	"github.com/livekit/protocol/livekit"
-	"github.com/livekit/protocol/logger"
-	"github.com/livekit/server-sdk-go/v2/pkg/jitter"
-	"github.com/livekit/server-sdk-go/v2/pkg/synchronizer"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	"github.com/pion/webrtc/v4/pkg/media"
+
+	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/logger"
+	"github.com/livekit/server-sdk-go/v2/pkg/samplebuilder"
+	"github.com/livekit/server-sdk-go/v2/pkg/synchronizer"
 )
 
 const (
@@ -50,7 +51,7 @@ type RelayWhipTrackHandler struct {
 	writePLI     func(ssrc webrtc.SSRC)
 	onRTCP       func(packet rtcp.Packet)
 
-	jb        *jitter.Buffer
+	jb        *samplebuilder.SampleBuilder
 	relaySink *RelayMediaSink
 
 	firstPacket sync.Once
@@ -228,75 +229,69 @@ func (t *RelayWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
 
 	t.jb.Push(pkt)
 
-	samples := t.jb.PopSamples(false)
-	for _, pkts := range samples {
-		if len(pkts) == 0 {
+	pkts := t.jb.PopPackets()
+	var ts time.Duration
+	var err error
+	var buffer bytes.Buffer // TODO reuse the same buffer across calls, after resetting it if buffer allocation is a performane bottleneck
+	for _, pkt := range pkts {
+		ts, err = t.sync.GetPTS(pkt)
+		switch err {
+		case nil, synchronizer.ErrBackwardsPTS:
+			err = nil
+		default:
+			return err
+		}
+
+		t.statsLock.Lock()
+		stats := t.trackStats
+		t.statsLock.Unlock()
+
+		if t.lastSnValid && t.lastSn+1 != pkt.SequenceNumber {
+			gap := pkt.SequenceNumber - t.lastSn
+			if t.lastSn-pkt.SequenceNumber < gap {
+				gap = t.lastSn - pkt.SequenceNumber
+			}
+			if stats != nil {
+				stats.PacketLost(int64(gap - 1))
+			}
+		}
+
+		t.lastSnValid = true
+		t.lastSn = pkt.SequenceNumber
+
+		if len(pkt.Payload) <= 2 {
+			// Padding
 			continue
 		}
 
-		var ts time.Duration
-		var err error
-		var buffer bytes.Buffer // TODO reuse the same buffer across calls, after resetting it if buffer allocation is a performane bottleneck
-		for _, pkt := range pkts {
-			ts, err = t.sync.GetPTS(pkt)
-			switch err {
-			case nil, synchronizer.ErrBackwardsPTS:
-				err = nil
-			default:
-				return err
-			}
-
-			t.statsLock.Lock()
-			stats := t.trackStats
-			t.statsLock.Unlock()
-
-			if t.lastSnValid && t.lastSn+1 != pkt.SequenceNumber {
-				gap := pkt.SequenceNumber - t.lastSn
-				if t.lastSn-pkt.SequenceNumber < gap {
-					gap = t.lastSn - pkt.SequenceNumber
-				}
-				if stats != nil {
-					stats.PacketLost(int64(gap - 1))
-				}
-			}
-
-			t.lastSnValid = true
-			t.lastSn = pkt.SequenceNumber
-
-			if len(pkt.Payload) <= 2 {
-				// Padding
-				continue
-			}
-
-			buf, err := t.depacketizer.Unmarshal(pkt.Payload)
-			if err != nil {
-				t.logger.Warnw("failed unmarshalling RTP payload", err, "pkt", pkt, "payload", pkt.Payload[:min(len(pkt.Payload), 20)])
-				return err
-			}
-
-			if stats != nil {
-				stats.MediaReceived(int64(len(buf)))
-			}
-
-			_, err = buffer.Write(buf)
-			if err != nil {
-				return err
-			}
+		buf, err := t.depacketizer.Unmarshal(pkt.Payload)
+		if err != nil {
+			t.logger.Warnw("failed unmarshalling RTP payload", err, "pkt", pkt, "payload", pkt.Payload[:min(len(pkt.Payload), 20)])
+			return err
 		}
 
-		// This returns the average duration, not the actual duration of the specific sample
-		// SampleBuilder is using the duration of the previous sample, which is inaccurate as well
-		sampleDuration := t.sync.GetFrameDuration()
-
-		s := &media.Sample{
-			Data:     buffer.Bytes(),
-			Duration: sampleDuration,
+		if stats != nil {
+			stats.MediaReceived(int64(len(buf)))
 		}
 
-		err = t.relaySink.PushSample(s, ts)
+		_, err = buffer.Write(buf)
 		if err != nil {
 			return err
 		}
+	}
+
+	// This returns the average duration, not the actual duration of the specific sample
+	// SampleBuilder is using the duration of the previous sample, which is inaccurate as well
+	sampleDuration := t.sync.GetFrameDuration()
+
+	s := &media.Sample{
+		Data:     buffer.Bytes(),
+		Duration: sampleDuration,
+	}
+
+	err = t.relaySink.PushSample(s, ts)
+	if err != nil {
+		return err
 	}
 
 	return nil

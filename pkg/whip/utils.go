@@ -4,13 +4,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/protocol/logger"
-	"github.com/livekit/server-sdk-go/v2/pkg/jitter"
 	"github.com/pion/rtp"
 	"github.com/pion/rtp/codecs"
 	"github.com/pion/sdp/v3"
 	"github.com/pion/webrtc/v4"
+
+	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/protocol/logger"
+	"github.com/livekit/server-sdk-go/v2/pkg/samplebuilder"
 )
 
 func createDepacketizer(track *webrtc.TrackRemote) (rtp.Depacketizer, error) {
@@ -33,9 +34,9 @@ func createDepacketizer(track *webrtc.TrackRemote) (rtp.Depacketizer, error) {
 	return depacketizer, nil
 }
 
-func createJitterBuffer(track *webrtc.TrackRemote, logger logger.Logger, writePLI func(ssrc webrtc.SSRC)) (*jitter.Buffer, error) {
+func createJitterBuffer(track *webrtc.TrackRemote, logger logger.Logger, writePLI func(ssrc webrtc.SSRC)) (*samplebuilder.SampleBuilder, error) {
 	var maxLatency time.Duration
-	options := []jitter.Option{jitter.WithLogger(logger)}
+	options := []samplebuilder.Option{}
 
 	depacketizer, err := createDepacketizer(track)
 	if err != nil {
@@ -45,11 +46,11 @@ func createJitterBuffer(track *webrtc.TrackRemote, logger logger.Logger, writePL
 	switch strings.ToLower(track.Codec().MimeType) {
 	case strings.ToLower(webrtc.MimeTypeVP8):
 		maxLatency = maxVideoLatency
-		options = append(options, jitter.WithPacketDroppedHandler(func() { writePLI(track.SSRC()) }))
+		options = append(options, samplebuilder.WithPacketDroppedHandler(func() { writePLI(track.SSRC()) }))
 
 	case strings.ToLower(webrtc.MimeTypeH264):
 		maxLatency = maxVideoLatency
-		options = append(options, jitter.WithPacketDroppedHandler(func() { writePLI(track.SSRC()) }))
+		options = append(options, samplebuilder.WithPacketDroppedHandler(func() { writePLI(track.SSRC()) }))
 
 	case strings.ToLower(webrtc.MimeTypeOpus):
 		maxLatency = maxAudioLatency
@@ -61,7 +62,7 @@ func createJitterBuffer(track *webrtc.TrackRemote, logger logger.Logger, writePL
 
 	clockRate := track.Codec().ClockRate
 
-	jb := jitter.NewBuffer(depacketizer, clockRate, maxLatency, options...)
+	jb := samplebuilder.New(uint16(maxLatency), depacketizer, clockRate, options...)
 
 	return jb, nil
 }
