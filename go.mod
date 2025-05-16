@@ -2,7 +2,7 @@ module github.com/livekit/ingress
 
 go 1.23.2
 
-replace github.com/go-gst/go-gst => github.com/livekit/go-gst v0.2.34-0.20250213212803-e8b19bcbb3e9
+replace github.com/go-gst/go-gst => github.com/livekit/go-gst 1587004ebad5
 
 toolchain go1.24.3
 
@@ -14,11 +14,11 @@ require (
 	github.com/go-gst/go-gst v1.4.0
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
-	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
-	github.com/livekit/mediatransportutil v0.0.0-20241220010243-a2bdee945564
-	github.com/livekit/protocol v1.37.2-0.20250506041305-86628c07da5e
-	github.com/livekit/psrpc v0.6.1-0.20250205181828-a0beed2e4126
-	github.com/livekit/server-sdk-go/v2 v2.4.2
+	github.com/livekit/mageutil 0f1ff63f7731
+	github.com/livekit/mediatransportutil 5f8c73435f62
+	github.com/livekit/protocol v1.38.0
+	github.com/livekit/psrpc 465289d72c3c
+	github.com/livekit/server-sdk-go/v2 v2.8.2
 	github.com/pion/dtls/v3 v3.0.6
 	github.com/pion/interceptor v0.1.37
 	github.com/pion/rtcp v1.2.15
