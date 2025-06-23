@@ -25,7 +25,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/urfave/cli/v2"
+	"github.com/urfave/cli/v3"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/livekit/ingress/pkg/config"
@@ -44,7 +44,7 @@ import (
 )
 
 func main() {
-	app := &cli.App{
+	cmd := &cli.Command{
 		Name:        "ingress",
 		Usage:       "LiveKit Ingress",
 		Version:     version.Version,
@@ -84,23 +84,23 @@ func main() {
 			&cli.StringFlag{
 				Name:    "config",
 				Usage:   "LiveKit Ingress yaml config file",
-				EnvVars: []string{"INGRESS_CONFIG_FILE"},
+				Sources: cli.EnvVars("INGRESS_CONFIG_FILE"),
 			},
 			&cli.StringFlag{
 				Name:    "config-body",
 				Usage:   "LiveKit Ingress yaml config body",
-				EnvVars: []string{"INGRESS_CONFIG_BODY"},
+				Sources: cli.EnvVars("INGRESS_CONFIG_BODY"),
 			},
 		},
 		Action: runService,
 	}
 
-	if err := app.Run(os.Args); err != nil {
+	if err := cmd.Run(context.Background(), os.Args); err != nil {
 		logger.Infow("process excited", "error", err)
 	}
 }
 
-func runService(c *cli.Context) error {
+func runService(_ context.Context, c *cli.Command) error {
 	conf, err := getConfig(c, true)
 	if err != nil {
 		return err
@@ -209,7 +209,7 @@ func setupHealthHandlers(conf *config.Config, svc *service.Service) error {
 	return nil
 }
 
-func runHandler(c *cli.Context) error {
+func runHandler(_ context.Context, c *cli.Command) error {
 	conf, err := getConfig(c, false)
 	if err != nil {
 		return err
@@ -313,7 +313,7 @@ func setupHandlerRPCHandlers(conf *config.Config, handler *service.Handler, bus 
 	return service.RegisterIngressRpcHandlers(rpcServer, info)
 }
 
-func getConfig(c *cli.Context, initialize bool) (*config.Config, error) {
+func getConfig(c *cli.Command, initialize bool) (*config.Config, error) {
 	configFile := c.String("config")
 	configBody := c.String("config-body")
 	if configBody == "" {
