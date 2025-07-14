@@ -33,7 +33,7 @@ var Default = Build
 
 const (
 	imageName  = "livekit/ingress"
-	gstVersion = "1.22.5"
+	gstVersion = "1.24.12"
 	goVersion  = "1.21.5"
 )
 
