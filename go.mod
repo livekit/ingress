@@ -14,11 +14,11 @@ require (
 	github.com/go-gst/go-gst v1.4.0
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
-	github.com/livekit/mageutil v0.0.0-20230125210925-54e8a70427c1
-	github.com/livekit/mediatransportutil v0.0.0-20241220010243-a2bdee945564
-	github.com/livekit/protocol v1.37.2-0.20250506041305-86628c07da5e
-	github.com/livekit/psrpc v0.6.1-0.20250205181828-a0beed2e4126
-	github.com/livekit/server-sdk-go/v2 v2.4.2
+	github.com/livekit/mageutil 0f1ff63f7731
+	github.com/livekit/mediatransportutil fb90f5acfded
+	github.com/livekit/protocol v1.39.3
+	github.com/livekit/psrpc 3915e005e741
+	github.com/livekit/server-sdk-go/v2 v2.9.2
 	github.com/pion/dtls/v3 v3.0.6
 	github.com/pion/interceptor v0.1.40
 	github.com/pion/rtcp v1.2.15
