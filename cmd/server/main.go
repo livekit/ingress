@@ -131,7 +131,10 @@ func runService(_ context.Context, c *cli.Command) error {
 		rtmpsrv = rtmp.NewRTMPServer()
 	}
 	if conf.WHIPPort > 0 {
-		whipsrv = whip.NewWHIPServer(bus)
+		whipsrv, err = whip.NewWHIPServer(bus)
+		if err != nil {
+			return err
+		}
 	}
 
 	svc, err := service.NewService(conf, psrpcClient, bus, rtmpsrv, whipsrv, service.NewCmd, "")

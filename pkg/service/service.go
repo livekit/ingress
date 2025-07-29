@@ -151,10 +151,6 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 		return nil, nil, nil, err
 	}
 
-	var rpcServer rpc.IngressHandlerServer
-	if !*p.EnableTranscoding {
-	}
-
 	ready = func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer {
 		ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ready")
 		defer span.End()
