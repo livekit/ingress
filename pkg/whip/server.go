@@ -32,7 +32,9 @@ import (
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
+	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/utils"
@@ -53,12 +55,26 @@ type WHIPServer struct {
 
 	conf         *config.Config
 	webRTCConfig *rtcconfig.WebRTCConfig
-	onPublish    func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error)
+	onPublish    func(streamKey, resourceId string) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error)
 	bus          psrpc.MessageBus
 	rpcClient    rpc.IngressHandlerClient
 
 	handlersLock sync.Mutex
-	handlers     map[string]*whipHandler
+	handlers     map[string]WHIPHandler
+}
+
+type WHIPHandler interface {
+	Init(ctx context.Context, sdpOffer string) (string, error)
+	SetMediaStatsGatherer(st *stats.LocalMediaStatsGatherer)
+	Start(ctx context.Context) (map[types.StreamKind]string, error)
+	WaitForSessionEnd(ctx context.Context) error
+	Close()
+	UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error)
+	DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error)
+	DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error)
+	ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error)
+	AssociateRelay(kind types.StreamKind, token string, w io.WriteCloser) error
+	DissociateRelay(kind types.StreamKind)
 }
 
 func NewWHIPServer(bus psrpc.MessageBus) (*WHIPServer, error) {
@@ -70,7 +86,7 @@ func NewWHIPServer(bus psrpc.MessageBus) (*WHIPServer, error) {
 	return &WHIPServer{
 		bus:       bus,
 		rpcClient: psrpcWHIPClient,
-		handlers:  make(map[string]*whipHandler),
+		handlers:  make(map[string]WHIPHandler),
 	}, nil
 }
 
@@ -345,16 +361,21 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 		return "", "", err
 	}
 
-	var h WhipHandler
+	var h WHIPHandler
 	if *p.EnableTranscoding {
-		h = NewWHIPHandler(s.webRTCConfig)
+		h = NewWHIPHandler(p, s.webRTCConfig)
 	} else {
-		h = NewProxyWHIPHandler(s.bus)
+		h, err = NewProxyWHIPHandler(p, s.bus)
+		if err != nil {
+			return "", "", err
+		}
 	}
 
-	sdpResponse, err := h.Init(ctx, p, sdpOffer)
+	sdpResponse, err := h.Init(ctx, sdpOffer)
 	if err != nil {
 		ready(nil, err)
+
+		h.Close()
 		return "", "", err
 	}
 
@@ -372,6 +393,8 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 				}
 
 				if err != nil {
+					h.Close()
+
 					s.handlersLock.Lock()
 					delete(s.handlers, resourceId)
 					s.handlersLock.Unlock()
@@ -393,6 +416,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 		go func() {
 			var err error
 			defer func() {
+				h.Close()
 				s.handlersLock.Lock()
 				delete(s.handlers, resourceId)
 				s.handlersLock.Unlock()

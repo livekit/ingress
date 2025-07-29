@@ -142,7 +142,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 	return p, stats, nil
 }
 
-func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, ended func(err error), err error) {
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, ended func(err error), err error) {
 	ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest")
 	defer span.End()
 
@@ -164,9 +164,6 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			p.SendStateUpdate(ctx)
 
-			if !*p.EnableTranscoding {
-				DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo)
-			}
 			span.RecordError(err)
 			return nil
 		}
@@ -191,6 +188,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			}
 		}
 
+		// TODO remove non transcoded stats
 		stats, err := s.sm.GetIngressMediaStats(resourceId)
 		if err != nil {
 			return nil
@@ -212,7 +210,6 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 
 			p.SendStateUpdate(ctx)
 			s.sm.IngressEnded(p.IngressInfo.State.ResourceId)
-			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo)
 		}
 	}
 

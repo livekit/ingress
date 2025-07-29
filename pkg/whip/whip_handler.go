@@ -92,23 +92,22 @@ type whipHandler struct {
 	trackSDKMediaSink     map[types.StreamKind]*SDKMediaSink
 }
 
-func NewWHIPHandler(webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
+func NewWHIPHandler(p *params.Params, webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 	// Copy the rtc conf to allow modifying to to match the request
 	rtcConfCopy := *webRTCConfig
 
 	return &whipHandler{
 		rtcConfig:         &rtcConfCopy,
+		params:            p,
+		logger:            p.GetLogger(),
 		sync:              synchronizer.NewSynchronizer(nil),
 		trackHandlers:     make(map[WhipTrackDescription]WhipTrackHandler),
 		trackSDKMediaSink: make(map[types.StreamKind]*SDKMediaSink),
 	}
 }
 
-func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer string) (string, error) {
+func (h *whipHandler) Init(ctx context.Context, sdpOffer string) (string, error) {
 	var err error
-
-	h.logger = p.GetLogger()
-	h.params = p
 
 	h.updateSettings()
 
@@ -122,7 +121,7 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 		return "", err
 	}
 
-	if *p.EnableTranscoding && len(h.simulcastLayers) != 0 {
+	if *h.params.EnableTranscoding && len(h.simulcastLayers) != 0 {
 		return "", errors.ErrSimulcastTranscode
 	}
 
@@ -139,7 +138,7 @@ func (h *whipHandler) Init(ctx context.Context, p *params.Params, sdpOffer strin
 	// for each PeerConnection.
 	i := &interceptor.Registry{}
 
-	if *p.EnableTranscoding {
+	if *h.params.EnableTranscoding {
 		// Use the default set of Interceptors
 		if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
 			return "", err
