@@ -54,22 +54,29 @@ type WHIPServer struct {
 	conf         *config.Config
 	webRTCConfig *rtcconfig.WebRTCConfig
 	onPublish    func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error)
+	bus          psrpc.MessageBus
 	rpcClient    rpc.IngressHandlerClient
 
 	handlersLock sync.Mutex
 	handlers     map[string]*whipHandler
 }
 
-func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
-	return &WHIPServer{
-		rpcClient: rpcClient,
-		handlers:  make(map[string]*whipHandler),
+func NewWHIPServer(bus psrpc.MessageBus) (*WHIPServer, error) {
+	psrpcWHIPClient, err := rpc.NewIngressHandlerClient(bus)
+	if err != nil {
+		return nil, err
 	}
+
+	return &WHIPServer{
+		bus:       bus,
+		rpcClient: psrpcWHIPClient,
+		handlers:  make(map[string]*whipHandler),
+	}, nil
 }
 
 func (s *WHIPServer) Start(
 	conf *config.Config,
-	onPublish func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error),
+	onPublish func(streamKey, resourceId string) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error),
 	healthHandlers HealthHandlers,
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -333,11 +340,16 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
 
-	h := NewWHIPHandler(s.webRTCConfig)
-
-	p, ready, ended, err := s.onPublish(streamKey, resourceId, h)
+	p, ready, ended, err := s.onPublish(streamKey, resourceId)
 	if err != nil {
 		return "", "", err
+	}
+
+	var h WhipHandler
+	if *p.EnableTranscoding {
+		h = NewWHIPHandler(s.webRTCConfig)
+	} else {
+		h = NewProxyWHIPHandler(s.bus)
 	}
 
 	sdpResponse, err := h.Init(ctx, p, sdpOffer)
