@@ -183,13 +183,6 @@ func (s *WHIPServer) Start(
 		logger.Infow("handling ICE Restart request", "resourceID", resourceID)
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		if r.Header.Get("If-Match") != "*" {
-			logger.Infow("WHIP client attempted Trickle-ICE", "streamKey", streamKey, "resourceID", resourceID)
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			_, _ = w.Write([]byte("WHIP Trickle-ICE not supported"))
-			return
-		}
-
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			logger.Infow("WHIP ICE Restart failed to read body", "error", err, "streamKey", streamKey, "resourceID", resourceID)
@@ -215,19 +208,23 @@ func (s *WHIPServer) Start(
 		}
 
 		resp, err := s.rpcClient.ICERestartWHIPResource(s.ctx, resourceID, &rpc.ICERestartWHIPResourceRequest{
-			UserFragment: userFragment,
-			Password:     password,
-			ResourceId:   resourceID,
-			StreamKey:    streamKey,
+			UserFragment:         userFragment,
+			Password:             password,
+			ResourceId:           resourceID,
+			StreamKey:            streamKey,
+			RawTrickleIceSdpfrag: string(body),
+			IfMatch:              r.Header.Get("If-Match"),
 		}, psrpc.WithRequestTimeout(5*time.Second))
 		if err == psrpc.ErrNoResponse {
-			s.handleError(errors.ErrIngressNotFound, w)
+			s.handleError(err, w)
 			logger.Infow("WHIP ICE Restart failed no such session", "error", err, "streamKey", streamKey, "resourceID", resourceID)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/trickle-ice-sdpfrag")
-		w.Header().Set("ETag", fmt.Sprintf("%08x", crc32.ChecksumIEEE([]byte(resp.TrickleIceSdpfrag))))
+		if resp.Etag != "" {
+			w.Header().Set("ETag", resp.Etag)
+		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(resp.TrickleIceSdpfrag))
 

@@ -17,6 +17,8 @@ package whip
 import (
 	"bufio"
 	"context"
+	"fmt"
+	"hash/crc32"
 	"io"
 	"strings"
 	"sync"
@@ -725,6 +727,11 @@ func (h *whipHandler) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERe
 	_, span := tracer.Start(ctx, "whipHandler.ICERestartWHIPResource")
 	defer span.End()
 
+	if req.IfMatch != "*" {
+		h.logger.Infow("WHIP client attempted Trickle-ICE")
+		return nil, psrpc.NewErrorf(psrpc.UnprocessableEntity, "Trickle-ICE not supported")
+	}
+
 	if h.pc == nil {
 		return nil, errors.ErrIngressNotFound
 	}
@@ -771,5 +778,7 @@ func (h *whipHandler) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERe
 		trickleIceSdpfrag.WriteString(l + "\n")
 	}
 
-	return &rpc.ICERestartWHIPResourceResponse{TrickleIceSdpfrag: trickleIceSdpfrag.String()}, nil
+	etag := fmt.Sprintf("%08x", crc32.ChecksumIEEE([]byte(trickleIceSdpfrag.String())))
+
+	return &rpc.ICERestartWHIPResourceResponse{TrickleIceSdpfrag: trickleIceSdpfrag.String(), Etag: etag}, nil
 }

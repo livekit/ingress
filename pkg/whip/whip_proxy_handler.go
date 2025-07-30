@@ -245,5 +245,42 @@ func (h *proxyWhipHandler) DeleteWHIPResource(ctx context.Context, req *rpc.Dele
 }
 
 func (h *proxyWhipHandler) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
-	return nil, nil
+
+	h.logger.Infow("closing WHIP session", "location", h.location)
+
+	if h.location == nil {
+		return nil, psrpc.NewErrorf(psrpc.FailedPrecondition, "WHIP session not established")
+	}
+
+	wreq, err := http.NewRequest("PATCH", h.location.String(), bytes.NewReader([]byte(req.RawTrickleIceSdpfrag)))
+	if err != nil {
+		return nil, err
+	}
+
+	wreq.Header.Add("Content-type", "application/trickle-ice-sdpfrag")
+	wreq.Header.Add("Authorization", fmt.Sprintf("Bearer %s", h.params.Token))
+	wreq.Header.Add("If-Match", req.IfMatch)
+
+	resp, err := http.DefaultClient.Do(wreq)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	h.logger.Infow("requested WHIP resource deletion", "url", h.location, "statusCode", resp.StatusCode)
+
+	code := getErrorCodeForStatus(resp.StatusCode)
+	if code != psrpc.OK {
+		return nil, psrpc.NewErrorf(code, fmt.Sprintf("WHIP resource patch failed on SFU. code=%d", resp.StatusCode))
+	}
+
+	sdpResponse, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	return &rpc.ICERestartWHIPResourceResponse{
+		TrickleIceSdpfrag: string(sdpResponse),
+		Etag:              resp.Header.Get("ETag"),
+	}, nil
 }
