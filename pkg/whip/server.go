@@ -359,9 +359,11 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 	}
 
 	var h WHIPHandler
-	if *p.EnableTranscoding {
+	if *p.EnableTranscoding || !s.conf.SFUTranscodingBypassedWHIP {
+		logger.Infow("Using native WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
 		h = NewWHIPHandler(p, s.webRTCConfig)
 	} else {
+		logger.Infow("Using proxied WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
 		h, err = NewProxyWHIPHandler(p, s.bus)
 		if err != nil {
 			return "", "", err

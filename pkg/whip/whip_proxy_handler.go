@@ -166,6 +166,8 @@ func (h *proxyWhipHandler) Start(ctx context.Context) (map[types.StreamKind]stri
 func (h *proxyWhipHandler) Close() {
 	utils.DeregisterIngressRpcHandlers(h.rpcServer, h.params.IngressInfo)
 
+	h.done.Break()
+
 	h.logger.Infow("closing WHIP session", "location", h.location)
 
 	if h.location == nil {
