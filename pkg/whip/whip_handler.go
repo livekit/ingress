@@ -36,6 +36,7 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -74,8 +75,9 @@ type WhipTrackDescription struct {
 }
 
 type whipHandler struct {
-	logger logger.Logger
-	params *params.Params
+	logger    logger.Logger
+	params    *params.Params
+	rpcServer rpc.IngressHandlerServer
 
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
@@ -94,11 +96,11 @@ type whipHandler struct {
 	trackSDKMediaSink     map[types.StreamKind]*SDKMediaSink
 }
 
-func NewWHIPHandler(p *params.Params, webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
+func NewWHIPHandler(p *params.Params, webRTCConfig *rtcconfig.WebRTCConfig, bus psrpc.MessageBus) (*whipHandler, error) {
 	// Copy the rtc conf to allow modifying to to match the request
 	rtcConfCopy := *webRTCConfig
 
-	return &whipHandler{
+	h := &whipHandler{
 		rtcConfig:         &rtcConfCopy,
 		params:            p,
 		logger:            p.GetLogger(),
@@ -106,6 +108,20 @@ func NewWHIPHandler(p *params.Params, webRTCConfig *rtcconfig.WebRTCConfig) *whi
 		trackHandlers:     make(map[WhipTrackDescription]WhipTrackHandler),
 		trackSDKMediaSink: make(map[types.StreamKind]*SDKMediaSink),
 	}
+
+	var err error
+	if bus != nil {
+		h.rpcServer, err = rpc.NewIngressHandlerServer(h, bus)
+		if err != nil {
+			return nil, err
+		}
+		err = utils.RegisterIngressRpcHandlers(h.rpcServer, p.IngressInfo)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return h, nil
 }
 
 func (h *whipHandler) Init(ctx context.Context, sdpOffer string) (string, error) {
@@ -203,6 +219,9 @@ func (h *whipHandler) SetMediaStatsGatherer(st *stats.LocalMediaStatsGatherer) {
 }
 
 func (h *whipHandler) Close() {
+	if h.rpcServer != nil {
+		utils.DeregisterIngressRpcHandlers(h.rpcServer, h.params.IngressInfo)
+	}
 	if h.pc != nil {
 		h.pc.Close()
 	}
