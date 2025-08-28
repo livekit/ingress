@@ -151,6 +151,21 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 		return nil, nil, nil, err
 	}
 
+	var rpcServer rpc.IngressHandlerServer
+	if !*p.EnableTranscoding {
+		// RPC is handled in the handler process when transcoding
+
+		rpcServer, err = rpc.NewIngressHandlerServer(ihs, s.bus)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		err = RegisterIngressRpcHandlers(rpcServer, p.IngressInfo)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
 	ready = func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer {
 		ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ready")
 		defer span.End()
@@ -160,6 +175,9 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			p.SendStateUpdate(ctx)
 
+			if !*p.EnableTranscoding {
+				DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo)
+			}
 			span.RecordError(err)
 			return nil
 		}
@@ -206,6 +224,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 
 			p.SendStateUpdate(ctx)
 			s.sm.IngressEnded(p.IngressInfo.State.ResourceId)
+			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo)
 		}
 	}
 
