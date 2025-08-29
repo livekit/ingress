@@ -16,8 +16,8 @@ require (
 	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
 	github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731
 	github.com/livekit/mediatransportutil v0.0.0-20241220010243-a2bdee945564
-	github.com/livekit/protocol v1.40.1-0.20250828201311-e5c6f5472d35
-	github.com/livekit/psrpc v0.6.1-0.20250828201448-982c2620735d
+	github.com/livekit/protocol v1.41.1-0.20250828235846-b798f9caf00f
+	github.com/livekit/psrpc v0.6.1-0.20250828235857-3fafdbbcbe55
 	github.com/livekit/server-sdk-go/v2 v2.4.2
 	github.com/pion/dtls/v3 v3.0.6
 	github.com/pion/interceptor v0.1.40
@@ -36,7 +36,13 @@ require (
 	gopkg.in/yaml.v3 v3.0.1
 )
 
-require buf.build/go/protovalidate v0.13.1 // indirect
+require (
+	buf.build/go/protovalidate v0.13.1 // indirect
+	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
+	go.opentelemetry.io/otel v1.37.0 // indirect
+	go.opentelemetry.io/otel/metric v1.37.0 // indirect
+	go.opentelemetry.io/otel/trace v1.37.0 // indirect
+)
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.6-20250625184727-c923a0c2a132.1 // indirect
