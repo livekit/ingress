@@ -38,20 +38,23 @@ import (
 )
 
 type proxyWhipHandler struct {
-	logger   logger.Logger
-	params   *params.Params
-	location *url.URL
+	logger        logger.Logger
+	params        *params.Params
+	location      *url.URL
+	ua            string
+	participantID string
 
 	done      core.Fuse
 	rpcServer rpc.IngressHandlerServer
 }
 
-func NewProxyWHIPHandler(p *params.Params, bus psrpc.MessageBus) (WHIPHandler, error) {
+func NewProxyWHIPHandler(p *params.Params, bus psrpc.MessageBus, ua string) (WHIPHandler, error) {
 	// RPC is handled in the handler process when transcoding
 
 	h := &proxyWhipHandler{
 		params: p,
 		logger: p.GetLogger(),
+		ua:     ua,
 	}
 
 	rpcServer, err := rpc.NewIngressHandlerServer(h, bus)
@@ -117,6 +120,10 @@ func (h *proxyWhipHandler) Init(ctx context.Context, sdpOffer string) (string, e
 
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", h.params.Token))
 	req.Header.Add("Content-Type", "application/sdp")
+	req.Header.Add("X-Livekit-Ingress", "true")
+	if h.ua != "" {
+		req.Header.Set("User-Agent", h.ua)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -142,11 +149,14 @@ func (h *proxyWhipHandler) Init(ctx context.Context, sdpOffer string) (string, e
 	}
 
 	location := urlObj.ResolveReference(locationHeaderUrl)
-	if err != nil {
-		return "", err
-	}
 
 	h.location = location
+	h.participantID = location.Path[strings.LastIndex(location.Path, "/")+1:]
+	if h.participantID != "" {
+		if err = h.rpcServer.RegisterWHIPRTCConnectionNotifyTopic(h.participantID); err != nil {
+			return "", err
+		}
+	}
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -164,13 +174,22 @@ func (h *proxyWhipHandler) Start(ctx context.Context) (map[types.StreamKind]stri
 }
 
 func (h *proxyWhipHandler) Close() {
+	h.close(false)
+}
+
+func (h *proxyWhipHandler) close(isRTCClosed bool) {
+	if !h.done.Break() {
+		return
+	}
+
 	utils.DeregisterIngressRpcHandlers(h.rpcServer, h.params.IngressInfo)
+	if h.participantID != "" {
+		h.rpcServer.DeregisterWHIPRTCConnectionNotifyTopic(h.participantID)
+	}
 
-	h.done.Break()
+	h.logger.Infow("closing WHIP session", "location", h.location, "isRTCClosed", isRTCClosed)
 
-	h.logger.Infow("closing WHIP session", "location", h.location)
-
-	if h.location == nil {
+	if h.location == nil || isRTCClosed {
 		return
 	}
 
@@ -285,4 +304,14 @@ func (h *proxyWhipHandler) ICERestartWHIPResource(ctx context.Context, req *rpc.
 		TrickleIceSdpfrag: string(sdpResponse),
 		Etag:              resp.Header.Get("ETag"),
 	}, nil
+}
+
+func (h *proxyWhipHandler) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
+	h.logger.Infow("WHIPRTCConnectionNotify", "participantID", h.participantID, "req", req)
+
+	if req.Closed {
+		h.close(true)
+	}
+
+	return &google_protobuf2.Empty{}, nil
 }

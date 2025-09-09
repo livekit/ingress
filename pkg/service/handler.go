@@ -169,6 +169,13 @@ func (h *Handler) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestar
 	return &rpc.ICERestartWHIPResourceResponse{}, nil
 }
 
+func (h *Handler) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
+	_, span := tracer.Start(ctx, "Handler.WHIPRTCConnectionNotify")
+	defer span.End()
+
+	return &google_protobuf2.Empty{}, nil
+}
+
 func (h *Handler) GetPProf(ctx context.Context, req *ipc.PProfRequest) (*ipc.PProfResponse, error) {
 	ctx, span := tracer.Start(ctx, "Handler.GetPProf")
 	defer span.End()

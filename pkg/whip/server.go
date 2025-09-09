@@ -332,7 +332,7 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 
 	logger.Debugw("new whip request", "streamKey", streamKey, "sdpOffer", sdpOffer.String(), "userAgent", r.Header.Get("User-Agent"))
 
-	resourceId, sdp, err := s.createStream(streamKey, sdpOffer.String())
+	resourceId, sdp, err := s.createStream(streamKey, sdpOffer.String(), r.Header.Get("User-Agent"))
 	if err != nil {
 		return err
 	}
@@ -347,7 +347,7 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 	return nil
 }
 
-func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, string, error) {
+func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) (string, string, error) {
 	ctx, done := context.WithTimeout(s.ctx, sdpResponseTimeout)
 	defer done()
 
@@ -373,7 +373,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 		}
 	} else {
 		logger.Infow("Using proxied WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
-		h, err = NewProxyWHIPHandler(p, s.bus)
+		h, err = NewProxyWHIPHandler(p, s.bus, ua)
 		if err != nil {
 			return "", "", err
 		}

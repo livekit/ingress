@@ -801,3 +801,7 @@ func (h *whipHandler) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERe
 
 	return &rpc.ICERestartWHIPResourceResponse{TrickleIceSdpfrag: trickleIceSdpfrag.String(), Etag: etag}, nil
 }
+
+func (h *whipHandler) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
+	return &google_protobuf2.Empty{}, nil
+}
