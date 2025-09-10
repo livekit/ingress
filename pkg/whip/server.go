@@ -32,7 +32,9 @@ import (
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
+	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/utils"
@@ -53,23 +55,44 @@ type WHIPServer struct {
 
 	conf         *config.Config
 	webRTCConfig *rtcconfig.WebRTCConfig
-	onPublish    func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error)
+	onPublish    func(streamKey, resourceId string) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error)
+	bus          psrpc.MessageBus
 	rpcClient    rpc.IngressHandlerClient
 
 	handlersLock sync.Mutex
-	handlers     map[string]*whipHandler
+	handlers     map[string]WHIPHandler
 }
 
-func NewWHIPServer(rpcClient rpc.IngressHandlerClient) *WHIPServer {
-	return &WHIPServer{
-		rpcClient: rpcClient,
-		handlers:  make(map[string]*whipHandler),
+type WHIPHandler interface {
+	Init(ctx context.Context, sdpOffer string) (string, error)
+	SetMediaStatsGatherer(st *stats.LocalMediaStatsGatherer)
+	Start(ctx context.Context) (map[types.StreamKind]string, error)
+	WaitForSessionEnd(ctx context.Context) error
+	Close()
+	UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error)
+	DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error)
+	DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error)
+	ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error)
+	AssociateRelay(kind types.StreamKind, token string, w io.WriteCloser) error
+	DissociateRelay(kind types.StreamKind)
+}
+
+func NewWHIPServer(bus psrpc.MessageBus) (*WHIPServer, error) {
+	psrpcWHIPClient, err := rpc.NewIngressHandlerClient(bus)
+	if err != nil {
+		return nil, err
 	}
+
+	return &WHIPServer{
+		bus:       bus,
+		rpcClient: psrpcWHIPClient,
+		handlers:  make(map[string]WHIPHandler),
+	}, nil
 }
 
 func (s *WHIPServer) Start(
 	conf *config.Config,
-	onPublish func(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error),
+	onPublish func(streamKey, resourceId string) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error),
 	healthHandlers HealthHandlers,
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -160,13 +183,6 @@ func (s *WHIPServer) Start(
 		logger.Infow("handling ICE Restart request", "resourceID", resourceID)
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		if r.Header.Get("If-Match") != "*" {
-			logger.Infow("WHIP client attempted Trickle-ICE", "streamKey", streamKey, "resourceID", resourceID)
-			w.WriteHeader(http.StatusUnprocessableEntity)
-			_, _ = w.Write([]byte("WHIP Trickle-ICE not supported"))
-			return
-		}
-
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			logger.Infow("WHIP ICE Restart failed to read body", "error", err, "streamKey", streamKey, "resourceID", resourceID)
@@ -192,19 +208,23 @@ func (s *WHIPServer) Start(
 		}
 
 		resp, err := s.rpcClient.ICERestartWHIPResource(s.ctx, resourceID, &rpc.ICERestartWHIPResourceRequest{
-			UserFragment: userFragment,
-			Password:     password,
-			ResourceId:   resourceID,
-			StreamKey:    streamKey,
+			UserFragment:         userFragment,
+			Password:             password,
+			ResourceId:           resourceID,
+			StreamKey:            streamKey,
+			RawTrickleIceSdpfrag: string(body),
+			IfMatch:              r.Header.Get("If-Match"),
 		}, psrpc.WithRequestTimeout(5*time.Second))
 		if err == psrpc.ErrNoResponse {
-			s.handleError(errors.ErrIngressNotFound, w)
+			s.handleError(err, w)
 			logger.Infow("WHIP ICE Restart failed no such session", "error", err, "streamKey", streamKey, "resourceID", resourceID)
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/trickle-ice-sdpfrag")
-		w.Header().Set("ETag", fmt.Sprintf("%08x", crc32.ChecksumIEEE([]byte(resp.TrickleIceSdpfrag))))
+		if resp.Etag != "" {
+			w.Header().Set("ETag", resp.Etag)
+		}
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(resp.TrickleIceSdpfrag))
 
@@ -312,7 +332,7 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 
 	logger.Debugw("new whip request", "streamKey", streamKey, "sdpOffer", sdpOffer.String(), "userAgent", r.Header.Get("User-Agent"))
 
-	resourceId, sdp, err := s.createStream(streamKey, sdpOffer.String())
+	resourceId, sdp, err := s.createStream(streamKey, sdpOffer.String(), r.Header.Get("User-Agent"))
 	if err != nil {
 		return err
 	}
@@ -327,22 +347,43 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 	return nil
 }
 
-func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, string, error) {
+func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) (string, string, error) {
 	ctx, done := context.WithTimeout(s.ctx, sdpResponseTimeout)
 	defer done()
 
 	resourceId := utils.NewGuid(utils.WHIPResourcePrefix)
 
-	h := NewWHIPHandler(s.webRTCConfig)
-
-	p, ready, ended, err := s.onPublish(streamKey, resourceId, h)
+	p, ready, ended, err := s.onPublish(streamKey, resourceId)
 	if err != nil {
 		return "", "", err
 	}
 
-	sdpResponse, err := h.Init(ctx, p, sdpOffer)
+	var h WHIPHandler
+	if *p.EnableTranscoding || !s.conf.SFUTranscodingBypassedWHIP {
+		logger.Infow("Using native WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
+
+		var bus psrpc.MessageBus
+		if !*p.EnableTranscoding {
+			// RPC is handled in the handler process when transcoding
+			bus = s.bus
+		}
+		h, err = NewWHIPHandler(p, s.webRTCConfig, bus)
+		if err != nil {
+			return "", "", err
+		}
+	} else {
+		logger.Infow("Using proxied WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
+		h, err = NewProxyWHIPHandler(p, s.bus, ua)
+		if err != nil {
+			return "", "", err
+		}
+	}
+
+	sdpResponse, err := h.Init(ctx, sdpOffer)
 	if err != nil {
 		ready(nil, err)
+
+		h.Close()
 		return "", "", err
 	}
 
@@ -360,6 +401,8 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 				}
 
 				if err != nil {
+					h.Close()
+
 					s.handlersLock.Lock()
 					delete(s.handlers, resourceId)
 					s.handlersLock.Unlock()
@@ -381,6 +424,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string) (string, st
 		go func() {
 			var err error
 			defer func() {
+				h.Close()
 				s.handlersLock.Lock()
 				delete(s.handlers, resourceId)
 				s.handlersLock.Unlock()

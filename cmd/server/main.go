@@ -33,6 +33,7 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/ingress/version"
 	"github.com/livekit/protocol/livekit"
@@ -130,12 +131,10 @@ func runService(_ context.Context, c *cli.Command) error {
 		rtmpsrv = rtmp.NewRTMPServer()
 	}
 	if conf.WHIPPort > 0 {
-		psrpcWHIPClient, err := rpc.NewIngressHandlerClient(bus)
+		whipsrv, err = whip.NewWHIPServer(bus)
 		if err != nil {
 			return err
 		}
-
-		whipsrv = whip.NewWHIPServer(psrpcWHIPClient)
 	}
 
 	svc, err := service.NewService(conf, psrpcClient, bus, rtmpsrv, whipsrv, service.NewCmd, "")
@@ -310,7 +309,7 @@ func setupHandlerRPCHandlers(conf *config.Config, handler *service.Handler, bus 
 		return err
 	}
 
-	return service.RegisterIngressRpcHandlers(rpcServer, info)
+	return utils.RegisterIngressRpcHandlers(rpcServer, info)
 }
 
 func getConfig(c *cli.Command, initialize bool) (*config.Config, error) {
