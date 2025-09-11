@@ -93,6 +93,10 @@ func (s *ioServer) UpdateSIPCallState(context.Context, *rpc.UpdateSIPCallStateRe
 	return nil, nil
 }
 
+func (s *ioServer) RecordCallContext(context.Context, *rpc.RecordCallContextRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
+}
+
 func GetDefaultConfig(t *testing.T) *TestConfig {
 	tc := &TestConfig{
 		Config: &config.Config{
