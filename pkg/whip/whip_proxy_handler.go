@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/livekit/protocol/livekit"
@@ -184,7 +185,12 @@ func (h *proxyWhipHandler) close(isRTCClosed bool) {
 
 	utils.DeregisterIngressRpcHandlers(h.rpcServer, h.params.IngressInfo)
 	if h.participantID != "" {
-		h.rpcServer.DeregisterWHIPRTCConnectionNotifyTopic(h.participantID)
+		if isRTCClosed {
+			h.rpcServer.DeregisterWHIPRTCConnectionNotifyTopic(h.participantID)
+		} else {
+			// wait a bit before deregistering, in case sfu would send rtc closed notify
+			time.AfterFunc(5*time.Second, func() { h.rpcServer.DeregisterWHIPRTCConnectionNotifyTopic(h.participantID) })
+		}
 	}
 
 	h.logger.Infow("closing WHIP session", "location", h.location, "isRTCClosed", isRTCClosed)
