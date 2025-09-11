@@ -41,7 +41,8 @@ const (
 )
 
 func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
-	whipsrv := whip.NewWHIPServer(commandPsrpcClient)
+	whipsrv, err := whip.NewWHIPServer(bus)
+	require.NoError(t, err)
 	relay := service.NewRelay(nil, whipsrv)
 
 	svc, err := service.NewService(conf.Config, psrpcClient, bus, nil, whipsrv, newCmd, "")
