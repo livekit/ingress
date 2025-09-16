@@ -61,6 +61,8 @@ type WHIPServer struct {
 
 	handlersLock sync.Mutex
 	handlers     map[string]WHIPHandler
+
+	getWhipProxyEnabled func(ctx context.Context, streamKey string) bool
 }
 
 type WHIPHandler interface {
@@ -93,6 +95,7 @@ func NewWHIPServer(bus psrpc.MessageBus) (*WHIPServer, error) {
 func (s *WHIPServer) Start(
 	conf *config.Config,
 	onPublish func(streamKey, resourceId string) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error),
+	getWhipProxyEnabled func(ctx context.Context, streamKey string) bool,
 	healthHandlers HealthHandlers,
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -104,6 +107,7 @@ func (s *WHIPServer) Start(
 	}
 
 	s.onPublish = onPublish
+	s.getWhipProxyEnabled = getWhipProxyEnabled
 	s.conf = conf
 
 	var err error
@@ -359,7 +363,8 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) 
 	}
 
 	var h WHIPHandler
-	if *p.EnableTranscoding || !s.conf.SFUTranscodingBypassedWHIP {
+	if *p.EnableTranscoding || (!s.conf.SFUTranscodingBypassedWHIP &&
+		(s.getWhipProxyEnabled == nil || !s.getWhipProxyEnabled(ctx, streamKey))) {
 		logger.Infow("Using native WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
 
 		var bus psrpc.MessageBus
