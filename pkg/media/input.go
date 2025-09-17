@@ -61,18 +61,17 @@ type Input struct {
 type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
 
 func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGatherer) (*Input, error) {
-	bin := gst.NewBin("input")
-	i := &Input{
-		bin:                bin,
-		trackStatsGatherer: make(map[types.StreamKind]*stats.MediaTrackStatGatherer),
-	}
-
 	src, err := CreateSource(ctx, p)
 	if err != nil {
 		return nil, err
 	}
 
-	i.source = src
+	bin := gst.NewBin("input")
+	i := &Input{
+		bin:                bin,
+		source:             src,
+		trackStatsGatherer: make(map[types.StreamKind]*stats.MediaTrackStatGatherer),
+	}
 
 	if p.InputType == livekit.IngressInput_URL_INPUT {
 		// Gather input stats from the pipeline
