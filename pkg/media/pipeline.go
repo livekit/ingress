@@ -203,7 +203,9 @@ func (p *Pipeline) Run(ctx context.Context) error {
 	// Return the error from the most upstream part of the pipeline
 	err = p.input.Close()
 	sinkErr := p.sink.Close()
-	if err == nil {
+
+	if err == nil || (err == context.Canceled && sinkErr != nil) {
+		// prefer sink error if exists (causal and more specific) over the generic context.Canceled error
 		err = sinkErr
 	}
 
