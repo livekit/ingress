@@ -159,7 +159,7 @@ func (s *URLSource) ValidateCaps(caps *gst.Caps) error {
 	return errors.ErrUnsupportedDecodeMimeType(str.Name())
 }
 
-func (u *URLSource) Start(ctx context.Context) error {
+func (u *URLSource) Start(ctx context.Context, onClose func()) error {
 	if u.printStats == nil {
 		return nil
 	}

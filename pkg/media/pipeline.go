@@ -64,25 +64,26 @@ func New(ctx context.Context, conf *config.Config, params *params.Params, g *sta
 	// initialize gst
 	gst.Init(nil)
 
-	input, err := NewInput(ctx, params, g)
-	if err != nil {
-		return nil, err
-	}
-
 	pipeline, err := gst.NewPipeline("pipeline")
 	if err != nil {
-		return nil, err
-	}
-
-	if err = pipeline.Add(input.bin.Element); err != nil {
 		return nil, err
 	}
 
 	p := &Pipeline{
 		Params:      params,
 		pipeline:    pipeline,
-		input:       input,
 		pipelineErr: make(chan error, 1),
+	}
+
+	input, err := NewInput(ctx, params, g)
+	if err != nil {
+		return nil, err
+	}
+
+	p.input = input
+
+	if err = pipeline.Add(input.bin.Element); err != nil {
+		return nil, err
 	}
 
 	sink, err := NewWebRTCSink(ctx, params, func() {
@@ -185,7 +186,9 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		return err
 	}
 
-	err = p.input.Start(ctx)
+	err = p.input.Start(ctx, func(ctx context.Context) {
+		p.SendEOS(ctx)
+	})
 	if err != nil {
 		span.RecordError(err)
 		logger.Infow("failed to start input", err)

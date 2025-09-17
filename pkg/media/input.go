@@ -18,6 +18,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/frostbyte73/core"
 	"github.com/go-gst/go-gst/gst"
@@ -37,7 +38,7 @@ import (
 type Source interface {
 	GetSources() []*gst.Element
 	ValidateCaps(*gst.Caps) error
-	Start(ctx context.Context) error
+	Start(ctx context.Context, onClose func()) error
 	Close() error
 }
 
@@ -60,17 +61,18 @@ type Input struct {
 type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
 
 func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGatherer) (*Input, error) {
+	bin := gst.NewBin("input")
+	i := &Input{
+		bin:                bin,
+		trackStatsGatherer: make(map[types.StreamKind]*stats.MediaTrackStatGatherer),
+	}
+
 	src, err := CreateSource(ctx, p)
 	if err != nil {
 		return nil, err
 	}
 
-	bin := gst.NewBin("input")
-	i := &Input{
-		bin:                bin,
-		source:             src,
-		trackStatsGatherer: make(map[types.StreamKind]*stats.MediaTrackStatGatherer),
-	}
+	i.source = src
 
 	if p.InputType == livekit.IngressInput_URL_INPUT {
 		// Gather input stats from the pipeline
@@ -122,8 +124,21 @@ func (i *Input) OnOutputReady(f OutputReadyFunc) {
 	i.onOutputReady = f
 }
 
-func (i *Input) Start(ctx context.Context) error {
-	return i.source.Start(ctx)
+func (i *Input) Start(ctx context.Context, onCloseTimeout func(ctx context.Context)) error {
+	return i.source.Start(ctx, func() {
+		go func() {
+			t := time.NewTimer(5 * time.Second)
+			select {
+			case <-t.C:
+				logger.Infow("timeout while waiting for source closure to trigger pipeline stop. Pipeline frozen")
+				if onCloseTimeout != nil {
+					onCloseTimeout(context.Background())
+				}
+			case <-i.closeFuse.Watch():
+				t.Stop()
+			}
+		}()
+	})
 }
 
 func (i *Input) Close() error {

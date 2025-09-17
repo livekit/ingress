@@ -82,8 +82,8 @@ func NewWHIPAppSource(ctx context.Context, resourceId string, trackKind types.St
 	return w, nil
 }
 
-func (w *whipAppSource) Start(ctx context.Context, getCorrectedTs func(time.Duration) time.Duration) error {
-	ctx, span := tracer.Start(ctx, "RTMPRelaySource.Start")
+func (w *whipAppSource) Start(ctx context.Context, getCorrectedTs func(time.Duration) time.Duration, onClose func()) error {
+	ctx, span := tracer.Start(ctx, "WHIPAppSource.Start")
 	defer span.End()
 
 	logger.Debugw("starting WHIP app source", "resourceID", w.resourceId, "kind", w.trackKind)
@@ -103,6 +103,10 @@ func (w *whipAppSource) Start(ctx context.Context, getCorrectedTs func(time.Dura
 		logger.Debugw("WHIP app source relay stopped", "error", err, "resourceID", w.resourceId, "kind", w.trackKind)
 
 		w.appSrc.EndStream()
+
+		if onClose != nil {
+			onClose()
+		}
 
 		w.result <- err
 		close(w.result)
