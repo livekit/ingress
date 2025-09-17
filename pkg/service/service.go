@@ -142,28 +142,13 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 	return p, stats, nil
 }
 
-func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc.IngressHandlerServerImpl) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, ended func(err error), err error) {
+func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *params.Params, ready func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, ended func(err error), err error) {
 	ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest")
 	defer span.End()
 
 	p, err = s.handleRequest(ctx, streamKey, resourceId, livekit.IngressInput_WHIP_INPUT, nil, "", "", nil)
 	if err != nil {
 		return nil, nil, nil, err
-	}
-
-	var rpcServer rpc.IngressHandlerServer
-	if !*p.EnableTranscoding {
-		// RPC is handled in the handler process when transcoding
-
-		rpcServer, err = rpc.NewIngressHandlerServer(ihs, s.bus)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-
-		err = RegisterIngressRpcHandlers(rpcServer, p.IngressInfo)
-		if err != nil {
-			return nil, nil, nil, err
-		}
 	}
 
 	ready = func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer {
@@ -175,9 +160,6 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			p.SendStateUpdate(ctx)
 
-			if !*p.EnableTranscoding {
-				DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo)
-			}
 			span.RecordError(err)
 			return nil
 		}
@@ -202,6 +184,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 			}
 		}
 
+		// TODO remove non transcoded stats
 		stats, err := s.sm.GetIngressMediaStats(resourceId)
 		if err != nil {
 			return nil
@@ -223,7 +206,6 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string, ihs rpc
 
 			p.SendStateUpdate(ctx)
 			s.sm.IngressEnded(p.IngressInfo.State.ResourceId)
-			DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo)
 		}
 	}
 
@@ -552,35 +534,4 @@ func (a *localSessionAPI) GatherStats(ctx context.Context) (*ipc.MediaStats, err
 	// Return a nil stats map. Use the local gatherer in the session manager for local stats
 
 	return nil, nil
-}
-
-func RegisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) error {
-	if err := server.RegisterUpdateIngressTopic(info.IngressId); err != nil {
-		return err
-	}
-	if err := server.RegisterDeleteIngressTopic(info.IngressId); err != nil {
-		return err
-	}
-
-	if info.InputType == livekit.IngressInput_WHIP_INPUT {
-		if err := server.RegisterDeleteWHIPResourceTopic(info.State.ResourceId); err != nil {
-			return err
-		}
-		if err := server.RegisterICERestartWHIPResourceTopic(info.State.ResourceId); err != nil {
-			return err
-		}
-
-	}
-
-	return nil
-}
-
-func DeregisterIngressRpcHandlers(server rpc.IngressHandlerServer, info *livekit.IngressInfo) {
-	server.DeregisterUpdateIngressTopic(info.IngressId)
-	server.DeregisterDeleteIngressTopic(info.IngressId)
-
-	if info.InputType == livekit.IngressInput_WHIP_INPUT {
-		server.DeregisterDeleteWHIPResourceTopic(info.State.ResourceId)
-		server.DeregisterICERestartWHIPResourceTopic(info.State.ResourceId)
-	}
 }
