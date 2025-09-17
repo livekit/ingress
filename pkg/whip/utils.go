@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/media-sdk/jitter"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/server-sdk-go/v2/pkg/jitter"
 	"github.com/pion/rtp"
 	"github.com/pion/rtp/codecs"
 	"github.com/pion/sdp/v3"
