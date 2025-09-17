@@ -23,6 +23,7 @@ require (
 	github.com/pion/interceptor v0.1.40
 	github.com/pion/rtcp v1.2.15
 	github.com/pion/rtp v1.8.21
+	github.com/pion/rtp/v2 v2.0.0
 	github.com/pion/sdp/v3 v3.0.15
 	github.com/pion/webrtc/v4 v4.1.4
 	github.com/prometheus/client_golang v1.22.0
