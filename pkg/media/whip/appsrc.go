@@ -108,7 +108,10 @@ func (w *whipAppSource) Start(ctx context.Context, getCorrectedTs func(time.Dura
 			onClose()
 		}
 
-		w.result <- err
+		select {
+		case w.result <- err:
+		default:
+		}
 		close(w.result)
 	}()
 
