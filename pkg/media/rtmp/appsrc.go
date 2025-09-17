@@ -69,7 +69,7 @@ func NewRTMPRelaySource(ctx context.Context, p *params.Params) (*RTMPRelaySource
 	return s, nil
 }
 
-func (s *RTMPRelaySource) Start(ctx context.Context) error {
+func (s *RTMPRelaySource) Start(ctx context.Context, onClose func()) error {
 	ctx, span := tracer.Start(ctx, "RTMPRelaySource.Start")
 	defer span.End()
 
@@ -104,8 +104,14 @@ func (s *RTMPRelaySource) Start(ctx context.Context) error {
 		logger.Debugw("flv http relay reached end of stream")
 
 		s.flvSrc.EndStream()
+		if onClose != nil {
+			onClose()
+		}
 
-		s.result <- err
+		select {
+		case s.result <- err:
+		default:
+		}
 		close(s.result)
 	}()
 
