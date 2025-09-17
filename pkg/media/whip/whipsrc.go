@@ -65,9 +65,9 @@ func NewWHIPRelaySource(ctx context.Context, p *params.Params) (*WHIPSource, err
 	return s, nil
 }
 
-func (s *WHIPSource) Start(ctx context.Context) error {
+func (s *WHIPSource) Start(ctx context.Context, onClose func()) error {
 	for _, t := range s.trackSrc {
-		err := t.Start(ctx, s.getCorrctedTimestamp)
+		err := t.Start(ctx, s.getCorrctedTimestamp, onClose)
 		if err != nil {
 			return err
 		}
