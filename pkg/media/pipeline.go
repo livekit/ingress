@@ -243,7 +243,22 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 	case gst.MessageStreamCollection:
 		p.handleStreamCollectionMessage(msg)
 
-	case gst.MessageTag, gst.MessageStateChanged, gst.MessageLatency, gst.MessageAsyncDone, gst.MessageStreamStatus, gst.MessageElement:
+	case gst.MessageStateChanged:
+		p.logPipelineStateChange(msg)
+
+	case gst.MessageAsyncStart:
+		src := msg.Source()
+		if src == p.pipeline.GetName() {
+			logger.Infow("GST ASYNC_START (pipeline)")
+		}
+
+	case gst.MessageAsyncDone:
+		src := msg.Source()
+		if src == p.pipeline.GetName() {
+			logger.Debugw("GST ASYNC_DONE (pipeline)")
+		}
+
+	case gst.MessageTag, gst.MessageLatency, gst.MessageStreamStatus, gst.MessageElement:
 		// ignore
 
 	default:
@@ -278,6 +293,17 @@ func (p *Pipeline) handleStreamCollectionMessage(msg *gst.Message) {
 			videoState := getVideoState(gstStruct)
 			p.SetInputVideoState(context.Background(), videoState, true)
 		}
+	}
+}
+
+func (p *Pipeline) logPipelineStateChange(msg *gst.Message) {
+	old, new := msg.ParseStateChanged()
+	src := msg.Source()
+	isPipeline := (src == p.pipeline.GetName())
+
+	if isPipeline && new != old {
+		logger.Infow("GST pipeline state changed",
+			"old", old, "new", new)
 	}
 }
 
