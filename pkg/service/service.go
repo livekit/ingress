@@ -269,10 +269,11 @@ func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceI
 			info = resp.Info
 			wsUrl = resp.WsUrl
 			token = resp.Token
+			featureFlags = resp.FeatureFlags
 			loggingFields = resp.LoggingFields
 		}
 
-		p, err = s.handleNewPublisher(ctx, resourceId, inputType, info, wsUrl, token, loggingFields)
+		p, err = s.handleNewPublisher(ctx, resourceId, inputType, info, wsUrl, token, featureFlags, loggingFields)
 		if p != nil {
 			info = p.IngressInfo
 		}
@@ -307,7 +308,7 @@ func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceI
 	}
 }
 
-func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string, loggingFields map[string]string) (*params.Params, error) {
+func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string, featureFlags map[string]string, loggingFields map[string]string) (*params.Params, error) {
 	info.State = &livekit.IngressState{
 		Status:     livekit.IngressState_ENDPOINT_BUFFERING,
 		StartedAt:  time.Now().UnixNano(),
@@ -327,7 +328,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inp
 	}
 
 	// This validates the ingress info
-	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, "", loggingFields, nil)
+	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, "", featureFlags, loggingFields, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -506,6 +507,10 @@ func (s *Service) AvailabilityHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Healthy"))
+}
+
+func (s *Service) GetWhipProxyEnabled(ctx context.Context, map[string]string featureFlags) bool {    
+	return s.conf.WHIPProxyEnabled
 }
 
 type sessionCloser func(ctx context.Context)

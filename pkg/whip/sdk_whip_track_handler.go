@@ -178,12 +178,12 @@ func (t *SDKWhipTrackHandler) startRTPReceiver(onDone func(err error)) {
 
 func (t *SDKWhipTrackHandler) startRTCPReceiver() {
 	go func() {
-		t.logger.Infow("starting app source rtcp receiver")
+		t.logger.Infow("starting SDK source rtcp receiver")
 
 		for {
 			select {
 			case <-t.fuse.Watch():
-				t.logger.Debugw("stopping app source rtcp receiver")
+				t.logger.Debugw("stopping SDK source rtcp receiver")
 				return
 			default:
 				_ = t.receiver.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
