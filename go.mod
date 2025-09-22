@@ -19,7 +19,7 @@ require (
 	github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731
 	github.com/livekit/mediatransportutil v0.0.0-20241220010243-a2bdee945564
 	github.com/livekit/protocol v1.41.1-0.20250909050443-48ed04737846
-	github.com/livekit/psrpc v0.6.1-0.20250828235857-3fafdbbcbe55
+	github.com/livekit/psrpc v0.7.0
 	github.com/livekit/server-sdk-go/v2 v2.4.2
 	github.com/pion/dtls/v3 v3.0.7
 	github.com/pion/interceptor v0.1.40

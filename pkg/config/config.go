@@ -51,15 +51,15 @@ type ServiceConfig struct {
 	ApiSecret string             `yaml:"api_secret"` // required (env LIVEKIT_API_SECRET)
 	WsUrl     string             `yaml:"ws_url"`     // required (env LIVEKIT_WS_URL)
 
-	HealthPort                 int           `yaml:"health_port"`
-	DebugHandlerPort           int           `yaml:"debug_handler_port"`
-	PrometheusPort             int           `yaml:"prometheus_port"`
-	RTMPPort                   int           `yaml:"rtmp_port"` // -1 to disable RTMP
-	WHIPPort                   int           `yaml:"whip_port"` // -1 to disable WHIP
-	HTTPRelayPort              int           `yaml:"http_relay_port"`
-	Logging                    logger.Config `yaml:"logging"`
-	Development                bool          `yaml:"development"`
-	SFUTranscodingBypassedWHIP bool          `yaml:"sfu_transcoding_bypassed_whip"` // If true, WHIP requests with transcoding bypassed will be handled by the SFU directly
+	HealthPort       int           `yaml:"health_port"`
+	DebugHandlerPort int           `yaml:"debug_handler_port"`
+	PrometheusPort   int           `yaml:"prometheus_port"`
+	RTMPPort         int           `yaml:"rtmp_port"` // -1 to disable RTMP
+	WHIPPort         int           `yaml:"whip_port"` // -1 to disable WHIP
+	HTTPRelayPort    int           `yaml:"http_relay_port"`
+	Logging          logger.Config `yaml:"logging"`
+	Development      bool          `yaml:"development"`
+	WHIPProxyEnabled bool          `yaml:"whip_proxy_enabled"` // If true, WHIP requests with transcoding bypassed will be handled by the SFU directly
 
 	// Used for WHIP transport
 	RTCConfig rtcconfig.RTCConfig `yaml:"rtc_config"`
