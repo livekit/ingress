@@ -50,6 +50,15 @@ func NewCmd(ctx context.Context, p *params.Params) (*exec.Cmd, error) {
 		extraParamsString = string(p)
 	}
 
+	featureFlags := ""
+	if len(p.FeatureFlags) > 0 {
+		b, err := json.Marshal(p.FeatureFlags)
+		if err != nil {
+			return nil, err
+		}
+		featureFlags = string(b)
+	}
+
 	loggingFields := ""
 	if len(p.LoggingFields) > 0 {
 		b, err := json.Marshal(p.LoggingFields)
@@ -74,6 +83,9 @@ func NewCmd(ctx context.Context, p *params.Params) (*exec.Cmd, error) {
 	}
 	if extraParamsString != "" {
 		args = append(args, "--extra-params", extraParamsString)
+	}
+	if featureFlags != "" {
+		args = append(args, "--feature-flags", featureFlags)
 	}
 	if loggingFields != "" {
 		args = append(args, "--logging-fields", loggingFields)

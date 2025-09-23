@@ -71,6 +71,9 @@ func main() {
 						Name: "ws-url",
 					},
 					&cli.StringFlag{
+						Name: "feature-flags",
+					},
+					&cli.StringFlag{
 						Name: "logging-fields",
 					},
 					&cli.StringFlag{
@@ -158,7 +161,7 @@ func runService(_ context.Context, c *cli.Command) error {
 		}
 	}
 	if whipsrv != nil {
-		err = whipsrv.Start(conf, svc.HandleWHIPPublishRequest, nil, svc.GetHealthHandlers())
+		err = whipsrv.Start(conf, svc.HandleWHIPPublishRequest, svc.GetWhipProxyEnabled, svc.GetHealthHandlers())
 		if err != nil {
 			return err
 		}
@@ -251,7 +254,7 @@ func runHandler(_ context.Context, c *cli.Command) error {
 
 	var handler interface {
 		Kill()
-		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, loggingFields map[string]string, extraParams any) error
+		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, featureFlags map[string]string, loggingFields map[string]string, extraParams any) error
 	}
 
 	bus := psrpc.NewRedisMessageBus(rc)
@@ -281,6 +284,14 @@ func runHandler(_ context.Context, c *cli.Command) error {
 		wsUrl = c.String("ws-url")
 	}
 
+	var featureFlags map[string]string
+	if c.String("feature-flags") != "" {
+		err = json.Unmarshal([]byte(c.String("feature-flags")), &featureFlags)
+		if err != nil {
+			return err
+		}
+	}
+
 	var loggingFields map[string]string
 	if c.String("logging-fields") != "" {
 		err = json.Unmarshal([]byte(c.String("logging-fields")), &loggingFields)
@@ -289,7 +300,7 @@ func runHandler(_ context.Context, c *cli.Command) error {
 		}
 	}
 
-	err = handler.HandleIngress(ctx, info, wsUrl, token, c.String("relay-token"), loggingFields, ep)
+	err = handler.HandleIngress(ctx, info, wsUrl, token, c.String("relay-token"), featureFlags, loggingFields, ep)
 	return translateRetryableError(err)
 }
 

@@ -65,6 +65,8 @@ type Params struct {
 	RelayToken string
 	TmpDir     string
 
+	FeatureFlags map[string]string
+
 	// Input type specific private parameters
 	ExtraParams any
 }
@@ -83,7 +85,7 @@ func InitLogger(conf *config.Config, info *livekit.IngressInfo, loggingFields ma
 
 	return nil
 }
-func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, relayToken string, loggingFields map[string]string, ep any) (*Params, error) {
+func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, relayToken string, featureFlags map[string]string, loggingFields map[string]string, ep any) (*Params, error) {
 	var err error
 
 	// The state should have been created by the service, before launching the hander, but be defensive here.
@@ -160,6 +162,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		LoggingFields:        loggingFields,
 		RelayUrl:             relayUrl,
 		TmpDir:               tmpDir,
+		FeatureFlags:         featureFlags,
 		ExtraParams:          ep,
 	}
 

@@ -1,4 +1,4 @@
-// Copyright 2023 LiveKit, Inc.
+// Copyright 2023-2025 LiveKit, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -122,7 +122,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 	ctx, span := tracer.Start(context.Background(), "Service.HandleRTMPPublishRequest")
 	defer span.End()
 
-	p, err := s.handleRequest(ctx, streamKey, resourceId, livekit.IngressInput_RTMP_INPUT, nil, "", "", nil)
+	p, err := s.handleRequest(ctx, streamKey, resourceId, livekit.IngressInput_RTMP_INPUT, nil, "", "", nil, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -146,7 +146,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 	ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest")
 	defer span.End()
 
-	p, err = s.handleRequest(ctx, streamKey, resourceId, livekit.IngressInput_WHIP_INPUT, nil, "", "", nil)
+	p, err = s.handleRequest(ctx, streamKey, resourceId, livekit.IngressInput_WHIP_INPUT, nil, "", "", nil, nil)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -216,7 +216,7 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 	ctx, span := tracer.Start(ctx, "Service.HandleURLPublishRequest")
 	defer span.End()
 
-	p, err := s.handleRequest(ctx, "", resourceId, livekit.IngressInput_URL_INPUT, req.Info, req.WsUrl, req.Token, req.LoggingFields)
+	p, err := s.handleRequest(ctx, "", resourceId, livekit.IngressInput_URL_INPUT, req.Info, req.WsUrl, req.Token, req.FeatureFlags, req.LoggingFields)
 	if err != nil {
 		return nil, err
 	}
@@ -229,7 +229,7 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 	return p.IngressInfo, nil
 }
 
-func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string, loggingFields map[string]string) (p *params.Params, err error) {
+func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string, featureFlags map[string]string, loggingFields map[string]string) (p *params.Params, err error) {
 
 	ctx, span := tracer.Start(ctx, "Service.HandleRequest")
 	defer span.End()
@@ -269,10 +269,11 @@ func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceI
 			info = resp.Info
 			wsUrl = resp.WsUrl
 			token = resp.Token
+			featureFlags = resp.FeatureFlags
 			loggingFields = resp.LoggingFields
 		}
 
-		p, err = s.handleNewPublisher(ctx, resourceId, inputType, info, wsUrl, token, loggingFields)
+		p, err = s.handleNewPublisher(ctx, resourceId, inputType, info, wsUrl, token, featureFlags, loggingFields)
 		if p != nil {
 			info = p.IngressInfo
 		}
@@ -307,7 +308,7 @@ func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceI
 	}
 }
 
-func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string, loggingFields map[string]string) (*params.Params, error) {
+func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string, featureFlags map[string]string, loggingFields map[string]string) (*params.Params, error) {
 	info.State = &livekit.IngressState{
 		Status:     livekit.IngressState_ENDPOINT_BUFFERING,
 		StartedAt:  time.Now().UnixNano(),
@@ -327,7 +328,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inp
 	}
 
 	// This validates the ingress info
-	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, "", loggingFields, nil)
+	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, "", featureFlags, loggingFields, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -506,6 +507,10 @@ func (s *Service) AvailabilityHandler(w http.ResponseWriter, r *http.Request) {
 
 func (s *Service) HealthHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Healthy"))
+}
+
+func (s *Service) GetWhipProxyEnabled(ctx context.Context, featureFlags map[string]string) bool {
+	return s.conf.WHIPProxyEnabled
 }
 
 type sessionCloser func(ctx context.Context)
