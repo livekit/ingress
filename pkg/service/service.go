@@ -128,7 +128,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 			logger.Errorw("failed to register go collector", err)
 		}
 	}
-	if err := prometheus.Register(prometheus.NewBuildInfoCollector()); err != nil {
+	if err := prometheus.Register(collectors.NewBuildInfoCollector()); err != nil {
 		if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
 			logger.Errorw("failed to register build info collector", err)
 		}
