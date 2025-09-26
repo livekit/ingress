@@ -117,7 +117,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		}
 	}
 
-	// Register default Prometheus collectors (idempotent)
+	// Register default Prometheus collectors
 	if err := prometheus.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})); err != nil {
 		if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
 			logger.Errorw("failed to register process collector", err)
