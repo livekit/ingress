@@ -124,7 +124,7 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		}
 
 		// Unregister the default Go collector before registering detailed runtime metrics
-		prometheus.Unregister(collectors.NewGoCollector())
+		prometheus.Unregister(prometheus.NewGoCollector())
 		if err := prometheus.Register(collectors.NewGoCollector(collectors.WithGoCollectorRuntimeMetrics(collectors.MetricsAll))); err != nil {
 			if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
 				logger.Errorw("failed to register go collector", err)
