@@ -45,6 +45,8 @@ import (
 	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 )
 
 const shutdownTimer = time.Second * 5
@@ -112,6 +114,27 @@ func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.Mes
 		s.promServer = &http.Server{
 			Addr:    fmt.Sprintf(":%d", conf.PrometheusPort),
 			Handler: promhttp.Handler(),
+		}
+
+		// Register default Prometheus collectors only when Prometheus is enabled
+		if err := prometheus.Register(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{})); err != nil {
+			if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
+				logger.Errorw("failed to register process collector", err)
+			}
+		}
+
+		// Unregister the default Go collector before registering detailed runtime metrics
+		prometheus.Unregister(prometheus.NewGoCollector())
+		if err := prometheus.Register(collectors.NewGoCollector(collectors.WithGoCollectorRuntimeMetrics(collectors.MetricsAll))); err != nil {
+			if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
+				logger.Errorw("failed to register go collector", err)
+			}
+		}
+
+		if err := prometheus.Register(collectors.NewBuildInfoCollector()); err != nil {
+			if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
+				logger.Errorw("failed to register build info collector", err)
+			}
 		}
 	}
 
