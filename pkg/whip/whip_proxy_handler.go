@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/frostbyte73/core"
@@ -38,6 +39,10 @@ import (
 	"github.com/livekit/ingress/pkg/utils"
 )
 
+const (
+	sessionNotifyTimeout = 3 * time.Minute
+)
+
 type proxyWhipHandler struct {
 	logger        logger.Logger
 	params        *params.Params
@@ -47,6 +52,9 @@ type proxyWhipHandler struct {
 
 	done      core.Fuse
 	rpcServer rpc.IngressHandlerServer
+
+	mu       sync.Mutex
+	watchdog *time.Timer
 }
 
 func NewProxyWHIPHandler(p *params.Params, bus psrpc.MessageBus, ua string) (WHIPHandler, error) {
@@ -225,6 +233,8 @@ func (h *proxyWhipHandler) close(isRTCClosed bool) {
 }
 
 func (h *proxyWhipHandler) WaitForSessionEnd(ctx context.Context) error {
+	h.resetWatchDog()
+
 	select {
 	case <-h.done.Watch():
 	case <-ctx.Done():
@@ -313,10 +323,10 @@ func (h *proxyWhipHandler) ICERestartWHIPResource(ctx context.Context, req *rpc.
 }
 
 func (h *proxyWhipHandler) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
-	h.logger.Infow("WHIPRTCConnectionNotify", "participantID", h.participantID, "req", req)
-
 	tctx, done := context.WithTimeout(context.Background(), 10*time.Second)
 	defer done()
+
+	h.resetWatchDog()
 
 	if req.Video != nil {
 		h.params.SetInputVideoState(tctx, req.Video, true)
@@ -331,4 +341,17 @@ func (h *proxyWhipHandler) WHIPRTCConnectionNotify(ctx context.Context, req *rpc
 	}
 
 	return &google_protobuf2.Empty{}, nil
+}
+
+func (h *proxyWhipHandler) resetWatchDog() {
+	h.mu.Lock()
+	if h.watchdog != nil {
+		h.watchdog.Stop()
+	}
+
+	h.watchdog = time.AfterFunc(sessionNotifyTimeout, func() {
+		h.logger.Infow("no Notify call from the SFU, terminating ingress")
+		h.done.Break()
+	})
+	h.mu.Unlock()
 }
