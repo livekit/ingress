@@ -315,6 +315,17 @@ func (h *proxyWhipHandler) ICERestartWHIPResource(ctx context.Context, req *rpc.
 func (h *proxyWhipHandler) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
 	h.logger.Infow("WHIPRTCConnectionNotify", "participantID", h.participantID, "req", req)
 
+	tctx, done := context.WithTimeout(context.Background(), 10*time.Second)
+	defer done()
+
+	if req.Video != nil {
+		h.params.SetInputVideoState(tctx, req.Video, true)
+	}
+
+	if req.Audio != nil {
+		h.params.SetInputAudioState(tctx, req.Audio, true)
+	}
+
 	if req.Closed {
 		h.close(true)
 	}
