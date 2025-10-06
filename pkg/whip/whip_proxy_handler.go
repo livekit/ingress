@@ -191,6 +191,13 @@ func (h *proxyWhipHandler) close(isRTCClosed bool) {
 		return
 	}
 
+	h.mu.Lock()
+	if h.watchdog != nil {
+		h.watchdog.Stop()
+		h.watchdog = nil
+	}
+	h.mu.Unlock()
+
 	utils.DeregisterIngressRpcHandlers(h.rpcServer, h.params.IngressInfo)
 	if h.participantID != "" {
 		if isRTCClosed {
