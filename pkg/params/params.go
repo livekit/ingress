@@ -85,7 +85,9 @@ func InitLogger(conf *config.Config, info *livekit.IngressInfo, loggingFields ma
 
 	return nil
 }
-func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, relayToken string, featureFlags map[string]string, loggingFields map[string]string, ep any) (*Params, error) {
+
+// TODO: reduce the number of parameters (primitive types obsession)
+func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, relayToken string, featureFlags map[string]string, loggingFields map[string]string, ep any) (*Params, error) { // nolint:revive
 	var err error
 
 	// The state should have been created by the service, before launching the hander, but be defensive here.
@@ -189,11 +191,7 @@ func UpdateTranscodingEnabled(info *livekit.IngressInfo) {
 func getLive(info *livekit.IngressInfo) bool {
 	switch info.InputType {
 	case livekit.IngressInput_URL_INPUT:
-		if strings.HasPrefix(info.Url, "http://") || strings.HasPrefix(info.Url, "https://") {
-			return false
-		} else {
-			return true
-		}
+		return !(strings.HasPrefix(info.Url, "http://") || strings.HasPrefix(info.Url, "https://"))
 	default:
 		// TODO RTMP and WHIP should use the live mode but more work is needed on the pipeline sample timestamp fugding/dropping to avoid A/V sync issues
 		return false

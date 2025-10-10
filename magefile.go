@@ -32,9 +32,10 @@ import (
 var Default = Build
 
 const (
-	imageName  = "livekit/ingress"
-	gstVersion = "1.24.12"
-	goVersion  = "1.21.5"
+	imageName       = "livekit/ingress"
+	gstVersion      = "1.24.12"
+	goVersion       = "1.24.5"
+	golangciVersion = "v1.64.2"
 )
 
 var plugins = []string{"gstreamer", "gst-plugins-base", "gst-plugins-good", "gst-plugins-bad", "gst-plugins-ugly", "gst-libav"}
@@ -102,12 +103,22 @@ func Bootstrap() error {
 }
 
 func Build() error {
+	if err := Lint(); err != nil {
+		return err
+	}
+
 	gopath := os.Getenv("GOPATH")
 	if gopath == "" {
 		gopath = build.Default.GOPATH
 	}
 
-	return run(fmt.Sprintf("go build -a -o %s/bin/ingress ./cmd/server", gopath))
+	return run(fmt.Sprintf("go build -o %s/bin/ingress ./cmd/server", gopath))
+}
+
+func Lint() error {
+	return mageutil.Run(context.Background(),
+		fmt.Sprintf("go run github.com/golangci/golangci-lint/cmd/golangci-lint@%s run", golangciVersion),
+	)
 }
 
 func Test() error {

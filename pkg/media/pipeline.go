@@ -25,7 +25,6 @@ import (
 	"github.com/go-gst/go-gst/gst"
 	"github.com/pion/webrtc/v4"
 
-	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
@@ -54,7 +53,7 @@ type Pipeline struct {
 	pipelineErr chan error
 }
 
-func New(ctx context.Context, conf *config.Config, params *params.Params, g *stats.LocalMediaStatsGatherer) (*Pipeline, error) {
+func New(ctx context.Context, params *params.Params, g *stats.LocalMediaStatsGatherer) (*Pipeline, error) {
 	ctx, span := tracer.Start(ctx, "Pipeline.New")
 	defer span.End()
 
@@ -113,12 +112,12 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 		}
 	}()
 
-	_, err = pad.Connect("notify::caps", func(gPad *gst.GhostPad, param *glib.ParamSpec) {
-		p.onParamsReady(kind, gPad, param)
+	_, err = pad.Connect("notify::caps", func(gPad *gst.GhostPad, _ *glib.ParamSpec) {
+		p.onParamsReady(kind, gPad)
 	})
 }
 
-func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad, param *glib.ParamSpec) {
+func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 	var err error
 
 	// TODO fix go-gst to not create non nil gst.Caps for a NULL native caps pointer?
@@ -149,7 +148,7 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad, para
 		return
 	}
 
-	gPad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+	gPad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, _ *gst.PadProbeInfo) gst.PadProbeReturn {
 		// link
 		if linkReturn := pad.Link(bin.GetStaticPad("sink")); linkReturn != gst.PadLinkOK {
 			logger.Errorw("failed to link output bin", err)

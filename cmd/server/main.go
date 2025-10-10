@@ -264,7 +264,7 @@ func runHandler(_ context.Context, c *cli.Command) error {
 	}
 	handler = service.NewHandler(conf, rpcClient)
 
-	setupHandlerRPCHandlers(conf, handler.(*service.Handler), bus, info, ep)
+	setupHandlerRPCHandlers(handler.(*service.Handler), bus, info)
 
 	killChan := make(chan os.Signal, 1)
 	signal.Notify(killChan, syscall.SIGINT)
@@ -314,7 +314,7 @@ func translateRetryableError(err error) error {
 	return err
 }
 
-func setupHandlerRPCHandlers(conf *config.Config, handler *service.Handler, bus psrpc.MessageBus, info *livekit.IngressInfo, ep any) error {
+func setupHandlerRPCHandlers(handler *service.Handler, bus psrpc.MessageBus, info *livekit.IngressInfo) error {
 	rpcServer, err := rpc.NewIngressHandlerServer(handler, bus)
 	if err != nil {
 		return err
