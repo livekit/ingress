@@ -105,7 +105,7 @@ func RunRTMPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPs
 			},
 		},
 	}
-	ios.getIngressInfo = func(req *rpc.GetIngressInfoRequest) (*rpc.GetIngressInfoResponse, error) {
+	ios.getIngressInfo = func(_ *rpc.GetIngressInfoRequest) (*rpc.GetIngressInfoResponse, error) {
 		return &rpc.GetIngressInfoResponse{Info: info, WsUrl: conf.WsUrl}, nil
 	}
 

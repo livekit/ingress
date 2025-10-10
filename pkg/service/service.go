@@ -150,7 +150,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 		return nil, nil, err
 	}
 
-	err = s.manager.startIngress(ctx, p, func(ctx context.Context) {
+	err = s.manager.startIngress(ctx, p, func(_ context.Context) {
 		s.rtmpSrv.CloseHandler(resourceId)
 	})
 	if err != nil {
@@ -191,7 +191,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
 			p.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(ctx context.Context) {
+			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(_ context.Context) {
 				s.whipSrv.CloseHandler(resourceId)
 			}})
 		} else {
@@ -199,7 +199,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 				MimeTypes: mimeTypes,
 			})
 
-			err := s.manager.startIngress(ctx, p, func(ctx context.Context) {
+			err := s.manager.startIngress(ctx, p, func(_ context.Context) {
 				s.whipSrv.CloseHandler(resourceId)
 			})
 			if err != nil {
@@ -252,7 +252,8 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 	return p.IngressInfo, nil
 }
 
-func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string, featureFlags map[string]string, loggingFields map[string]string) (p *params.Params, err error) {
+// TODO: reduce the number of parameters (primitive types obsession)
+func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string, featureFlags map[string]string, loggingFields map[string]string) (p *params.Params, err error) { // nolint:revive
 
 	ctx, span := tracer.Start(ctx, "Service.HandleRequest")
 	defer span.End()
@@ -498,7 +499,7 @@ func (s *Service) StartIngress(ctx context.Context, req *rpc.StartIngressRequest
 	return s.HandleURLPublishRequest(ctx, utils.NewGuid(utils.URLResourcePrefix), req)
 }
 
-func (s *Service) StartIngressAffinity(ctx context.Context, req *rpc.StartIngressRequest) float32 {
+func (s *Service) StartIngressAffinity(_ context.Context, req *rpc.StartIngressRequest) float32 {
 	if !s.isActive.Load() || !s.monitor.CanAcceptIngress(req.Info) {
 		return -1
 	}
@@ -506,7 +507,7 @@ func (s *Service) StartIngressAffinity(ctx context.Context, req *rpc.StartIngres
 	return 1
 }
 
-func (s *Service) KillIngressSession(ctx context.Context, req *rpc.KillIngressSessionRequest) (*emptypb.Empty, error) {
+func (s *Service) KillIngressSession(_ context.Context, req *rpc.KillIngressSessionRequest) (*emptypb.Empty, error) {
 	s.sm.IngressEnded(req.Session.ResourceId)
 
 	return &emptypb.Empty{}, nil
@@ -519,7 +520,7 @@ func (s *Service) GetHealthHandlers() whip.HealthHandlers {
 	}
 }
 
-func (s *Service) AvailabilityHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Service) AvailabilityHandler(w http.ResponseWriter, _ *http.Request) {
 	if !s.CanAccept() {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte("No availability"))
@@ -528,11 +529,11 @@ func (s *Service) AvailabilityHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Available"))
 }
 
-func (s *Service) HealthHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HealthHandler(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("Healthy"))
 }
 
-func (s *Service) GetWhipProxyEnabled(ctx context.Context, featureFlags map[string]string) bool {
+func (s *Service) GetWhipProxyEnabled(_ context.Context, _ map[string]string) bool {
 	return s.conf.WHIPProxyEnabled
 }
 
@@ -553,12 +554,12 @@ func (a *localSessionAPI) GetProfileData(ctx context.Context, profileName string
 	return pprof.GetProfileData(ctx, profileName, timeout, debug)
 }
 
-func (a *localSessionAPI) GetPipelineDot(ctx context.Context) (string, error) {
+func (a *localSessionAPI) GetPipelineDot(_ context.Context) (string, error) {
 	// No dot file if transcoding is disabled
 	return "", errors.ErrIngressNotFound
 }
 
-func (a *localSessionAPI) GatherStats(ctx context.Context) (*ipc.MediaStats, error) {
+func (a *localSessionAPI) GatherStats(_ context.Context) (*ipc.MediaStats, error) {
 	// Return a nil stats map. Use the local gatherer in the session manager for local stats
 
 	return nil, nil

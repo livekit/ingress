@@ -28,7 +28,7 @@ func NewHandlerLogger(resourceID, ingressID string) *medialogutils.CmdLogger {
 		lines := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
 		for _, line := range lines {
 			if strings.HasSuffix(line, "}") {
-				fmt.Println(line)
+				fmt.Println(line) //nolint:forbidigo
 			} else {
 				action := logError
 				if len(line) > 5 {

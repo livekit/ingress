@@ -141,19 +141,19 @@ func (h *Handler) killAndReturnState(ctx context.Context) (*livekit.IngressState
 	}
 }
 
-func (h *Handler) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
+func (h *Handler) UpdateIngress(ctx context.Context, _ *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
 	_, span := tracer.Start(ctx, "Handler.UpdateIngress")
 	defer span.End()
 	return h.killAndReturnState(ctx)
 }
 
-func (h *Handler) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
+func (h *Handler) DeleteIngress(ctx context.Context, _ *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
 	_, span := tracer.Start(ctx, "Handler.DeleteIngress")
 	defer span.End()
 	return h.killAndReturnState(ctx)
 }
 
-func (h *Handler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {
+func (h *Handler) DeleteWHIPResource(ctx context.Context, _ *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {
 	_, span := tracer.Start(ctx, "Handler.DeleteWHIPResource")
 	defer span.End()
 
@@ -162,14 +162,14 @@ func (h *Handler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPRes
 	return &google_protobuf2.Empty{}, nil
 }
 
-func (h *Handler) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
+func (h *Handler) ICERestartWHIPResource(ctx context.Context, _ *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
 	_, span := tracer.Start(ctx, "Handler.ICERestartWHIPResource")
 	defer span.End()
 
 	return &rpc.ICERestartWHIPResourceResponse{}, nil
 }
 
-func (h *Handler) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
+func (h *Handler) WHIPRTCConnectionNotify(ctx context.Context, _ *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
 	_, span := tracer.Start(ctx, "Handler.WHIPRTCConnectionNotify")
 	defer span.End()
 
@@ -194,7 +194,7 @@ func (h *Handler) GetPProf(ctx context.Context, req *ipc.PProfRequest) (*ipc.PPr
 	}, nil
 }
 
-func (h *Handler) GetPipelineDot(ctx context.Context, in *ipc.GstPipelineDebugDotRequest) (*ipc.GstPipelineDebugDotResponse, error) {
+func (h *Handler) GetPipelineDot(ctx context.Context, _ *ipc.GstPipelineDebugDotRequest) (*ipc.GstPipelineDebugDotResponse, error) {
 	ctx, span := tracer.Start(ctx, "Handler.GetPipelineDot")
 	defer span.End()
 
@@ -219,7 +219,7 @@ func (h *Handler) GetPipelineDot(ctx context.Context, in *ipc.GstPipelineDebugDo
 
 }
 
-func (h *Handler) GatherMediaStats(ctx context.Context, in *ipc.GatherMediaStatsRequest) (*ipc.GatherMediaStatsResponse, error) {
+func (h *Handler) GatherMediaStats(ctx context.Context, _ *ipc.GatherMediaStatsRequest) (*ipc.GatherMediaStatsResponse, error) {
 	st, err := h.statsGatherer.GatherStats(ctx)
 	if err != nil {
 		return nil, err
@@ -263,7 +263,7 @@ func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, 
 	params, err := params.GetParams(ctx, h.rpcClient, h.conf, info, wsUrl, token, relayToken, featureFlags, loggingFields, extraParams)
 	if err == nil {
 		// create the pipeline
-		p, err = media.New(ctx, h.conf, params, h.statsGatherer)
+		p, err = media.New(ctx, params, h.statsGatherer)
 	}
 
 	if err != nil {

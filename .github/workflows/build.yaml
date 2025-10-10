@@ -31,5 +31,16 @@ jobs:
         with:
           lfs: true
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GOVERSION }}
+          cache: true
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: v1.60.3
+
       - name: Build docker image
         run: docker build -t ingress -f ./build/ingress/Dockerfile --build-arg GOVERSION=$GOVERSION --build-arg GSTVERSION=$GSTVERSION .

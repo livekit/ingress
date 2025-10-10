@@ -27,7 +27,7 @@ import (
 	"github.com/livekit/protocol/logger"
 )
 
-func NewCmd(ctx context.Context, p *params.Params) (*exec.Cmd, error) {
+func NewCmd(_ context.Context, p *params.Params) (*exec.Cmd, error) {
 	confString, err := yaml.Marshal(p.Config)
 	if err != nil {
 		logger.Errorw("could not marshal config", err)

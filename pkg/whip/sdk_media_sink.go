@@ -118,7 +118,7 @@ func (sp *SDKMediaSink) addTrack(quality livekit.VideoQuality) {
 	}
 }
 
-func (sp *SDKMediaSink) ensureAudioTracksInitialized(pkt *rtp.Packet, t *SDKMediaSinkTrack) (bool, error) {
+func (sp *SDKMediaSink) ensureAudioTracksInitialized(t *SDKMediaSinkTrack) (bool, error) {
 	stereo := strings.Contains(sp.codecParameters.SDPFmtpLine, "sprop-stereo=1")
 	audioState := getAudioState(sp.codecParameters.MimeType, stereo, sp.codecParameters.ClockRate)
 	sp.params.SetInputAudioState(context.Background(), audioState, true)
@@ -213,7 +213,7 @@ func (sp *SDKMediaSink) ensureTracksInitialized(pkt *rtp.Packet, t *SDKMediaSink
 	}
 
 	if sp.streamKind == types.Audio {
-		return sp.ensureAudioTracksInitialized(pkt, t)
+		return sp.ensureAudioTracksInitialized(t)
 	}
 
 	return sp.ensureVideoTracksInitialized(pkt, t)
@@ -301,7 +301,7 @@ func (t *SDKMediaSinkTrack) PushRTCP(pkts []rtcp.Packet) error {
 	return nil
 }
 
-func (sp *SDKMediaSinkTrack) QueueLength() int {
+func (t *SDKMediaSinkTrack) QueueLength() int {
 	// No buffering
 	return 0
 }

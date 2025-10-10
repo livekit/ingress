@@ -96,7 +96,7 @@ type whipHandler struct {
 	trackSDKMediaSink     map[types.StreamKind]*SDKMediaSink
 }
 
-func NewWHIPHandler(p *params.Params, webRTCConfig *rtcconfig.WebRTCConfig, bus psrpc.MessageBus) (*whipHandler, error) {
+func newWHIPHandler(p *params.Params, webRTCConfig *rtcconfig.WebRTCConfig, bus psrpc.MessageBus) (*whipHandler, error) {
 	// Copy the rtc conf to allow modifying to to match the request
 	rtcConfCopy := *webRTCConfig
 
@@ -710,7 +710,7 @@ func newMediaEngine() (*webrtc.MediaEngine, error) {
 }
 
 // IngressHandler RPC interface
-func (h *whipHandler) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
+func (h *whipHandler) UpdateIngress(ctx context.Context, _ *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
 	_, span := tracer.Start(ctx, "whipHandler.UpdateIngress")
 	defer span.End()
 
@@ -719,7 +719,7 @@ func (h *whipHandler) UpdateIngress(ctx context.Context, req *livekit.UpdateIngr
 	return h.params.CopyInfo().State, nil
 }
 
-func (h *whipHandler) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
+func (h *whipHandler) DeleteIngress(ctx context.Context, _ *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
 	_, span := tracer.Start(ctx, "whipHandler.DeleteIngress")
 	defer span.End()
 
@@ -802,6 +802,6 @@ func (h *whipHandler) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERe
 	return &rpc.ICERestartWHIPResourceResponse{TrickleIceSdpfrag: trickleIceSdpfrag.String(), Etag: etag}, nil
 }
 
-func (h *whipHandler) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
+func (h *whipHandler) WHIPRTCConnectionNotify(_ context.Context, _ *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
 	return &google_protobuf2.Empty{}, nil
 }

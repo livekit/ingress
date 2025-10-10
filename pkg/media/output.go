@@ -111,7 +111,7 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 		return nil, psrpc.NewErrorf(psrpc.Internal, "no sink pad on queue")
 	}
 	pad := pads[0]
-	id := pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+	id := pad.AddProbe(gst.PadProbeTypeBuffer, func(_ *gst.Pad, _ *gst.PadProbeInfo) gst.PadProbeReturn {
 		return gst.PadProbeDrop
 	})
 	e.stopDropping = func() {
@@ -295,7 +295,7 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 		return nil, psrpc.NewErrorf(psrpc.Internal, "no sink pad on queue")
 	}
 	pad := pads[0]
-	id := pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+	id := pad.AddProbe(gst.PadProbeTypeBuffer, func(_ *gst.Pad, _ *gst.PadProbeInfo) gst.PadProbeReturn {
 		return gst.PadProbeDrop
 	})
 	e.stopDropping = func() {
@@ -403,11 +403,11 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func(
 	return e, nil
 }
 
-func (o *Output) SinkReady(localTrack *lksdk_output.LocalTrack) {
-	o.localTrack.Store(localTrack)
+func (e *Output) SinkReady(localTrack *lksdk_output.LocalTrack) {
+	e.localTrack.Store(localTrack)
 
-	if o.stopDropping != nil {
-		o.stopDropping()
+	if e.stopDropping != nil {
+		e.stopDropping()
 	}
 }
 

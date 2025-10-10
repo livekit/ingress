@@ -115,34 +115,23 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 
 func (s *RTMPServer) AssociateRelay(resourceId string, token string, w io.WriteCloser) error {
 	h, ok := s.handlers.Load(resourceId)
-	if ok && h != nil {
-		if h.(*RTMPHandler).params.RelayToken != token {
-			return errors.ErrInvalidRelayToken
-		}
-
-		err := h.(*RTMPHandler).SetWriter(w)
-		if err != nil {
-			return err
-		}
-	} else {
+	if !ok || h == nil {
 		return errors.ErrIngressNotFound
 	}
 
-	return nil
+	if h.(*RTMPHandler).params.RelayToken != token {
+		return errors.ErrInvalidRelayToken
+	}
+
+	return h.(*RTMPHandler).SetWriter(w)
 }
 
 func (s *RTMPServer) DissociateRelay(resourceId string) error {
 	h, ok := s.handlers.Load(resourceId)
-	if ok && h != nil {
-		err := h.(*RTMPHandler).SetWriter(nil)
-		if err != nil {
-			return err
-		}
-	} else {
+	if !ok || h == nil {
 		return errors.ErrIngressNotFound
 	}
-
-	return nil
+	return h.(*RTMPHandler).SetWriter(nil)
 }
 
 func (s *RTMPServer) CloseHandler(resourceId string) {
@@ -199,7 +188,7 @@ func (h *RTMPHandler) OnCloseCallback(cb func(resourceId string)) {
 	h.onClose = cb
 }
 
-func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rtmpmsg.NetStreamPublish) error {
+func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, _ uint32, cmd *rtmpmsg.NetStreamPublish) error {
 	// Reject a connection when PublishingName is empty
 	if cmd.PublishingName == "" {
 		return errors.ErrMissingStreamKey
@@ -331,12 +320,11 @@ func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
 	}
 
 	if !h.keyFrameFound {
-		if video.FrameType == flvtag.FrameTypeKeyFrame {
-			h.log.Infow("key frame found")
-			h.keyFrameFound = true
-		} else {
+		if video.FrameType != flvtag.FrameTypeKeyFrame {
 			return nil
 		}
+		h.log.Infow("key frame found")
+		h.keyFrameFound = true
 	}
 
 	if err := h.flvEnc.Encode(&flvtag.FlvTag{

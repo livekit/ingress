@@ -49,7 +49,7 @@ type readResult struct {
 	err  error
 }
 
-func NewWHIPAppSource(ctx context.Context, resourceId string, trackKind types.StreamKind, mimeType string, relayUrl string) (*whipAppSource, error) {
+func newWHIPAppSource(ctx context.Context, resourceId string, trackKind types.StreamKind, mimeType string, relayUrl string) (*whipAppSource, error) {
 	ctx, span := tracer.Start(ctx, "WHIPRelaySource.New")
 	defer span.End()
 
@@ -171,10 +171,8 @@ func (w *whipAppSource) copyRelayedData(r io.Reader, getCorrectedTs func(time.Du
 			if w.fuse.IsBroken() {
 				// client closed the peer connection at the same time as it sent the DELETE request
 				return io.EOF
-			} else {
-				// relay stopped without a clean session shutdown
-				return io.ErrUnexpectedEOF
 			}
+			return io.ErrUnexpectedEOF
 		default:
 			return re.err
 		}

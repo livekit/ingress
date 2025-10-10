@@ -340,7 +340,7 @@ func (s *WebRTCSink) addSpliceProbe(bin *gst.Bin) {
 		return
 	}
 
-	pad.SetEventFunction(func(self *gst.Pad, parent *gst.Object, event *gst.Event) bool {
+	pad.SetEventFunction(func(_ *gst.Pad, parent *gst.Object, event *gst.Event) bool {
 		if event.HasName("scte-sit") {
 			s.lock.Lock()
 			p := s.spliceProcessor

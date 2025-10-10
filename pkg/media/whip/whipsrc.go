@@ -54,7 +54,7 @@ func NewWHIPRelaySource(ctx context.Context, p *params.Params) (*WHIPSource, err
 	mimeTypes := s.params.ExtraParams.(*params.WhipExtraParams).MimeTypes
 	for k, v := range mimeTypes {
 		relayUrl := s.getRelayUrl(k)
-		t, err := NewWHIPAppSource(ctx, s.resourceId, k, v, relayUrl)
+		t, err := newWHIPAppSource(ctx, s.resourceId, k, v, relayUrl)
 		if err != nil {
 			return nil, err
 		}

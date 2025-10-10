@@ -133,7 +133,7 @@ func (l *LocalMediaStatsGatherer) RegisterTrackStats(path string) *MediaTrackSta
 	return g
 }
 
-func (l *LocalMediaStatsGatherer) GatherStats(ctx context.Context) (*ipc.MediaStats, error) {
+func (l *LocalMediaStatsGatherer) GatherStats(_ context.Context) (*ipc.MediaStats, error) {
 	ms := &ipc.MediaStats{
 		TrackStats: make(map[string]*ipc.TrackStats),
 	}
@@ -148,7 +148,7 @@ func (l *LocalMediaStatsGatherer) GatherStats(ctx context.Context) (*ipc.MediaSt
 	return ms, nil
 }
 
-func (a *LocalStatsUpdater) UpdateMediaStats(ctx context.Context, s *ipc.MediaStats) error {
+func (a *LocalStatsUpdater) UpdateMediaStats(_ context.Context, s *ipc.MediaStats) error {
 	audioStats, ok := s.TrackStats[InputAudio]
 	if ok {
 		a.Params.SetInputAudioStats(audioStats)

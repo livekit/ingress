@@ -24,15 +24,15 @@ import (
 )
 
 func TestMediaWatchdog(t *testing.T) {
-	triggered := testWatchDog(t, 10)
+	triggered := testWatchDog(10)
 	require.False(t, triggered)
 
-	triggered = testWatchDog(t, 0)
+	triggered = testWatchDog(0)
 	require.True(t, triggered)
 
 }
 
-func testWatchDog(t *testing.T, mediaReceived int64) bool {
+func testWatchDog(mediaReceived int64) bool {
 	var triggered atomic.Bool
 	var done core.Fuse
 

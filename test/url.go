@@ -100,7 +100,7 @@ func RunURLTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsr
 			},
 		},
 	}
-	ios.getIngressInfo = func(req *rpc.GetIngressInfoRequest) (*rpc.GetIngressInfoResponse, error) {
+	ios.getIngressInfo = func(_ *rpc.GetIngressInfoRequest) (*rpc.GetIngressInfoResponse, error) {
 		return nil, psrpc.NewErrorf(psrpc.NotFound, "not found")
 	}
 

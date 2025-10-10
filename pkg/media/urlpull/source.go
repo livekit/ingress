@@ -50,7 +50,7 @@ type URLSource struct {
 	done core.Fuse
 }
 
-func NewURLSource(ctx context.Context, p *params.Params) (*URLSource, error) {
+func NewURLSource(p *params.Params) (*URLSource, error) {
 	var printStats func()
 	bin := gst.NewBin("input")
 
@@ -140,7 +140,7 @@ func (u *URLSource) GetSources() []*gst.Element {
 	}
 }
 
-func (s *URLSource) ValidateCaps(caps *gst.Caps) error {
+func (u *URLSource) ValidateCaps(caps *gst.Caps) error {
 	if caps.GetSize() == 0 {
 		return errors.ErrUnsupportedDecodeFormat
 	}
@@ -159,7 +159,7 @@ func (s *URLSource) ValidateCaps(caps *gst.Caps) error {
 	return errors.ErrUnsupportedDecodeMimeType(str.Name())
 }
 
-func (u *URLSource) Start(ctx context.Context, onClose func()) error {
+func (u *URLSource) Start(_ context.Context, _ func()) error {
 	if u.printStats == nil {
 		return nil
 	}
