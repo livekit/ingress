@@ -46,12 +46,6 @@ linters-settings:
       - name: unused-parameter
       - name: var-declaration
       - name: waitgroup-by-value
-  forbidigo:
-    forbid:
-      # - 'sync\.Mutex'   # Use deadlock.Mutex instead
-      # - 'sync\.RWMutex' # Use deadlock.RWMutex instead
-    analyze-types: true
-    analyze-generics: true
 issues:
   exclude-dirs:
     - cmd/rtmprelay
