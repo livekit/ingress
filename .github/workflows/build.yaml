@@ -38,9 +38,7 @@ jobs:
           cache: true
 
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: v1.60.3
+        run: go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.60.3 run
 
       - name: Build docker image
         run: docker build -t ingress -f ./build/ingress/Dockerfile --build-arg GOVERSION=$GOVERSION --build-arg GSTVERSION=$GSTVERSION .
