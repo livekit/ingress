@@ -56,9 +56,24 @@ type Input struct {
 	onOutputReady OutputReadyFunc
 	closeFuse     core.Fuse
 	closeErr      error
+
+	padTiming map[types.StreamKind]*padTimingState
 }
 
 type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
+
+type padTimingState struct {
+	lastBufferWallClockTime time.Time
+	lastBufferPTS           time.Duration
+	lastBufferDuration      time.Duration
+	lastSteadyBuffArrival   time.Time
+
+	firstBufferPTS           time.Duration
+	firstBufferWallClockTime time.Time
+
+	gateCompleted bool
+	padOffset     time.Duration
+}
 
 func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGatherer) (*Input, error) {
 	src, err := CreateSource(ctx, p)
@@ -71,6 +86,7 @@ func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGat
 		bin:                bin,
 		source:             src,
 		trackStatsGatherer: make(map[types.StreamKind]*stats.MediaTrackStatGatherer),
+		padTiming:          make(map[types.StreamKind]*padTimingState),
 	}
 
 	if p.InputType == livekit.IngressInput_URL_INPUT {
@@ -186,12 +202,15 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 	newPad := false
 	var kind types.StreamKind
 	var ghostPad *gst.GhostPad
+	var timingState *padTimingState
 	if strings.HasPrefix(pad.GetName(), "audio") {
 		if i.audioOutput == nil {
 			newPad = true
 			kind = types.Audio
 			i.audioOutput = pad
 			ghostPad = gst.NewGhostPad("audio", pad)
+			timingState = &padTimingState{}
+			i.padTiming[kind] = timingState
 		}
 	} else if strings.HasPrefix(pad.GetName(), "video") {
 		if i.videoOutput == nil {
@@ -199,6 +218,8 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 			kind = types.Video
 			i.videoOutput = pad
 			ghostPad = gst.NewGhostPad("video", pad)
+			timingState = &padTimingState{}
+			i.padTiming[kind] = timingState
 		}
 	}
 	i.lock.Unlock()
@@ -210,6 +231,111 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 			return
 		}
 		pad = ghostPad.Pad
+
+		state := timingState
+		pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+			ret := gst.PadProbeDrop
+			if state.gateCompleted {
+				ret = gst.PadProbeOK
+			}
+
+			if info == nil {
+				return ret
+			}
+
+			if info.Type()&gst.PadProbeTypeBuffer == 0 {
+				if info.Type() == gst.PadProbeTypeBufferList {
+					logger.Debugw("ghost pad probe, info type is buffer list")
+					return ret
+				}
+				return ret
+			}
+
+			buffer := info.GetBuffer()
+			if buffer == nil {
+				logger.Debugw("ghost pad probe, buffer is nil")
+				return ret
+			}
+
+			pts := buffer.PresentationTimestamp().AsDuration()
+			if pts == nil {
+				logger.Debugw("ghost pad probe, pts is nil")
+				return ret
+			}
+
+			if state.gateCompleted {
+				logger.Debugw("ghost pad probe, applying pad offset", "offset", state.padOffset)
+				if *pts-state.padOffset < 0 {
+					logger.Debugw("ghost pad probe, pts is less than pad offset", "pts", *pts, "offset", state.padOffset)
+					return gst.PadProbeDrop
+				}
+				buffer.SetPresentationTimestamp(gst.ClockTime(*pts - state.padOffset))
+				logger.Debugw("new pts", "pts", buffer.PresentationTimestamp().AsDuration())
+				return gst.PadProbeOK
+			}
+
+			wallClockTime := time.Now()
+
+			if state.firstBufferPTS == 0 {
+				state.firstBufferPTS = *pts
+				state.firstBufferWallClockTime = wallClockTime
+			}
+
+			if *pts < state.lastBufferPTS {
+				logger.Debugw("ghost pad probe, pts is less than last buffer pts", "pts", *pts, "lastBufferPTS", state.lastBufferPTS)
+				return ret
+			}
+
+			if state.lastBufferPTS == 0 {
+				logger.Debugw("ghost pad probe, first buffer returning", "pts", *pts)
+				state.lastBufferPTS = *pts
+				if duration := buffer.Duration().AsDuration(); duration != nil {
+					state.lastBufferDuration = *duration
+				}
+				state.lastBufferWallClockTime = wallClockTime
+				state.lastSteadyBuffArrival = wallClockTime
+				return ret
+			}
+
+			duration := buffer.Duration().AsDuration()
+
+			streamTime := *pts - state.lastBufferPTS
+			elapsedTime := wallClockTime.Sub(state.lastBufferWallClockTime)
+
+			state.lastBufferPTS = *pts
+			if duration != nil {
+				state.lastBufferDuration = *duration
+			}
+			state.lastBufferWallClockTime = wallClockTime
+
+			logger.Debugw("ghost pad probe, buffer received", "pts", *pts, "streamTime", streamTime, "elapsedTime", elapsedTime)
+
+			if elapsedTime <= 0 {
+				logger.Debugw("ghost pad probe, elapsed time non-positive", "elapsedTime", elapsedTime)
+				state.lastSteadyBuffArrival = wallClockTime
+				return ret
+			}
+
+			ratio := float64(streamTime) / float64(elapsedTime)
+			if ratio > 1.5 {
+				// still not steady
+				state.lastSteadyBuffArrival = wallClockTime
+				logger.Debugw("ghost pad probe, arrival not steady, dropping packet", "pts", *pts)
+				return ret
+			}
+
+			if wallClockTime.Sub(state.lastSteadyBuffArrival) > 300*time.Millisecond {
+				// steady buffer arrival, we are done
+				logger.Debugw("ghost pad probe, arrival stable, removing the probe", "pts", *pts)
+				state.gateCompleted = true
+				state.padOffset = *pts + *duration
+				return gst.PadProbeDrop
+			}
+
+			logger.Debugw("ghost pad probe, waiting for steady arrival", "totalPts", *pts-state.firstBufferPTS, "totalTime", wallClockTime.Sub(state.firstBufferWallClockTime))
+
+			return ret
+		})
 
 		if i.trackStatsGatherer[kind] != nil {
 			// Gather bitrate stats from pipeline itself
