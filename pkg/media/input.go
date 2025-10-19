@@ -37,7 +37,9 @@ import (
 )
 
 const (
-	steadyBufferArrivalThreshold = 300 * time.Millisecond
+	steadyBufferArrivalThreshold  = 300 * time.Millisecond
+	streamSteadyRatioThreshold    = 1.5
+	streamSteadySequenceThreshold = 3
 )
 
 type Source interface {
@@ -247,6 +249,8 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 		pad = ghostPad.Pad
 		padName := pad.GetName()
 
+		logger.Debugw("input ghost pad added", "padName", padName)
+
 		state := timingState
 		i.registerGatePad(padName, state)
 		i.addGateProbe(pad, padName, state)
@@ -325,23 +329,21 @@ func (i *Input) addBitrateProbe(kind types.StreamKind) {
 
 func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState) {
 	pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
-		ret := gst.PadProbeDrop
 		ok, pts, duration := extractBufferTiming(info)
 		if !ok {
-			return ret
+			return gst.PadProbeDrop
 		}
 
 		buffer := info.GetBuffer()
 
 		if state.gateCompleted.Load() {
 			if !state.offsetReady.Load() {
-				return ret
+				return gst.PadProbeDrop
 			}
 			applied := applyPadOffset(buffer, state, pts)
 			if !applied {
-				return ret
+				return gst.PadProbeDrop
 			}
-			logger.Debugw("new pts", "pts", buffer.PresentationTimestamp().AsDuration())
 			return gst.PadProbeOK
 		}
 
@@ -354,7 +356,7 @@ func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState
 
 		if pts < state.lastBufferPTS {
 			logger.Debugw("ghost pad probe, pts is less than last buffer pts", "pts", pts, "lastBufferPTS", state.lastBufferPTS)
-			return ret
+			return gst.PadProbeDrop
 		}
 
 		lastPTS := state.lastBufferPTS
@@ -365,43 +367,28 @@ func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState
 		state.lastBufferWallClockTime = wallClockTime
 
 		if lastPTS == 0 {
-			logger.Debugw("ghost pad probe, first buffer returning", "pts", pts)
+			logger.Debugw("input ghost pad probe, first buffer returning", "pts", pts)
 			state.lastSteadyBuffArrival = wallClockTime
-			return ret
+			return gst.PadProbeDrop
 		}
 
 		streamTime := pts - lastPTS
 		elapsedTime := wallClockTime.Sub(lastWallClockTime)
 
-		logger.Debugw("ghost pad probe, buffer received", "pts", pts, "streamTime", streamTime, "elapsedTime", elapsedTime)
+		logger.Debugw("input ghost pad probe, stream time", "streamTime", streamTime, "elapsedTime", elapsedTime, "pad", pad.GetName())
 
-		ratio := float64(streamTime) / float64(elapsedTime)
-		if ratio > 1.5 {
-			logger.Debugw("ghost pad probe, arrival not steady, dropping packet", "pts", pts)
-			// don't let a single high ratio prolong the gate completion
-			state.fastSequenceCnt++
-			if state.fastSequenceCnt > 3 {
-				state.lastSteadyBuffArrival = wallClockTime
-				state.fastSequenceCnt = 0
-			}
-			return ret
-		} else {
-			state.fastSequenceCnt = 0
-		}
-
-		if wallClockTime.Sub(state.lastSteadyBuffArrival) > steadyBufferArrivalThreshold {
-			logger.Debugw("ghost pad probe, arrival stable, allowing buffers to pass the probe", "pts", pts)
-			offset := pts
-			offset += duration
-			state.gateCompleted.Store(true)
-			state.offsetReady.Store(false)
-			i.onPadGateReady(padName, state, offset)
+		if !streamSteady(wallClockTime, elapsedTime, streamTime, state) {
 			return gst.PadProbeDrop
 		}
 
-		logger.Debugw("ghost pad probe, waiting for steady arrival", "totalPts", pts-state.firstBufferPTS, "totalTime", wallClockTime.Sub(state.firstBufferWallClockTime))
-
-		return ret
+		if wallClockTime.Sub(state.lastSteadyBuffArrival) > steadyBufferArrivalThreshold {
+			logger.Debugw("input ghost pad probe, arrival stable, allowing buffers to pass the probe", "pts", pts)
+			offset := pts
+			offset += duration
+			state.gateCompleted.Store(true)
+			i.onPadGateReady(padName, state, offset)
+		}
+		return gst.PadProbeDrop
 	})
 }
 
@@ -485,6 +472,20 @@ func extractBufferTiming(info *gst.PadProbeInfo) (ok bool, pts time.Duration, du
 	}
 
 	return true, *bufPTS, *bufDuration
+}
+
+func streamSteady(now time.Time, elapsed, streamTime time.Duration, state *padTimingState) bool {
+	ratio := float64(streamTime) / float64(elapsed)
+	if ratio > streamSteadyRatioThreshold {
+		// don't let a single high ratio prolong the gate completion
+		state.fastSequenceCnt++
+		if state.fastSequenceCnt > streamSteadySequenceThreshold {
+			state.lastSteadyBuffArrival = now
+			state.fastSequenceCnt = 0
+		}
+		return false
+	}
+	return true
 }
 
 func applyPadOffset(buffer *gst.Buffer, state *padTimingState, pts time.Duration) bool {
