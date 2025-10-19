@@ -18,8 +18,10 @@ import (
 	"context"
 	"strings"
 	"sync"
-	"sync/atomic"
+
 	"time"
+
+	"go.uber.org/atomic"
 
 	"github.com/frostbyte73/core"
 	"github.com/go-gst/go-gst/gst"
@@ -41,6 +43,7 @@ const (
 	streamSteadyRatioThreshold   = 1.5
 	streamSteadyWindow           = 100 * time.Millisecond
 	streamSteadyRequiredWindows  = 2
+	gateTerminatorTimeout        = 3 * time.Second
 )
 
 type Source interface {
@@ -67,10 +70,11 @@ type Input struct {
 
 	padTiming map[string]*padTimingState
 
-	gateMu       sync.Mutex
-	gateReady    map[string]bool
-	gateAllReady bool
-	gateOffset   time.Duration
+	gateMu         sync.Mutex
+	gateReady      map[string]bool
+	gateAllReady   bool
+	gateOffset     time.Duration
+	gateTerminator sync.Once
 }
 
 type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
@@ -84,7 +88,7 @@ type padTimingState struct {
 	firstBufferPTS           time.Duration
 	firstBufferWallClockTime time.Time
 
-	localOffset time.Duration
+	localOffset atomic.Duration
 
 	gateCompleted atomic.Bool
 	padOffset     atomic.Int64
@@ -358,7 +362,7 @@ func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState
 		}
 
 		if pts < state.lastBufferPTS {
-			logger.Debugw("ghost pad probe, pts is less than last buffer pts", "pts", pts, "lastBufferPTS", state.lastBufferPTS)
+			logger.Debugw("pts is less than last buffer pts", "pts", pts, "lastBufferPTS", state.lastBufferPTS, "pad", padName)
 			return gst.PadProbeDrop
 		}
 
@@ -368,9 +372,10 @@ func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState
 		state.lastBufferPTS = pts
 		state.lastBufferDuration = duration
 		state.lastBufferWallClockTime = wallClockTime
+		state.localOffset.Store(pts + duration)
 
 		if lastPTS == 0 {
-			logger.Debugw("input ghost pad probe, first buffer returning", "pts", pts)
+			logger.Debugw("first buffer returning", "pts", pts, "pad", padName)
 			state.lastSteadyBuffArrival = wallClockTime
 			return gst.PadProbeDrop
 		}
@@ -378,18 +383,16 @@ func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState
 		streamTime := pts - lastPTS
 		elapsedTime := wallClockTime.Sub(lastWallClockTime)
 
-		logger.Debugw("input ghost pad probe, stream time", "streamTime", streamTime, "elapsedTime", elapsedTime, "pad", pad.GetName())
+		logger.Debugw("stream time", "streamTime", streamTime, "elapsedTime", elapsedTime, "pad", padName)
 
 		if !streamSteady(wallClockTime, elapsedTime, streamTime, state) {
 			return gst.PadProbeDrop
 		}
 
 		if wallClockTime.Sub(state.lastSteadyBuffArrival) > steadyBufferArrivalThreshold {
-			logger.Debugw("input ghost pad probe, arrival stable, allowing buffers to pass the probe", "pts", pts)
-			offset := pts
-			offset += duration
+			logger.Debugw("arrival stable, allowing buffers to pass the probe", "pts", pts, "pad", padName)
 			state.gateCompleted.Store(true)
-			i.onPadGateReady(padName, state, offset)
+			i.onPadGateReady(padName, state)
 		}
 		return gst.PadProbeDrop
 	})
@@ -399,19 +402,43 @@ func (i *Input) registerGatePad(padName string, state *padTimingState) {
 	i.gateMu.Lock()
 	defer i.gateMu.Unlock()
 
+	// Gate terminator ensures we don't wait indefinitely for all pads to reach steady state.
+	// This timeout prevents hanging when some streams have irregular buffer arrivals or never stabilize.
+	// After 3 seconds, we use the maximum offset seen so far across all pads and allow processing to continue.
+	i.gateTerminator.Do(func() {
+		go func() {
+			time.Sleep(gateTerminatorTimeout)
+			logger.Debugw("input ghost pad probe gate terminator triggered", "pad", padName)
+
+			i.gateMu.Lock()
+			defer i.gateMu.Unlock()
+			if i.gateAllReady {
+				return
+			}
+			i.gateAllReady = true
+			i.gateOffset = i.calculateMaxGatePadOffsetLocked()
+			for _, st := range i.padTiming {
+				st.padOffset.Store(int64(i.gateOffset))
+				st.gateCompleted.Store(true)
+				st.offsetReady.Store(true)
+			}
+			logger.Debugw("input ghost pad probe gate terminator completed", "pad", padName, "offset", i.gateOffset)
+		}()
+	})
+
 	i.padTiming[padName] = state
 	i.gateReady[padName] = false
 	state.gateCompleted.Store(false)
 	state.padOffset.Store(0)
-	state.localOffset = 0
+	state.localOffset.Store(0)
 	state.offsetReady.Store(false)
 }
 
-func (i *Input) onPadGateReady(padName string, state *padTimingState, offset time.Duration) {
+func (i *Input) onPadGateReady(padName string, state *padTimingState) {
 	i.gateMu.Lock()
 	defer i.gateMu.Unlock()
+	offset := state.localOffset.Load()
 
-	state.localOffset = offset
 	i.gateReady[padName] = true
 
 	if i.gateAllReady {
@@ -430,12 +457,10 @@ func (i *Input) onPadGateReady(padName string, state *padTimingState, offset tim
 	}
 
 	allReady := true
-	maxOffset := offset
-	for name, st := range i.padTiming {
+	for name := range i.padTiming {
 		if !i.gateReady[name] {
 			allReady = false
-		} else if st.localOffset > maxOffset {
-			maxOffset = st.localOffset
+			break
 		}
 	}
 
@@ -444,11 +469,22 @@ func (i *Input) onPadGateReady(padName string, state *padTimingState, offset tim
 	}
 
 	i.gateAllReady = true
-	i.gateOffset = maxOffset
+	i.gateOffset = i.calculateMaxGatePadOffsetLocked()
 	for _, st := range i.padTiming {
-		st.padOffset.Store(int64(maxOffset))
+		st.padOffset.Store(int64(i.gateOffset))
 		st.offsetReady.Store(true)
 	}
+}
+
+func (i *Input) calculateMaxGatePadOffsetLocked() time.Duration {
+	maxOffset := time.Duration(0)
+	for _, st := range i.padTiming {
+		localOffset := st.localOffset.Load()
+		if localOffset > maxOffset {
+			maxOffset = localOffset
+		}
+	}
+	return maxOffset
 }
 
 func extractBufferTiming(info *gst.PadProbeInfo) (ok bool, pts time.Duration, duration time.Duration) {
