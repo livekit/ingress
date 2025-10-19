@@ -37,9 +37,10 @@ import (
 )
 
 const (
-	steadyBufferArrivalThreshold  = 300 * time.Millisecond
-	streamSteadyRatioThreshold    = 1.5
-	streamSteadySequenceThreshold = 3
+	steadyBufferArrivalThreshold = 300 * time.Millisecond
+	streamSteadyRatioThreshold   = 1.5
+	streamSteadyWindow           = 100 * time.Millisecond
+	streamSteadyRequiredWindows  = 2
 )
 
 type Source interface {
@@ -83,13 +84,15 @@ type padTimingState struct {
 	firstBufferPTS           time.Duration
 	firstBufferWallClockTime time.Time
 
-	fastSequenceCnt int
-
 	localOffset time.Duration
 
 	gateCompleted atomic.Bool
 	padOffset     atomic.Int64
 	offsetReady   atomic.Bool
+
+	windowStreamAccum  time.Duration
+	windowElapsedAccum time.Duration
+	steadyWindowCount  int
 }
 
 func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGatherer) (*Input, error) {
@@ -475,17 +478,21 @@ func extractBufferTiming(info *gst.PadProbeInfo) (ok bool, pts time.Duration, du
 }
 
 func streamSteady(now time.Time, elapsed, streamTime time.Duration, state *padTimingState) bool {
-	ratio := float64(streamTime) / float64(elapsed)
-	if ratio > streamSteadyRatioThreshold {
-		// don't let a single high ratio prolong the gate completion
-		state.fastSequenceCnt++
-		if state.fastSequenceCnt > streamSteadySequenceThreshold {
-			state.lastSteadyBuffArrival = now
-			state.fastSequenceCnt = 0
-		}
+	state.windowStreamAccum += streamTime
+	state.windowElapsedAccum += elapsed
+	if state.windowElapsedAccum < streamSteadyWindow {
 		return false
 	}
-	return true
+	ratio := float64(state.windowStreamAccum) / float64(state.windowElapsedAccum)
+	state.windowStreamAccum = 0
+	state.windowElapsedAccum = 0
+	if ratio <= streamSteadyRatioThreshold {
+		state.steadyWindowCount++
+		return state.steadyWindowCount >= streamSteadyRequiredWindows
+	}
+	state.steadyWindowCount = 0
+	state.lastSteadyBuffArrival = now
+	return false
 }
 
 func applyPadOffset(buffer *gst.Buffer, state *padTimingState, pts time.Duration) bool {
