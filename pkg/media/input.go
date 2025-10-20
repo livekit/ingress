@@ -84,7 +84,6 @@ type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
 type padTimingState struct {
 	lastBufferWallClockTime time.Time
 	lastBufferPTS           time.Duration
-	lastBufferDuration      time.Duration
 	lastSteadyBuffArrival   time.Time
 
 	firstBufferPTS           time.Duration
@@ -108,11 +107,12 @@ func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGat
 	}
 
 	bin := gst.NewBin("input")
+
 	i := &Input{
 		bin:                          bin,
 		source:                       src,
 		trackStatsGatherer:           make(map[types.StreamKind]*stats.MediaTrackStatGatherer),
-		enableStreamLatencyReduction: p.Config.EnableStreamLatencyReduction,
+		enableStreamLatencyReduction: shouldEnableStreamLatencyReduction(p),
 		padTiming:                    make(map[string]*padTimingState),
 		gateReady:                    make(map[string]bool),
 	}
@@ -375,7 +375,6 @@ func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState
 		lastWallClockTime := state.lastBufferWallClockTime
 
 		state.lastBufferPTS = pts
-		state.lastBufferDuration = duration
 		state.lastBufferWallClockTime = wallClockTime
 		state.localOffset.Store(pts + duration)
 
@@ -488,6 +487,16 @@ func (i *Input) calculateMaxGatePadOffsetLocked() time.Duration {
 		}
 	}
 	return maxOffset
+}
+
+func shouldEnableStreamLatencyReduction(p *params.Params) bool {
+	enableGate := p.Config.EnableStreamLatencyReduction
+	if enableGate && p.InputType == livekit.IngressInput_URL_INPUT {
+		if strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://") {
+			enableGate = false
+		}
+	}
+	return enableGate
 }
 
 func extractBufferTiming(info *gst.PadProbeInfo) (ok bool, pts time.Duration, duration time.Duration) {
