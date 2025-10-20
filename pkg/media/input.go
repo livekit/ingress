@@ -68,6 +68,8 @@ type Input struct {
 	closeFuse     core.Fuse
 	closeErr      error
 
+	enableStreamLatencyReduction bool
+
 	padTiming map[string]*padTimingState
 
 	gateMu         sync.Mutex
@@ -107,11 +109,12 @@ func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGat
 
 	bin := gst.NewBin("input")
 	i := &Input{
-		bin:                bin,
-		source:             src,
-		trackStatsGatherer: make(map[types.StreamKind]*stats.MediaTrackStatGatherer),
-		padTiming:          make(map[string]*padTimingState),
-		gateReady:          make(map[string]bool),
+		bin:                          bin,
+		source:                       src,
+		trackStatsGatherer:           make(map[types.StreamKind]*stats.MediaTrackStatGatherer),
+		enableStreamLatencyReduction: p.Config.EnableStreamLatencyReduction,
+		padTiming:                    make(map[string]*padTimingState),
+		gateReady:                    make(map[string]bool),
 	}
 
 	if p.InputType == livekit.IngressInput_URL_INPUT {
@@ -258,9 +261,11 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 
 		logger.Debugw("input ghost pad added", "padName", padName)
 
-		state := timingState
-		i.registerGatePad(padName, state)
-		i.addGateProbe(pad, padName, state)
+		if i.enableStreamLatencyReduction {
+			state := timingState
+			i.registerGatePad(padName, state)
+			i.addGateProbe(pad, padName, state)
+		}
 
 		if i.trackStatsGatherer[kind] != nil {
 			// Gather bitrate stats from pipeline itself
