@@ -383,8 +383,6 @@ func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState
 		streamTime := pts - lastPTS
 		elapsedTime := wallClockTime.Sub(lastWallClockTime)
 
-		logger.Debugw("stream time", "streamTime", streamTime, "elapsedTime", elapsedTime, "pad", padName)
-
 		if !streamSteady(wallClockTime, elapsedTime, streamTime, state) {
 			return gst.PadProbeDrop
 		}
@@ -535,7 +533,7 @@ func applyPadOffset(buffer *gst.Buffer, state *padTimingState, pts time.Duration
 	offset := time.Duration(state.padOffset.Load())
 	adj := pts - offset
 	if adj < 0 {
-		logger.Debugw("ghost pad probe, pts is less than pad offset, dropping packet", "pts", pts, "offset", offset)
+		logger.Debugw("pts is smaller than pad offset, dropping packet", "pts", pts, "offset", offset)
 		return false
 	}
 
