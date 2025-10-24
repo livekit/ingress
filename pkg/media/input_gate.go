@@ -37,7 +37,7 @@ type padTimingState struct {
 
 func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState) {
 	pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
-		ok, pts, duration := extractBufferTiming(info)
+		ok, pts, duration := extractBufferTiming(info, state)
 		if !ok {
 			return gst.PadProbeDrop
 		}
@@ -185,7 +185,7 @@ func (i *Input) calculateMaxGatePadOffsetLocked() time.Duration {
 	return maxOffset
 }
 
-func extractBufferTiming(info *gst.PadProbeInfo) (ok bool, pts time.Duration, duration time.Duration) {
+func extractBufferTiming(info *gst.PadProbeInfo, state *padTimingState) (ok bool, pts time.Duration, duration time.Duration) {
 	if info == nil {
 		return
 	}
@@ -205,7 +205,11 @@ func extractBufferTiming(info *gst.PadProbeInfo) (ok bool, pts time.Duration, du
 
 	bufDuration := buffer.Duration().AsDuration()
 	if bufDuration == nil {
-		return
+		if state.lastBufferPTS == 0 {
+			return true, *bufPTS, 0
+		}
+		duration = *bufPTS - state.lastBufferPTS
+		bufDuration = &duration
 	}
 
 	return true, *bufPTS, *bufDuration
