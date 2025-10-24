@@ -311,10 +311,20 @@ func (i *Input) addBitrateProbe(kind types.StreamKind) {
 
 func shouldEnableStreamLatencyReduction(p *params.Params) bool {
 	enableGate := p.Config.EnableStreamLatencyReduction
-	if enableGate && p.InputType == livekit.IngressInput_URL_INPUT {
-		if strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://") {
-			enableGate = false
-		}
+	if !enableGate {
+		return false
 	}
-	return enableGate
+
+	if p.InputType == livekit.IngressInput_WHIP_INPUT {
+		return false
+	}
+
+	if p.InputType == livekit.IngressInput_URL_INPUT &&
+		(strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://")) {
+		// disable for non SRT URLs
+		return false
+	}
+
+	logger.Debugw("stream latency reduction enabled", "inputType", p.InputType)
+	return true
 }
