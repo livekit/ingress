@@ -144,7 +144,7 @@ func (h *proxyWhipHandler) Init(ctx context.Context, sdpOffer string) (string, e
 
 	code := getErrorCodeForStatus(resp.StatusCode)
 	if code != psrpc.OK {
-		return "", psrpc.NewErrorf(code, fmt.Sprintf("WHIP resource creation failed on SFU. code=%d", resp.StatusCode))
+		return "", psrpc.NewErrorf(code, "WHIP resource creation failed on SFU. code=%d", resp.StatusCode)
 	}
 
 	locationHeader := resp.Header.Get("Location")
@@ -233,7 +233,7 @@ func (h *proxyWhipHandler) close(isRTCClosed bool) {
 
 	code := getErrorCodeForStatus(resp.StatusCode)
 	if code != psrpc.OK {
-		err = psrpc.NewErrorf(code, fmt.Sprintf("WHIP resource deletion failed on SFU. code=%d", resp.StatusCode))
+		err = psrpc.NewErrorf(code, "WHIP resource deletion failed on SFU. code=%d", resp.StatusCode)
 		h.logger.Warnw("WHIP delete request returned error status code", err, "statusCode", resp.StatusCode)
 		return
 	}
@@ -315,7 +315,7 @@ func (h *proxyWhipHandler) ICERestartWHIPResource(ctx context.Context, req *rpc.
 
 	code := getErrorCodeForStatus(resp.StatusCode)
 	if code != psrpc.OK {
-		return nil, psrpc.NewErrorf(code, fmt.Sprintf("WHIP resource patch failed on SFU. code=%d", resp.StatusCode))
+		return nil, psrpc.NewErrorf(code, "WHIP resource patch failed on SFU. code=%d", resp.StatusCode)
 	}
 
 	sdpResponse, err := io.ReadAll(resp.Body)

@@ -24,7 +24,7 @@ RUN apt-get update && \
     curl 
 
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then GOARCH=arm64; else GOARCH=amd64; fi && \
-    curl -L -o /tmp/go.tar.gz "https://go.dev/dl/go1.21.5.linux-$GOARCH.tar.gz"
+    curl -L -o /tmp/go.tar.gz "https://go.dev/dl/go1.25.0.linux-$GOARCH.tar.gz"
 RUN tar -C /usr/local -xzf /tmp/go.tar.gz
 ENV PATH="$PATH:/usr/local/go/bin"
 

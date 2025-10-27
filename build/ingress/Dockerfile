@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG GSTVERSION
+ARG GSTVERSION=1.24.12
 
 FROM livekit/gstreamer:$GSTVERSION-dev
 
@@ -43,6 +43,7 @@ COPY version/ version/
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then GOARCH=arm64; else GOARCH=amd64; fi && \
     CGO_ENABLED=1 GOOS=linux GOARCH=${GOARCH} GO111MODULE=on go build -a -o ingress ./cmd/server
 
+ARG GSTVERSION
 FROM livekit/gstreamer:$GSTVERSION-prod
 
 # install wget for health check
