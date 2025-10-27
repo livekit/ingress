@@ -66,6 +66,10 @@ type ServiceConfig struct {
 
 	// CPU costs for various ingress types
 	CPUCost CPUCostConfig `yaml:"cpu_cost"`
+
+	// Experimental config
+	// Reduces ingest e2e latency by dropping excess preroll buffers
+	EnableStreamLatencyReduction bool `yaml:"enable_stream_latency_reduction"`
 }
 
 type InternalConfig struct {

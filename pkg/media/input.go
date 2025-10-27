@@ -56,6 +56,16 @@ type Input struct {
 	onOutputReady OutputReadyFunc
 	closeFuse     core.Fuse
 	closeErr      error
+
+	enableStreamLatencyReduction bool
+
+	padTiming map[string]*padTimingState
+
+	gateMu         sync.Mutex
+	gateReady      map[string]bool
+	gateAllReady   bool
+	gateOffset     time.Duration
+	gateTerminator sync.Once
 }
 
 type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
@@ -67,10 +77,14 @@ func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGat
 	}
 
 	bin := gst.NewBin("input")
+
 	i := &Input{
-		bin:                bin,
-		source:             src,
-		trackStatsGatherer: make(map[types.StreamKind]*stats.MediaTrackStatGatherer),
+		bin:                          bin,
+		source:                       src,
+		trackStatsGatherer:           make(map[types.StreamKind]*stats.MediaTrackStatGatherer),
+		enableStreamLatencyReduction: shouldEnableStreamLatencyReduction(p),
+		padTiming:                    make(map[string]*padTimingState),
+		gateReady:                    make(map[string]bool),
 	}
 
 	if p.InputType == livekit.IngressInput_URL_INPUT {
@@ -186,12 +200,14 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 	newPad := false
 	var kind types.StreamKind
 	var ghostPad *gst.GhostPad
+	var timingState *padTimingState
 	if strings.HasPrefix(pad.GetName(), "audio") {
 		if i.audioOutput == nil {
 			newPad = true
 			kind = types.Audio
 			i.audioOutput = pad
 			ghostPad = gst.NewGhostPad("audio", pad)
+			timingState = &padTimingState{}
 		}
 	} else if strings.HasPrefix(pad.GetName(), "video") {
 		if i.videoOutput == nil {
@@ -199,6 +215,7 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 			kind = types.Video
 			i.videoOutput = pad
 			ghostPad = gst.NewGhostPad("video", pad)
+			timingState = &padTimingState{}
 		}
 	}
 	i.lock.Unlock()
@@ -210,6 +227,15 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 			return
 		}
 		pad = ghostPad.Pad
+		padName := pad.GetName()
+
+		logger.Debugw("input ghost pad added", "padName", padName)
+
+		if i.enableStreamLatencyReduction {
+			state := timingState
+			i.registerGatePad(padName, state)
+			i.addGateProbe(pad, padName, state)
+		}
 
 		if i.trackStatsGatherer[kind] != nil {
 			// Gather bitrate stats from pipeline itself
@@ -281,4 +307,27 @@ func (i *Input) addBitrateProbe(kind types.StreamKind) {
 	}
 
 	logger.Debugw("no pad on multiqueue with required kind found", "kind", kind)
+}
+
+func shouldEnableStreamLatencyReduction(p *params.Params) bool {
+	enableGate := p.Config.EnableStreamLatencyReduction
+	if !enableGate {
+		return false
+	}
+
+	// whip RTP streams are independent and common latency reduction offset can't be applied
+	if p.InputType == livekit.IngressInput_WHIP_INPUT {
+		return false
+	}
+
+	if p.InputType == livekit.IngressInput_URL_INPUT &&
+		(strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://")) {
+		// Disable for non SRT URLs
+		// For sreaming VOD files or HLS streams over HTTP, at least 1 segment worth of data will be buffered.
+		// That doesn't allow arrival rate based latency reduction to be applied.
+		return false
+	}
+
+	logger.Debugw("stream latency reduction enabled", "inputType", p.InputType)
+	return true
 }
