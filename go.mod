@@ -1,10 +1,10 @@
 module github.com/livekit/ingress
 
-go 1.23.2
+go 1.25
 
 replace github.com/go-gst/go-gst => github.com/livekit/gst-go v0.0.0-20250701011214-e7f61abd14cb
 
-toolchain go1.24.3
+toolchain go1.25.0
 
 require (
 	github.com/Eyevinn/mp4ff v0.48.0
