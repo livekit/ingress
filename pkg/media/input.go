@@ -315,13 +315,16 @@ func shouldEnableStreamLatencyReduction(p *params.Params) bool {
 		return false
 	}
 
+	// whip RTP streams are independent and common latency reduction offset can't be applied
 	if p.InputType == livekit.IngressInput_WHIP_INPUT {
 		return false
 	}
 
 	if p.InputType == livekit.IngressInput_URL_INPUT &&
 		(strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://")) {
-		// disable for non SRT URLs
+		// Disable for non SRT URLs
+		// For sreaming VOD files or HLS streams over HTTP, at least 1 segment worth of data will be buffered.
+		// That doesn't allow arrival rate based latency reduction to be applied.
 		return false
 	}
 
