@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"path"
+	"strings"
 	"sync"
 
 	"github.com/frostbyte73/core"
@@ -205,7 +207,40 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 		return errors.ErrMissingStreamKey
 	}
 
-	_, streamKey := path.Split(cmd.PublishingName)
+	// Unescape percent-encoded characters to tolerate clients sending x%2F<key>
+	rawName := cmd.PublishingName
+	unescapedName, unescapeErr := url.PathUnescape(rawName)
+	if unescapeErr == nil {
+		cmd.PublishingName = unescapedName
+	}
+
+	// Derive app and stream key from the (possibly) unescaped publishing name for diagnostics
+	head, tail := path.Split(cmd.PublishingName)
+	app := strings.Trim(head, "/")
+	streamKey := tail
+
+	// Build a normalized concat form for quick visual verification of the final path
+	concat := func(serverApp, key string) string {
+		needsSlash := !strings.HasSuffix(serverApp, "/") && !strings.HasPrefix(key, "/")
+		if needsSlash {
+			return serverApp + "/" + key
+		}
+		return serverApp + key
+	}("/"+app, streamKey)
+
+	// Temporary logging to diagnose publish path assembly issues
+	// Example: about_to_publish tcUrl="rtmps://<host>/x" app="x" stream="<key>" concat="/x/<key>"
+	h.log.Infow("about_to_publish",
+		"raw_publishing_name", rawName,
+		"unescaped_publishing_name", cmd.PublishingName,
+		"app", app,
+		"stream", streamKey,
+		"concat", concat,
+		"encoded_slash", strings.Contains(rawName, "%2F") || strings.Contains(rawName, "%2f"),
+	)
+	if unescapeErr == nil && rawName != unescapedName {
+		h.log.Warnw("publishing name contained percent-encoding; using unescaped value")
+	}
 	h.resourceId = protoutils.NewGuid(protoutils.RTMPResourcePrefix)
 	h.log = logger.GetLogger().WithValues("streamKey", streamKey, "resourceID", h.resourceId)
 	if h.onPublish != nil {
