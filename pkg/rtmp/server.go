@@ -228,18 +228,8 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 		return serverApp + key
 	}("/"+app, streamKey)
 
-	// Temporary logging to diagnose publish path assembly issues
-	// Example: about_to_publish tcUrl="rtmps://<host>/x" app="x" stream="<key>" concat="/x/<key>"
-	h.log.Infow("about_to_publish",
-		"raw_publishing_name", rawName,
-		"unescaped_publishing_name", cmd.PublishingName,
-		"app", app,
-		"stream", streamKey,
-		"concat", concat,
-		"encoded_slash", strings.Contains(rawName, "%2F") || strings.Contains(rawName, "%2f"),
 	)
 	if unescapeErr == nil && rawName != unescapedName {
-		h.log.Warnw("publishing name contained percent-encoding; using unescaped value", nil)
 	}
 	h.resourceId = protoutils.NewGuid(protoutils.RTMPResourcePrefix)
 	h.log = logger.GetLogger().WithValues("streamKey", streamKey, "resourceID", h.resourceId)
