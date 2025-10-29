@@ -219,14 +219,6 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 	app := strings.Trim(head, "/")
 	streamKey := tail
 
-	// Build a normalized concat form for quick visual verification of the final path
-	concat := func(serverApp, key string) string {
-		needsSlash := !strings.HasSuffix(serverApp, "/") && !strings.HasPrefix(key, "/")
-		if needsSlash {
-			return serverApp + "/" + key
-		}
-		return serverApp + key
-	}("/"+app, streamKey)
 
 	h.resourceId = protoutils.NewGuid(protoutils.RTMPResourcePrefix)
 	h.log = logger.GetLogger().WithValues("streamKey", streamKey, "resourceID", h.resourceId)
