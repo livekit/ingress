@@ -239,7 +239,7 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 		"encoded_slash", strings.Contains(rawName, "%2F") || strings.Contains(rawName, "%2f"),
 	)
 	if unescapeErr == nil && rawName != unescapedName {
-		h.log.Warnw("publishing name contained percent-encoding; using unescaped value")
+		h.log.Warnw("publishing name contained percent-encoding; using unescaped value", nil)
 	}
 	h.resourceId = protoutils.NewGuid(protoutils.RTMPResourcePrefix)
 	h.log = logger.GetLogger().WithValues("streamKey", streamKey, "resourceID", h.resourceId)
