@@ -207,17 +207,22 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 		return errors.ErrMissingStreamKey
 	}
 
-	// Unescape percent-encoded characters to tolerate clients sending x%2F<key>
+	// Split first; if there is no tail and we detect an encoded slash, unescape and re-split
 	rawName := cmd.PublishingName
-	unescapedName, unescapeErr := url.PathUnescape(rawName)
-	if unescapeErr == nil {
-		cmd.PublishingName = unescapedName
-	}
-
-	// Derive app and stream key from the (possibly) unescaped publishing name for diagnostics
-	head, tail := path.Split(cmd.PublishingName)
+	head, tail := path.Split(rawName)
 	app := strings.Trim(head, "/")
 	streamKey := tail
+
+	if streamKey == "" && (strings.Contains(rawName, "%2F") || strings.Contains(rawName, "%2f")) {
+		if unescapedName, err := url.PathUnescape(rawName); err == nil {
+			h2, t2 := path.Split(unescapedName)
+			if t2 != "" {
+				cmd.PublishingName = unescapedName
+				app = strings.Trim(h2, "/")
+				streamKey = t2
+			}
+		}
+	}
 
 	h.resourceId = protoutils.NewGuid(protoutils.RTMPResourcePrefix)
 	h.log = logger.GetLogger().WithValues("streamKey", streamKey, "resourceID", h.resourceId)
