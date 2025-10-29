@@ -229,8 +229,6 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 	}("/"+app, streamKey)
 
 	)
-	if unescapeErr == nil && rawName != unescapedName {
-	}
 	h.resourceId = protoutils.NewGuid(protoutils.RTMPResourcePrefix)
 	h.log = logger.GetLogger().WithValues("streamKey", streamKey, "resourceID", h.resourceId)
 	if h.onPublish != nil {
