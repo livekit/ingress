@@ -5,8 +5,8 @@ import (
 	"time"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/media-sdk/jitter"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/server-sdk-go/v2/pkg/jitter"
 	"github.com/pion/rtp"
 	"github.com/pion/rtp/codecs"
 	"github.com/pion/sdp/v3"
@@ -33,7 +33,12 @@ func createDepacketizer(track *webrtc.TrackRemote) (rtp.Depacketizer, error) {
 	return depacketizer, nil
 }
 
-func createJitterBuffer(track *webrtc.TrackRemote, logger logger.Logger, writePLI func(ssrc webrtc.SSRC)) (*jitter.Buffer, error) {
+func createJitterBuffer(
+	track *webrtc.TrackRemote,
+	logger logger.Logger,
+	writePLI func(ssrc webrtc.SSRC),
+	onPacket func([]jitter.ExtPacket),
+) (*jitter.Buffer, error) {
 	var maxLatency time.Duration
 	options := []jitter.Option{jitter.WithLogger(logger)}
 
@@ -45,11 +50,11 @@ func createJitterBuffer(track *webrtc.TrackRemote, logger logger.Logger, writePL
 	switch strings.ToLower(track.Codec().MimeType) {
 	case strings.ToLower(webrtc.MimeTypeVP8):
 		maxLatency = maxVideoLatency
-		options = append(options, jitter.WithPacketDroppedHandler(func() { writePLI(track.SSRC()) }))
+		options = append(options, jitter.WithPacketLossHandler(func() { writePLI(track.SSRC()) }))
 
 	case strings.ToLower(webrtc.MimeTypeH264):
 		maxLatency = maxVideoLatency
-		options = append(options, jitter.WithPacketDroppedHandler(func() { writePLI(track.SSRC()) }))
+		options = append(options, jitter.WithPacketLossHandler(func() { writePLI(track.SSRC()) }))
 
 	case strings.ToLower(webrtc.MimeTypeOpus):
 		maxLatency = maxAudioLatency
@@ -59,9 +64,7 @@ func createJitterBuffer(track *webrtc.TrackRemote, logger logger.Logger, writePL
 		return nil, errors.ErrUnsupportedDecodeMimeType(track.Codec().MimeType)
 	}
 
-	clockRate := track.Codec().ClockRate
-
-	jb := jitter.NewBuffer(depacketizer, clockRate, maxLatency, options...)
+	jb := jitter.NewBuffer(depacketizer, maxLatency, onPacket, options...)
 
 	return jb, nil
 }

@@ -22,12 +22,14 @@ import (
 	"sync"
 	"time"
 
+	"go.uber.org/atomic"
+
 	"github.com/frostbyte73/core"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/media-sdk/jitter"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/server-sdk-go/v2/pkg/jitter"
 	"github.com/livekit/server-sdk-go/v2/pkg/synchronizer"
 	"github.com/pion/rtcp"
 	"github.com/pion/rtp"
@@ -58,6 +60,8 @@ type RelayWhipTrackHandler struct {
 	lastSn      uint16
 	lastSnValid bool
 
+	lastError atomic.Error
+
 	statsLock  sync.Mutex
 	trackStats *stats.MediaTrackStatGatherer
 }
@@ -71,7 +75,16 @@ func NewRelayWhipTrackHandler(
 	writePLI func(ssrc webrtc.SSRC),
 	onRTCP func(packet rtcp.Packet),
 ) (*RelayWhipTrackHandler, error) {
-	jb, err := createJitterBuffer(track, logger, writePLI)
+	t := &RelayWhipTrackHandler{
+		logger:      logger,
+		remoteTrack: track,
+		quality:     quality,
+		receiver:    receiver,
+		sync:        sync,
+		writePLI:    writePLI,
+		onRTCP:      onRTCP,
+	}
+	jb, err := createJitterBuffer(track, logger, writePLI, t.onPacket)
 	if err != nil {
 		return nil, err
 	}
@@ -81,17 +94,11 @@ func NewRelayWhipTrackHandler(
 	}
 	relaySink := NewRelayMediaSink(logger)
 
-	return &RelayWhipTrackHandler{
-		logger:       logger,
-		remoteTrack:  track,
-		quality:      quality,
-		receiver:     receiver,
-		relaySink:    relaySink,
-		sync:         sync,
-		jb:           jb,
-		onRTCP:       onRTCP,
-		depacketizer: depacketizer,
-	}, nil
+	t.jb = jb
+	t.depacketizer = depacketizer
+	t.relaySink = relaySink
+
+	return t, nil
 }
 
 func (t *RelayWhipTrackHandler) Start(onDone func(err error)) (err error) {
@@ -150,13 +157,17 @@ func (t *RelayWhipTrackHandler) startRTPReceiver(onDone func(err error)) {
 		for {
 			select {
 			case <-t.fuse.Watch():
+				if t.lastError.Load() != nil {
+					err = t.lastError.Load()
+					t.logger.Warnw("error forwarding rtp packets", err)
+				}
 				t.logger.Debugw("stopping rtp receiver")
 				return
 			default:
 				err = t.processRTPPacket()
 				switch err {
-				case nil, errors.ErrPrerollBufferReset:
-					// continue
+				case nil:
+					continue
 				case io.EOF:
 					err = nil // success
 					return
@@ -217,87 +228,90 @@ func (t *RelayWhipTrackHandler) processRTPPacket() error {
 		return err
 	}
 
-	return t.pushRTP(pkt)
+	t.pushRTP(pkt)
+	return nil
 }
 
-func (t *RelayWhipTrackHandler) pushRTP(pkt *rtp.Packet) error {
+func (t *RelayWhipTrackHandler) pushRTP(pkt *rtp.Packet) {
 	t.firstPacket.Do(func() {
 		t.logger.Debugw("first packet received")
 		t.sync.Initialize(pkt)
 	})
 
 	t.jb.Push(pkt)
+}
 
-	samples := t.jb.PopSamples(false)
-	for _, pkts := range samples {
-		if len(pkts) == 0 {
+func (t *RelayWhipTrackHandler) onPacket(samples []jitter.ExtPacket) {
+	var buffer bytes.Buffer
+	var ts time.Duration
+	var err error
+
+	for _, pkt := range samples {
+		ts, err = t.sync.GetPTS(pkt)
+		if err != nil {
+			if errors.Is(err, synchronizer.ErrPacketTooOld) {
+				continue
+			}
+			t.lastError.Store(err)
+			t.fuse.Break()
+			return
+		}
+
+		// TODO: use buffer stats
+		t.statsLock.Lock()
+		stats := t.trackStats
+		t.statsLock.Unlock()
+
+		if t.lastSnValid && t.lastSn+1 != pkt.SequenceNumber {
+			gap := pkt.SequenceNumber - t.lastSn
+			if t.lastSn-pkt.SequenceNumber < gap {
+				gap = t.lastSn - pkt.SequenceNumber
+			}
+			if stats != nil {
+				stats.PacketLost(int64(gap - 1))
+			}
+		}
+
+		t.lastSnValid = true
+		t.lastSn = pkt.SequenceNumber
+
+		if len(pkt.Payload) <= 2 {
+			// Padding
 			continue
 		}
 
-		var ts time.Duration
-		var err error
-		var buffer bytes.Buffer // TODO reuse the same buffer across calls, after resetting it if buffer allocation is a performane bottleneck
-		for _, pkt := range pkts {
-			ts, err = t.sync.GetPTS(pkt)
-			switch err {
-			case nil, synchronizer.ErrBackwardsPTS:
-				err = nil
-			default:
-				return err
-			}
-
-			t.statsLock.Lock()
-			stats := t.trackStats
-			t.statsLock.Unlock()
-
-			if t.lastSnValid && t.lastSn+1 != pkt.SequenceNumber {
-				gap := pkt.SequenceNumber - t.lastSn
-				if t.lastSn-pkt.SequenceNumber < gap {
-					gap = t.lastSn - pkt.SequenceNumber
-				}
-				if stats != nil {
-					stats.PacketLost(int64(gap - 1))
-				}
-			}
-
-			t.lastSnValid = true
-			t.lastSn = pkt.SequenceNumber
-
-			if len(pkt.Payload) <= 2 {
-				// Padding
-				continue
-			}
-
-			buf, err := t.depacketizer.Unmarshal(pkt.Payload)
-			if err != nil {
-				t.logger.Warnw("failed unmarshalling RTP payload", err, "pkt", pkt, "payload", pkt.Payload[:min(len(pkt.Payload), 20)])
-				return err
-			}
-
-			if stats != nil {
-				stats.MediaReceived(int64(len(buf)))
-			}
-
-			_, err = buffer.Write(buf)
-			if err != nil {
-				return err
-			}
-		}
-
-		// This returns the average duration, not the actual duration of the specific sample
-		// SampleBuilder is using the duration of the previous sample, which is inaccurate as well
-		sampleDuration := t.sync.GetFrameDuration()
-
-		s := &media.Sample{
-			Data:     buffer.Bytes(),
-			Duration: sampleDuration,
-		}
-
-		err = t.relaySink.PushSample(s, ts)
+		buf, err := t.depacketizer.Unmarshal(pkt.Payload)
 		if err != nil {
-			return err
+			t.logger.Warnw("failed unmarshalling RTP payload", err, "pkt", pkt, "payload", pkt.Payload[:min(len(pkt.Payload), 20)])
+			t.lastError.Store(err)
+			t.fuse.Break()
+			return
+		}
+
+		if stats != nil {
+			stats.MediaReceived(int64(len(buf)))
+		}
+
+		_, err = buffer.Write(buf)
+		if err != nil {
+			t.lastError.Store(err)
+			t.fuse.Break()
+			return
 		}
 	}
 
-	return nil
+	if buffer.Len() == 0 {
+		return
+	}
+
+	s := &media.Sample{
+		Data: buffer.Bytes(),
+	}
+
+	err = t.relaySink.PushSample(s, ts)
+	if err != nil && !errors.Is(err, errors.ErrPrerollBufferReset) {
+		t.lastError.Store(err)
+		t.fuse.Break()
+		return
+	}
 }
