@@ -38,8 +38,9 @@ import (
 )
 
 const (
-	maxVideoLatency = 600 * time.Millisecond
-	maxAudioLatency = time.Second
+	maxVideoLatency     = 600 * time.Millisecond
+	maxAudioLatency     = time.Second
+	statsReportInterval = 3 * time.Second
 )
 
 type RelayWhipTrackHandler struct {
@@ -57,13 +58,14 @@ type RelayWhipTrackHandler struct {
 
 	firstPacket sync.Once
 	fuse        core.Fuse
-	lastSn      uint16
-	lastSnValid bool
 
 	lastError atomic.Error
 
 	statsLock  sync.Mutex
 	trackStats *stats.MediaTrackStatGatherer
+
+	statsTicker *time.Ticker
+	lastJBStats jitter.BufferStats
 }
 
 func NewRelayWhipTrackHandler(
@@ -106,6 +108,7 @@ func (t *RelayWhipTrackHandler) Start(onDone func(err error)) (err error) {
 	if t.onRTCP != nil {
 		t.startRTCPReceiver()
 	}
+	t.startStatsReporter()
 
 	return nil
 }
@@ -126,6 +129,9 @@ func (t *RelayWhipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaS
 
 	g := st.RegisterTrackStats(path)
 	t.trackStats = g
+	if jbStats := t.jb.Stats(); jbStats != nil {
+		t.lastJBStats = *jbStats
+	}
 
 	t.statsLock.Unlock()
 }
@@ -257,23 +263,9 @@ func (t *RelayWhipTrackHandler) onPacket(samples []jitter.ExtPacket) {
 			return
 		}
 
-		// TODO: use buffer stats
 		t.statsLock.Lock()
 		stats := t.trackStats
 		t.statsLock.Unlock()
-
-		if t.lastSnValid && t.lastSn+1 != pkt.SequenceNumber {
-			gap := pkt.SequenceNumber - t.lastSn
-			if t.lastSn-pkt.SequenceNumber < gap {
-				gap = t.lastSn - pkt.SequenceNumber
-			}
-			if stats != nil {
-				stats.PacketLost(int64(gap - 1))
-			}
-		}
-
-		t.lastSnValid = true
-		t.lastSn = pkt.SequenceNumber
 
 		if len(pkt.Payload) <= 2 {
 			// Padding
@@ -314,4 +306,47 @@ func (t *RelayWhipTrackHandler) onPacket(samples []jitter.ExtPacket) {
 		t.fuse.Break()
 		return
 	}
+}
+
+func (t *RelayWhipTrackHandler) startStatsReporter() {
+	if t.statsTicker != nil {
+		return
+	}
+
+	ticker := time.NewTicker(statsReportInterval)
+	t.statsTicker = ticker
+	fuseCh := t.fuse.Watch()
+
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				t.reportJitterStats()
+			case <-fuseCh:
+				return
+			}
+		}
+	}()
+}
+
+func (t *RelayWhipTrackHandler) reportJitterStats() {
+	t.statsLock.Lock()
+	g := t.trackStats
+	t.statsLock.Unlock()
+
+	jbStats := t.jb.Stats()
+	if jbStats == nil {
+		return
+	}
+
+	lostDelta := int64(jbStats.PacketsLost - t.lastJBStats.PacketsLost)
+	droppedDelta := int64(jbStats.PacketsDropped - t.lastJBStats.PacketsDropped)
+
+	totalLoss := lostDelta + droppedDelta
+	if totalLoss > 0 {
+		g.PacketLost(totalLoss)
+	}
+
+	t.lastJBStats = *jbStats
 }
