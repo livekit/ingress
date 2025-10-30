@@ -247,12 +247,12 @@ func (t *RelayWhipTrackHandler) pushRTP(pkt *rtp.Packet) {
 	t.jb.Push(pkt)
 }
 
-func (t *RelayWhipTrackHandler) onPacket(samples []jitter.ExtPacket) {
+func (t *RelayWhipTrackHandler) onPacket(sample []jitter.ExtPacket) {
 	var buffer bytes.Buffer
 	var ts time.Duration
 	var err error
 
-	for _, pkt := range samples {
+	for _, pkt := range sample {
 		ts, err = t.sync.GetPTS(pkt)
 		if err != nil {
 			if errors.Is(err, synchronizer.ErrPacketTooOld) {
