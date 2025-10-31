@@ -35,6 +35,10 @@ import (
 	"github.com/livekit/protocol/logger"
 )
 
+const (
+	packetLatencyCaps = "application/x-livekit-latency"
+)
+
 type Source interface {
 	GetSources() []*gst.Element
 	ValidateCaps(*gst.Caps) error
@@ -66,6 +70,7 @@ type Input struct {
 	gateAllReady   bool
 	gateOffset     time.Duration
 	gateTerminator sync.Once
+	latencyCaps    *gst.Caps
 }
 
 type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
@@ -85,6 +90,7 @@ func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGat
 		enableStreamLatencyReduction: shouldEnableStreamLatencyReduction(p),
 		padTiming:                    make(map[string]*padTimingState),
 		gateReady:                    make(map[string]bool),
+		latencyCaps:                  gst.NewCapsFromString(packetLatencyCaps),
 	}
 
 	if p.InputType == livekit.IngressInput_URL_INPUT {
@@ -239,7 +245,7 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 
 		if i.trackStatsGatherer[kind] != nil {
 			// Gather bitrate stats from pipeline itself
-			i.addBitrateProbe(kind)
+			i.addStatsCollectionProbe(kind)
 		}
 	} else {
 		var sink *gst.Element
@@ -261,8 +267,9 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 	}
 }
 
-func (i *Input) addBitrateProbe(kind types.StreamKind) {
-	// Do a best effort to add probe to retrieve bitrate.
+func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
+	// Do a best effort to add probe to retrieve bitrate and ingest time metadata.
+	// Time metadata would be best ingested at the source but flv muxer doesn't support carrying it through.
 	// The multiqueue is generally created in the pipeline before the decoders
 	mq, err := i.bin.GetElementByName("multiqueue0")
 
@@ -295,6 +302,10 @@ func (i *Input) addBitrateProbe(kind types.StreamKind) {
 
 					size := buffer.GetSize()
 					g.MediaReceived(size)
+
+					// mark the packet with the current time to be able to calculate packet processing latency at output stage
+					now := time.Now()
+					buffer.AddReferenceTimestampMeta(i.latencyCaps, gst.ClockTime(uint64(now.UnixNano())), gst.ClockTime(0))
 
 					return gst.PadProbeOK
 				})

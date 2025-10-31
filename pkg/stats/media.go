@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/frostbyte73/core"
+	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
@@ -34,11 +35,36 @@ const (
 	OutputVideo = "output.video"
 )
 
+var (
+	latencyMetricOnce sync.Once
+	latencyHistogram  *prometheus.HistogramVec
+)
+
+func getLatencyHistogram() *prometheus.HistogramVec {
+	latencyMetricOnce.Do(func() {
+		latencyHistogram = prometheus.NewHistogramVec(
+			prometheus.HistogramOpts{
+				Namespace: "livekit",
+				Subsystem: "ingress",
+				Name:      "packet_latency_seconds",
+				Help:      "Observed end-to-end packet latency within the ingress pipeline",
+				Buckets:   prometheus.ExponentialBuckets(0.005, 2, 12),
+			},
+			[]string{"track"},
+		)
+		prometheus.MustRegister(latencyHistogram)
+	})
+
+	return latencyHistogram
+}
+
 type MediaStatsReporter struct {
 	lock sync.Mutex
 
 	statsUpdater  types.MediaStatsUpdater
 	statGatherers []types.MediaStatGatherer
+
+	latencyMetric *prometheus.HistogramVec
 
 	done core.Fuse
 }
@@ -54,7 +80,8 @@ type LocalMediaStatsGatherer struct {
 
 func NewMediaStats(statsUpdater types.MediaStatsUpdater) *MediaStatsReporter {
 	m := &MediaStatsReporter{
-		statsUpdater: statsUpdater,
+		statsUpdater:  statsUpdater,
+		latencyMetric: getLatencyHistogram(),
 	}
 
 	go func() {
@@ -94,6 +121,13 @@ func (m *MediaStatsReporter) UpdateStats(ctx context.Context) {
 
 		// Merge the result. Keys are assumed to be exclusive
 		for k, v := range ms.TrackStats {
+			if len(v.PacketLatencySeconds) > 0 && m.latencyMetric != nil {
+				hist := m.latencyMetric.WithLabelValues(k)
+				for _, sample := range v.PacketLatencySeconds {
+					hist.Observe(sample)
+				}
+				v.PacketLatencySeconds = nil
+			}
 			res.TrackStats[k] = v
 		}
 

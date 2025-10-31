@@ -25,7 +25,8 @@ import (
 )
 
 const (
-	maxJitterStatsLen = 100_000
+	maxJitterStatsLen   = 100_000
+	maxLatencySampleLen = 5_000
 )
 
 type MediaTrackStatGatherer struct {
@@ -48,6 +49,7 @@ type MediaTrackStatGatherer struct {
 	lastPacketTime     time.Time
 	lastPacketInterval time.Duration
 	jitter             morestats.Sample
+	packetLatency      []float64
 }
 
 func NewMediaTrackStatGatherer(path string) *MediaTrackStatGatherer {
@@ -105,6 +107,22 @@ func (g *MediaTrackStatGatherer) PLI() {
 	g.totalPLI++
 }
 
+func (g *MediaTrackStatGatherer) ObserveLatency(latency time.Duration) {
+	g.lock.Lock()
+	defer g.lock.Unlock()
+
+	if latency < 0 {
+		return
+	}
+
+	if len(g.packetLatency) >= maxLatencySampleLen {
+		copy(g.packetLatency, g.packetLatency[1:])
+		g.packetLatency = g.packetLatency[:maxLatencySampleLen-1]
+	}
+
+	g.packetLatency = append(g.packetLatency, latency.Seconds())
+}
+
 func (g *MediaTrackStatGatherer) UpdateStats() *ipc.TrackStats {
 	g.lock.Lock()
 	defer g.lock.Unlock()
@@ -139,11 +157,16 @@ func (g *MediaTrackStatGatherer) UpdateStats() *ipc.TrackStats {
 		Jitter:          jitterStats,
 	}
 
+	if len(g.packetLatency) > 0 {
+		st.PacketLatencySeconds = append(st.PacketLatencySeconds, g.packetLatency...)
+	}
+
 	g.lastQueryTime = now
 	g.currentBytes = 0
 	g.currentPackets = 0
 	g.currentLost = 0
 	g.currentPLI = 0
+	g.packetLatency = nil
 
 	return st
 }
