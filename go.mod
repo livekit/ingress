@@ -13,13 +13,13 @@ require (
 	github.com/go-gst/go-glib v1.4.1-0.20250303082535-35ebad1471fd
 	github.com/go-gst/go-gst v1.4.0
 	github.com/gorilla/mux v1.8.1
-	github.com/livekit/go-rtmp v0.0.0-20230829211117-1c4f5a5c81ed
+	github.com/livekit/go-rtmp v0.0.0-20251031234730-75a652881771
 	github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731
-	github.com/livekit/media-sdk v0.0.0-20250927154350-bd99739b439b
-	github.com/livekit/mediatransportutil v0.0.0-20250825135402-7bc31f107ade
-	github.com/livekit/protocol v1.42.3-0.20251023002554-070839e4cae7
-	github.com/livekit/psrpc v0.7.0
-	github.com/livekit/server-sdk-go/v2 v2.12.3-0.20251029150117-96a2110dc2f9
+	github.com/livekit/media-sdk v0.0.0-20251020120113-a84c3b4b6c31
+	github.com/livekit/mediatransportutil v0.0.0-20250922175932-f537f0880397
+	github.com/livekit/protocol v1.42.3-0.20251031205738-4e56a139a2c5
+	github.com/livekit/psrpc v0.7.1-0.20251021235041-bdebea7dacf4
+	github.com/livekit/server-sdk-go/v2 v2.12.4
 	github.com/pion/dtls/v3 v3.0.7
 	github.com/pion/interceptor v0.1.41
 	github.com/pion/rtcp v1.2.15
