@@ -639,6 +639,5 @@ func (e *Output) observeLatency(buffer *gst.Buffer) {
 
 	latency := now.Sub(*ingestedAt)
 	e.trackStatsGatherer.ObserveLatency(latency)
-	e.logger.Debugw("latency", "latency", latency)
 	e.latencySampledAt = now
 }

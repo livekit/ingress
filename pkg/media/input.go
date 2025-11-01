@@ -243,10 +243,8 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 			i.addGateProbe(pad, padName, state)
 		}
 
-		if i.trackStatsGatherer[kind] != nil {
-			// Gather bitrate stats from pipeline itself
-			i.addStatsCollectionProbe(kind)
-		}
+		// Gather bitrate stats & attach latency meta from the pipeline
+		i.addStatsCollectionProbe(kind)
 	} else {
 		var sink *gst.Element
 
@@ -292,8 +290,6 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 			padKind := getKindFromGstMimeType(gstStruct)
 
 			if padKind == kind {
-				g := i.trackStatsGatherer[kind]
-
 				pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
 					buffer := info.GetBuffer()
 					if buffer == nil {
@@ -301,7 +297,9 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 					}
 
 					size := buffer.GetSize()
-					g.MediaReceived(size)
+					if gatherer := i.trackStatsGatherer[kind]; gatherer != nil {
+						gatherer.MediaReceived(size)
+					}
 
 					// mark the packet with the current time to be able to calculate packet processing latency at output stage
 					now := time.Now()

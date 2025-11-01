@@ -50,7 +50,7 @@ func getLatencyHistogram() *prometheus.HistogramVec {
 				Help:      "Observed end-to-end packet latency within the ingress pipeline",
 				Buckets:   prometheus.ExponentialBuckets(0.005, 2, 12),
 			},
-			[]string{"track"},
+			[]string{"track", "ingress_type"},
 		)
 		prometheus.MustRegister(latencyHistogram)
 	})
@@ -63,6 +63,7 @@ type MediaStatsReporter struct {
 
 	statsUpdater  types.MediaStatsUpdater
 	statGatherers []types.MediaStatGatherer
+	ingressType   string
 
 	latencyMetric *prometheus.HistogramVec
 
@@ -78,10 +79,11 @@ type LocalMediaStatsGatherer struct {
 	stats []*MediaTrackStatGatherer
 }
 
-func NewMediaStats(statsUpdater types.MediaStatsUpdater) *MediaStatsReporter {
+func NewMediaStats(statsUpdater types.MediaStatsUpdater, ingressType string) *MediaStatsReporter {
 	m := &MediaStatsReporter{
 		statsUpdater:  statsUpdater,
 		latencyMetric: getLatencyHistogram(),
+		ingressType:   ingressType,
 	}
 
 	go func() {
@@ -122,7 +124,7 @@ func (m *MediaStatsReporter) UpdateStats(ctx context.Context) {
 		// Merge the result. Keys are assumed to be exclusive
 		for k, v := range ms.TrackStats {
 			if len(v.PacketLatencySeconds) > 0 && m.latencyMetric != nil {
-				hist := m.latencyMetric.WithLabelValues(k)
+				hist := m.latencyMetric.WithLabelValues(k, m.ingressType)
 				for _, sample := range v.PacketLatencySeconds {
 					hist.Observe(sample)
 				}
