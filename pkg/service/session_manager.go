@@ -58,7 +58,7 @@ func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI t
 	r := &sessionRecord{
 		info:               info,
 		sessionAPI:         sessionAPI,
-		mediaStats:         stats.NewMediaStats(sessionAPI),
+		mediaStats:         stats.NewMediaStats(sessionAPI, livekit.IngressInput_name[int32(info.InputType)]),
 		localStatsGatherer: stats.NewLocalMediaStatsGatherer(),
 	}
 	r.mediaStats.RegisterGatherer(r.localStatsGatherer)
