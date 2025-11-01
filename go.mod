@@ -18,8 +18,8 @@ require (
 	github.com/livekit/media-sdk v0.0.0-20251020120113-a84c3b4b6c31
 	github.com/livekit/mediatransportutil v0.0.0-20250922175932-f537f0880397
 	github.com/livekit/protocol v1.42.3-0.20251031205738-4e56a139a2c5
-	github.com/livekit/psrpc v0.7.1-0.20251021235041-bdebea7dacf4
-	github.com/livekit/server-sdk-go/v2 v2.12.4
+	github.com/livekit/psrpc v0.7.1-0.20251101160341-f7f2fe125942
+	github.com/livekit/server-sdk-go/v2 v2.12.5
 	github.com/pion/dtls/v3 v3.0.7
 	github.com/pion/interceptor v0.1.41
 	github.com/pion/rtcp v1.2.15
