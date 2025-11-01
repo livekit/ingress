@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/url"
 	"path"
+	"strings"
 	"sync"
 
 	"github.com/frostbyte73/core"
@@ -205,7 +207,23 @@ func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, timestamp uint32, cmd *rt
 		return errors.ErrMissingStreamKey
 	}
 
-	_, streamKey := path.Split(cmd.PublishingName)
+	// Split first; if there is no tail and we detect an encoded slash, unescape and re-split
+	rawName := cmd.PublishingName
+	head, tail := path.Split(rawName)
+	app := strings.Trim(head, "/")
+	streamKey := tail
+
+	if streamKey == "" && (strings.Contains(rawName, "%2F") || strings.Contains(rawName, "%2f")) {
+		if unescapedName, err := url.PathUnescape(rawName); err == nil {
+			h2, t2 := path.Split(unescapedName)
+			if t2 != "" {
+				cmd.PublishingName = unescapedName
+				app = strings.Trim(h2, "/")
+				streamKey = t2
+			}
+		}
+	}
+
 	h.resourceId = protoutils.NewGuid(protoutils.RTMPResourcePrefix)
 	h.log = logger.GetLogger().WithValues("streamKey", streamKey, "resourceID", h.resourceId)
 	if h.onPublish != nil {
