@@ -289,6 +289,8 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 			gstStruct := caps.GetStructureAt(0)
 			padKind := getKindFromGstMimeType(gstStruct)
 
+			g := i.trackStatsGatherer[kind]
+
 			if padKind == kind {
 				pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
 					buffer := info.GetBuffer()
@@ -297,8 +299,8 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 					}
 
 					size := buffer.GetSize()
-					if gatherer := i.trackStatsGatherer[kind]; gatherer != nil {
-						gatherer.MediaReceived(size)
+					if g != nil {
+						g.MediaReceived(size)
 					}
 
 					// mark the packet with the current time to be able to calculate packet processing latency at output stage
