@@ -39,7 +39,8 @@ const (
 
 	pixelsPerEncoderThread = 640 * 480
 
-	queueCapacity = 5
+	queueCapacity         = 5
+	latencySampleInterval = 500 * time.Millisecond
 )
 
 // Output manages GStreamer elements that converts & encodes video to the specification that's
@@ -59,8 +60,10 @@ type Output struct {
 	localTrack   atomic.Pointer[lksdk_output.LocalTrack]
 	stopDropping func()
 
-	closed      core.Fuse
-	pipelineErr atomic.Pointer[error]
+	closed           core.Fuse
+	pipelineErr      atomic.Pointer[error]
+	latencyCaps      *gst.Caps
+	latencySampledAt time.Time
 }
 
 type sample struct {
@@ -90,6 +93,8 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 	e.logger = logger.GetLogger().WithValues("kind", "video", "layer", layer.Quality.String())
 
 	e.trackStatsGatherer = statsGatherer.RegisterTrackStats(fmt.Sprintf("%s.%s", stats.OutputVideo, layer.Quality.String()))
+
+	e.latencyCaps = gst.NewCapsFromString(packetLatencyCaps)
 
 	threadCount := getVideoEncoderThreadCount(layer)
 
@@ -344,6 +349,8 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 		return nil, err
 	}
 
+	e.latencyCaps = gst.NewCapsFromString(packetLatencyCaps)
+
 	return e, nil
 }
 
@@ -551,6 +558,8 @@ func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 
 	e.queue.PushBack(sample)
 
+	e.observeLatency(buffer)
+
 	return gst.FlowOK
 }
 
@@ -595,6 +604,8 @@ func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 		e.queue.PushBack(sample)
 	}
 
+	e.observeLatency(buffer)
+
 	return gst.FlowOK
 }
 
@@ -602,4 +613,31 @@ func getVideoEncoderThreadCount(layer *livekit.VideoLayer) uint {
 	threadCount := (int64(layer.Width)*int64(layer.Height) + int64(pixelsPerEncoderThread-1)) / int64(pixelsPerEncoderThread)
 
 	return uint(threadCount)
+}
+
+func (e *Output) observeLatency(buffer *gst.Buffer) {
+	if e.trackStatsGatherer == nil {
+		return
+	}
+
+	meta := buffer.GetReferenceTimestampMeta(e.latencyCaps)
+	if meta == nil {
+		return
+	}
+
+	ingestedAt := meta.Timestamp.AsTimestamp()
+	if ingestedAt == nil || ingestedAt.IsZero() {
+		return
+	}
+
+	now := time.Now()
+	if !e.latencySampledAt.IsZero() {
+		if since := now.Sub(e.latencySampledAt); since < latencySampleInterval {
+			return
+		}
+	}
+
+	latency := now.Sub(*ingestedAt)
+	e.trackStatsGatherer.ObserveLatency(latency)
+	e.latencySampledAt = now
 }
