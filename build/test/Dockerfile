@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM livekit/gstreamer:1.24.12-dev
+FROM livekit/gstreamer:1.26.7-dev
 
 ARG TARGETPLATFORM
 

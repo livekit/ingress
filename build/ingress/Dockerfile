@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG GSTVERSION=1.24.12
+ARG GSTVERSION=1.26.7
 
 FROM livekit/gstreamer:$GSTVERSION-dev
 
