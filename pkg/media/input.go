@@ -23,6 +23,10 @@ import (
 	"github.com/frostbyte73/core"
 	"github.com/go-gst/go-gst/gst"
 
+	"github.com/livekit/protocol/ingress"
+	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/logger"
+
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/media/rtmp"
 	"github.com/livekit/ingress/pkg/media/urlpull"
@@ -30,9 +34,6 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/protocol/ingress"
-	"github.com/livekit/protocol/livekit"
-	"github.com/livekit/protocol/logger"
 )
 
 const (
@@ -321,6 +322,8 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 }
 
 func shouldEnableStreamLatencyReduction(p *params.Params) bool {
+	return false
+
 	enableGate := p.Config.EnableStreamLatencyReduction
 	if !enableGate {
 		return false
