@@ -96,6 +96,54 @@ func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState
 	})
 }
 
+func (i *Input) addSegmentEventProbe(pad *gst.Pad, padName string) {
+	logSegmentEvent := func(direction string, seg *gst.Segment) {
+		if seg == nil {
+			logger.Debugw("nil segment event received", "pad", padName, "direction", direction)
+			return
+		}
+
+		fields := []interface{}{
+			"pad", padName,
+			"direction", direction,
+			"format", seg.GetFormat(),
+			"rate", seg.GetRate(),
+			"appliedRate", seg.GetAppliedRate(),
+			"base", seg.GetBase(),
+			"start", seg.GetStart(),
+			"stop", seg.GetStop(),
+			"time", seg.GetTime(),
+			"position", seg.GetPosition(),
+		}
+
+		if seg.GetFormat() == gst.FormatTime {
+			fields = append(fields,
+				"baseDur", time.Duration(seg.GetBase()),
+				"startDur", time.Duration(seg.GetStart()),
+				"stopDur", time.Duration(seg.GetStop()),
+				"timeDur", time.Duration(seg.GetTime()),
+				"positionDur", time.Duration(seg.GetPosition()),
+			)
+		}
+
+		logger.Debugw("segment event received", fields...)
+	}
+
+	pad.AddProbe(gst.PadProbeTypeEventDownstream, func(_ *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+		event := info.GetEvent()
+		if event == nil {
+			return gst.PadProbeOK
+		}
+
+		switch event.Type() {
+		case gst.EventTypeSegment:
+			logSegmentEvent("downstream", event.ParseSegment())
+		}
+
+		return gst.PadProbeOK
+	})
+}
+
 func (i *Input) registerGatePad(padName string, state *padTimingState) {
 	i.gateMu.Lock()
 	defer i.gateMu.Unlock()

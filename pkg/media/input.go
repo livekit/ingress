@@ -241,6 +241,7 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 			state := timingState
 			i.registerGatePad(padName, state)
 			i.addGateProbe(pad, padName, state)
+			i.addSegmentEventProbe(pad, padName)
 		}
 
 		// Gather bitrate stats & attach latency meta from the pipeline
