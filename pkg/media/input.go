@@ -299,14 +299,20 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 						return gst.PadProbeOK
 					}
 
-					size := buffer.GetSize()
+					wbuf := ensureWritableBuffer(buffer)
+					if wbuf == nil {
+						return gst.PadProbeOK
+					}
+
+					size := wbuf.GetSize()
 					if g != nil {
 						g.MediaReceived(size)
 					}
 
 					// mark the packet with the current time to be able to calculate packet processing latency at output stage
 					now := time.Now()
-					buffer.AddReferenceTimestampMeta(i.latencyCaps, gst.ClockTime(uint64(now.UnixNano())), gst.ClockTime(0))
+					wbuf.AddReferenceTimestampMeta(i.latencyCaps, gst.ClockTime(uint64(now.UnixNano())), gst.ClockTime(0))
+					info.SetBuffer(wbuf)
 
 					return gst.PadProbeOK
 				})

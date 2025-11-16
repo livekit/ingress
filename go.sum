@@ -111,8 +111,8 @@ github.com/lithammer/shortuuid/v4 v4.2.0 h1:LMFOzVB3996a7b8aBuEXxqOBflbfPQAiVzkI
 github.com/lithammer/shortuuid/v4 v4.2.0/go.mod h1:D5noHZ2oFw/YaKCfGy0YxyE7M0wMbezmMjPdhyEFe6Y=
 github.com/livekit/go-rtmp v0.0.0-20251031234730-75a652881771 h1:B7KbsLsIf6tGHnkpYpeB9IoHSyGLjsRylfS8wZumc8o=
 github.com/livekit/go-rtmp v0.0.0-20251031234730-75a652881771/go.mod h1:8ozE8WyeW9yd3PHbVOHcyZ6ArGB2i6t+1hEcA9lTdtc=
-github.com/livekit/gst-go v0.0.0-20250701011214-e7f61abd14cb h1:1Vjk6NaXJZQiCvXGlKv38ossk4mNKHy5ob+eZygewdw=
-github.com/livekit/gst-go v0.0.0-20250701011214-e7f61abd14cb/go.mod h1:pyCgY9XFSG0CAnJzoJ84R5XWn8rEj849EYJOwnAdB8k=
+github.com/livekit/gst-go v0.0.0-20251116215826-f4c2710cb100 h1:H6pdpx7IDQLsHXB198+wysrgb9fSABS+OGfK36bBg3Q=
+github.com/livekit/gst-go v0.0.0-20251116215826-f4c2710cb100/go.mod h1:pyCgY9XFSG0CAnJzoJ84R5XWn8rEj849EYJOwnAdB8k=
 github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731 h1:9x+U2HGLrSw5ATTo469PQPkqzdoU7be46ryiCDO3boc=
 github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731/go.mod h1:Rs3MhFwutWhGwmY1VQsygw28z5bWcnEYmS1OG9OxjOQ=
 github.com/livekit/media-sdk v0.0.0-20251020120113-a84c3b4b6c31 h1:i2d3UdmZ7q1F3lEz5+b6Uf5L/+jq3nK7MWiK1k9JprQ=

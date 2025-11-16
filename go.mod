@@ -2,7 +2,7 @@ module github.com/livekit/ingress
 
 go 1.25
 
-replace github.com/go-gst/go-gst => github.com/livekit/gst-go v0.0.0-20250701011214-e7f61abd14cb
+replace github.com/go-gst/go-gst => github.com/livekit/gst-go v0.0.0-20251116215826-f4c2710cb100
 
 toolchain go1.25.0
 

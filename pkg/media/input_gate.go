@@ -48,7 +48,7 @@ func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState
 			if !state.offsetReady.Load() {
 				return gst.PadProbeDrop
 			}
-			applied := applyPadOffset(buffer, state, pts)
+			applied := applyPadOffset(info, buffer, state, pts)
 			if !applied {
 				return gst.PadProbeDrop
 			}
@@ -284,7 +284,12 @@ func streamSteady(now time.Time, elapsed, streamTime time.Duration, state *padTi
 	return false
 }
 
-func applyPadOffset(buffer *gst.Buffer, state *padTimingState, pts time.Duration) bool {
+func applyPadOffset(info *gst.PadProbeInfo, buffer *gst.Buffer, state *padTimingState, pts time.Duration) bool {
+	wbuf := ensureWritableBuffer(buffer)
+	if wbuf == nil {
+		return false
+	}
+
 	offset := time.Duration(state.padOffset.Load())
 	adj := pts - offset
 	if adj < 0 {
@@ -292,6 +297,14 @@ func applyPadOffset(buffer *gst.Buffer, state *padTimingState, pts time.Duration
 		return false
 	}
 
-	buffer.SetPresentationTimestamp(gst.ClockTime(adj))
+	wbuf.SetPresentationTimestamp(gst.ClockTime(adj))
+	info.SetBuffer(wbuf)
 	return true
+}
+
+func ensureWritableBuffer(b *gst.Buffer) *gst.Buffer {
+	if b == nil {
+		return nil
+	}
+	return b.MakeWritable() // idempotent; returns same b if already writable
 }
