@@ -300,7 +300,6 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 					}
 
 					wbuf := ensureWritableBuffer(buffer)
-					defer wbuf.Unref()
 
 					if wbuf == nil {
 						return gst.PadProbeOK
