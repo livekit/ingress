@@ -33,6 +33,8 @@ type padTimingState struct {
 	windowStreamAccum  time.Duration
 	windowElapsedAccum time.Duration
 	steadyWindowCount  int
+
+	segmentStart atomic.Duration
 }
 
 func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState) {
@@ -96,50 +98,29 @@ func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState
 	})
 }
 
-func (i *Input) addSegmentEventProbe(pad *gst.Pad, padName string) {
-	logSegmentEvent := func(direction string, seg *gst.Segment) {
-		if seg == nil {
-			logger.Debugw("nil segment event received", "pad", padName, "direction", direction)
-			return
-		}
-
-		fields := []interface{}{
-			"pad", padName,
-			"direction", direction,
-			"format", seg.GetFormat(),
-			"rate", seg.GetRate(),
-			"appliedRate", seg.GetAppliedRate(),
-			"base", seg.GetBase(),
-			"start", seg.GetStart(),
-			"stop", seg.GetStop(),
-			"time", seg.GetTime(),
-			"position", seg.GetPosition(),
-		}
-
-		if seg.GetFormat() == gst.FormatTime {
-			fields = append(fields,
-				"baseDur", time.Duration(seg.GetBase()),
-				"startDur", time.Duration(seg.GetStart()),
-				"stopDur", time.Duration(seg.GetStop()),
-				"timeDur", time.Duration(seg.GetTime()),
-				"positionDur", time.Duration(seg.GetPosition()),
-			)
-		}
-
-		logger.Debugw("segment event received", fields...)
-	}
-
+func (i *Input) addSegmentEventProbe(pad *gst.Pad, padName string, state *padTimingState) {
 	pad.AddProbe(gst.PadProbeTypeEventDownstream, func(_ *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
 		event := info.GetEvent()
-		if event == nil {
+		if event == nil || event.Type() != gst.EventTypeSegment {
 			return gst.PadProbeOK
 		}
 
-		switch event.Type() {
-		case gst.EventTypeSegment:
-			logSegmentEvent("downstream", event.ParseSegment())
+		seg := event.ParseSegment()
+		if seg == nil {
+			logger.Debugw("segment event missing data", "pad", padName)
+			return gst.PadProbeOK
 		}
 
+		state.segmentStart.Store(time.Duration(seg.GetStart()))
+		logger.Debugw("segment event received",
+			"pad", padName,
+			"format", seg.GetFormat(),
+			"start", seg.GetStart(),
+			"startDur", time.Duration(seg.GetStart()),
+			"time", seg.GetTime(),
+			"timeDur", time.Duration(seg.GetTime()),
+			"rate", seg.GetRate(),
+		)
 		return gst.PadProbeOK
 	})
 }
@@ -291,6 +272,11 @@ func applyPadOffset(buffer *gst.Buffer, state *padTimingState, pts time.Duration
 		logger.Debugw("pts is smaller than pad offset, dropping packet", "pts", pts, "offset", offset)
 		return false
 	}
+
+	// by design, every buffer must be preceded by SEGMENT (and SEGMENT is sticky),
+	// so downstream elements will push STREAM_START → CAPS → SEGMENT before any buffers.
+	// By the time buffers are processed, the segment start time will be set.
+	adj += state.segmentStart.Load()
 
 	buffer.SetPresentationTimestamp(gst.ClockTime(adj))
 	return true
