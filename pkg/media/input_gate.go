@@ -273,6 +273,9 @@ func applyPadOffset(buffer *gst.Buffer, state *padTimingState, pts time.Duration
 		return false
 	}
 
+	// by design, every buffer must be preceded by SEGMENT (and SEGMENT is sticky),
+	// so downstream elements will push STREAM_START → CAPS → SEGMENT before any buffers.
+	// By the time buffers are processed, the segment start time will be set.
 	adj += state.segmentStart.Load()
 
 	buffer.SetPresentationTimestamp(gst.ClockTime(adj))
