@@ -33,6 +33,8 @@ type padTimingState struct {
 	windowStreamAccum  time.Duration
 	windowElapsedAccum time.Duration
 	steadyWindowCount  int
+
+	segmentStart atomic.Duration
 }
 
 func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState) {
@@ -96,7 +98,7 @@ func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState
 	})
 }
 
-func (i *Input) addSegmentEventProbe(pad *gst.Pad, padName string) {
+func (i *Input) addSegmentEventProbe(pad *gst.Pad, padName string, state *padTimingState) {
 	logSegmentEvent := func(direction string, seg *gst.Segment) {
 		if seg == nil {
 			logger.Debugw("nil segment event received", "pad", padName, "direction", direction)
@@ -125,6 +127,8 @@ func (i *Input) addSegmentEventProbe(pad *gst.Pad, padName string) {
 				"positionDur", time.Duration(seg.GetPosition()),
 			)
 		}
+
+		state.segmentStart.Store(time.Duration(seg.GetStart()))
 
 		logger.Debugw("segment event received", fields...)
 	}
@@ -291,6 +295,8 @@ func applyPadOffset(buffer *gst.Buffer, state *padTimingState, pts time.Duration
 		logger.Debugw("pts is smaller than pad offset, dropping packet", "pts", pts, "offset", offset)
 		return false
 	}
+
+	adj += state.segmentStart.Load()
 
 	buffer.SetPresentationTimestamp(gst.ClockTime(adj))
 	return true
