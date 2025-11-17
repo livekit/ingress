@@ -286,6 +286,8 @@ func streamSteady(now time.Time, elapsed, streamTime time.Duration, state *padTi
 
 func applyPadOffset(info *gst.PadProbeInfo, buffer *gst.Buffer, state *padTimingState, pts time.Duration) bool {
 	wbuf := ensureWritableBuffer(buffer)
+	defer wbuf.Unref()
+
 	if wbuf == nil {
 		return false
 	}
