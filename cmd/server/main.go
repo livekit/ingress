@@ -269,16 +269,6 @@ func runHandler(_ context.Context, c *cli.Command) error {
 	killChan := make(chan os.Signal, 1)
 	signal.Notify(killChan, syscall.SIGINT)
 
-	go func() {
-		sig := <-killChan
-		logger.Infow("exit requested, stopping all ingress and shutting down", "signal", sig)
-		handler.Kill()
-
-		time.Sleep(10 * time.Second)
-		// If handler didn't exit cleanly after 10s, cancel the context
-		cancel()
-	}()
-
 	wsUrl := conf.WsUrl
 	if c.String("ws-url") != "" {
 		wsUrl = c.String("ws-url")
@@ -299,6 +289,18 @@ func runHandler(_ context.Context, c *cli.Command) error {
 			return err
 		}
 	}
+
+	params.InitLogger(conf, info, loggingFields)
+
+	go func() {
+		sig := <-killChan
+		logger.Infow("exit requested, stopping all ingress and shutting down", "signal", sig)
+		handler.Kill()
+
+		time.Sleep(10 * time.Second)
+		// If handler didn't exit cleanly after 10s, cancel the context
+		cancel()
+	}()
 
 	err = handler.HandleIngress(ctx, info, wsUrl, token, c.String("relay-token"), featureFlags, loggingFields, ep)
 	return translateRetryableError(err)
