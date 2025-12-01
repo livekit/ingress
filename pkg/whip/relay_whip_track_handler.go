@@ -344,7 +344,7 @@ func (t *RelayWhipTrackHandler) reportJitterStats() {
 	droppedDelta := int64(jbStats.PacketsDropped - t.lastJBStats.PacketsDropped)
 
 	totalLoss := lostDelta + droppedDelta
-	if totalLoss > 0 {
+	if totalLoss > 0 && g != nil {
 		g.PacketLost(totalLoss)
 	}
 
