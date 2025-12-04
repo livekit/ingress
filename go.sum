@@ -119,8 +119,8 @@ github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731 h1:9x+U2HGLrSw5AT
 github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731/go.mod h1:Rs3MhFwutWhGwmY1VQsygw28z5bWcnEYmS1OG9OxjOQ=
 github.com/livekit/media-sdk v0.0.0-20251126100256-e9674e0bcb9e h1:QizG+G159uzFPoia5QwSAG9hHBi+vDAYSAa4pEHs/Xk=
 github.com/livekit/media-sdk v0.0.0-20251126100256-e9674e0bcb9e/go.mod h1:7ssWiG+U4xnbvLih9WiZbhQP6zIKMjgXdUtIE1bm/E8=
-github.com/livekit/mediatransportutil v0.0.0-20251201055132-772504244e19 h1:JLLiGw3xtmLPzncsxe8wxvNQu91de+IV3BHIG5KlGoQ=
-github.com/livekit/mediatransportutil v0.0.0-20251201055132-772504244e19/go.mod h1:mSNtYzSf6iY9xM3UX42VEI+STHvMgHmrYzEHPcdhB8A=
+github.com/livekit/mediatransportutil v0.0.0-20251204091721-6b6e9a44e81f h1:2zvkGDPaC34ufp0RGDG28AcbhXdWsiOg9giAe2BqiMk=
+github.com/livekit/mediatransportutil v0.0.0-20251204091721-6b6e9a44e81f/go.mod h1:mSNtYzSf6iY9xM3UX42VEI+STHvMgHmrYzEHPcdhB8A=
 github.com/livekit/protocol v1.43.2 h1:yx4Xtd7yUJC2CESsBcotUcimrH7y/lZYiDYpO2YfW8g=
 github.com/livekit/protocol v1.43.2/go.mod h1:yjkL2/HcaCRyHykP9rLgKST2099AGd8laaU8EuHMnfw=
 github.com/livekit/psrpc v0.7.1 h1:ms37az0QTD3UXIWuUC5D/SkmKOlRMVRsI261eBWu/Vw=
