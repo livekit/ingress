@@ -25,6 +25,8 @@ import (
 	"go.uber.org/atomic"
 
 	"github.com/frostbyte73/core"
+	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/media-sdk/jitter"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -33,9 +35,6 @@ import (
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4"
 	"github.com/pion/webrtc/v4/pkg/media"
-
-	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/ingress/pkg/stats"
 )
 
 const (
@@ -335,10 +334,6 @@ func (t *RelayWhipTrackHandler) reportJitterStats() {
 	t.statsLock.Lock()
 	g := t.trackStats
 	t.statsLock.Unlock()
-
-	if g == nil {
-		return
-	}
 
 	jbStats := t.jb.Stats()
 	if jbStats == nil {
