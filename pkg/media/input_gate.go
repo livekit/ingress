@@ -29,6 +29,7 @@ type padTimingState struct {
 	gateCompleted atomic.Bool
 	padOffset     atomic.Int64
 	offsetReady   atomic.Bool
+	skipOffset    atomic.Bool
 
 	windowStreamAccum  time.Duration
 	windowElapsedAccum time.Duration
@@ -47,6 +48,9 @@ func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState
 		buffer := info.GetBuffer()
 
 		if state.gateCompleted.Load() {
+			if state.skipOffset.Load() {
+				return gst.PadProbeOK
+			}
 			if !state.offsetReady.Load() {
 				return gst.PadProbeDrop
 			}
@@ -131,7 +135,8 @@ func (i *Input) registerGatePad(padName string, state *padTimingState) {
 
 	// Gate terminator ensures we don't wait indefinitely for all pads to reach steady state.
 	// This timeout prevents hanging when some streams have irregular buffer arrivals or never stabilize.
-	// After 3 seconds, we use the maximum offset seen so far across all pads and allow processing to continue.
+	// After 3 seconds, we stop waiting and let buffers flow without applying any offset to avoid
+	// pushing a potentially incorrect shared offset.
 	i.gateTerminator.Do(func() {
 		go func() {
 			time.Sleep(gateTerminatorTimeout)
@@ -142,10 +147,12 @@ func (i *Input) registerGatePad(padName string, state *padTimingState) {
 			if i.gateAllReady {
 				return
 			}
+			logger.Warnw("gate terminator fired before all pads stabilized; skipping offset application", nil, "pad", padName)
 			i.gateAllReady = true
-			i.gateOffset = i.calculateMaxGatePadOffsetLocked()
+			i.gateOffset = 0
 			for _, st := range i.padTiming {
-				st.padOffset.Store(int64(i.gateOffset))
+				st.skipOffset.Store(true)
+				st.padOffset.Store(0)
 				st.gateCompleted.Store(true)
 				st.offsetReady.Store(true)
 			}
@@ -159,6 +166,7 @@ func (i *Input) registerGatePad(padName string, state *padTimingState) {
 	state.padOffset.Store(0)
 	state.localOffset.Store(0)
 	state.offsetReady.Store(false)
+	state.skipOffset.Store(false)
 }
 
 func (i *Input) onPadGateReady(padName string, state *padTimingState) {
