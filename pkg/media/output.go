@@ -519,7 +519,7 @@ func (e *Output) QueueLength() int {
 }
 
 func (e *Output) Close() error {
-	e.logger.Debugw("Closing output")
+	e.logger.Debugw("closing output")
 
 	e.closed.Break()
 	e.outputSync.Close()
@@ -529,7 +529,7 @@ func (e *Output) Close() error {
 }
 
 func (e *Output) onSourceEOS() {
-	e.logger.Debugw("EOS received, eventually closing queue after timeout", "output", e.localTrack.Load().StreamID())
+	e.logger.Debugw("eos received, eventually closing queue after timeout")
 	go func() {
 		timer := time.NewTimer(eosQueueDrainTimeout)
 		defer timer.Stop()
@@ -537,7 +537,7 @@ func (e *Output) onSourceEOS() {
 		select {
 		case <-timer.C:
 			e.Close()
-			e.logger.Debugw("Output closed on EOS timeout")
+			e.logger.Debugw("output closed on eos timeout")
 		case <-e.closed.Watch():
 			// already closed as a result of handling EOS in-band
 		}
