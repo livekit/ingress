@@ -52,6 +52,8 @@ type Pipeline struct {
 	cancel atomic.Pointer[context.CancelFunc]
 
 	pipelineErr chan error
+
+	eos *eosDispatcher
 }
 
 func New(ctx context.Context, conf *config.Config, params *params.Params, g *stats.LocalMediaStatsGatherer) (*Pipeline, error) {
@@ -83,7 +85,10 @@ func New(ctx context.Context, conf *config.Config, params *params.Params, g *sta
 		pipeline:    pipeline,
 		input:       input,
 		pipelineErr: make(chan error, 1),
+		eos:         newEOSDispatcher(),
 	}
+
+	input.SetOnEOS(p.eos.Fire)
 
 	sink, err := NewWebRTCSink(ctx, params, func() {
 		if cancel := p.cancel.Load(); cancel != nil {
@@ -93,7 +98,7 @@ func New(ctx context.Context, conf *config.Config, params *params.Params, g *sta
 		if p.loop != nil {
 			p.loop.Quit()
 		}
-	}, g)
+	}, g, p.eos)
 	if err != nil {
 		return nil, err
 	}

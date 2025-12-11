@@ -41,6 +41,7 @@ const (
 
 	queueCapacity         = 5
 	latencySampleInterval = 500 * time.Millisecond
+	eosQueueDrainTimeout  = 2 * time.Second
 )
 
 // Output manages GStreamer elements that converts & encodes video to the specification that's
@@ -56,6 +57,7 @@ type Output struct {
 	isPlayingTooSlow   func() bool
 	trackStatsGatherer *stats.MediaTrackStatGatherer
 	queue              *utils.BlockingQueue[*sample]
+	eos                *eosDispatcher
 
 	localTrack   atomic.Pointer[lksdk_output.LocalTrack]
 	stopDropping func()
@@ -84,8 +86,8 @@ type AudioOutput struct {
 	codec livekit.AudioCodec
 }
 
-func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, statsGatherer *stats.LocalMediaStatsGatherer) (*VideoOutput, error) {
-	e, err := newVideoOutput(codec, outputSync, isPlayingTooSlow)
+func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, statsGatherer *stats.LocalMediaStatsGatherer, eos *eosDispatcher) (*VideoOutput, error) {
+	e, err := newVideoOutput(codec, outputSync, isPlayingTooSlow, eos)
 	if err != nil {
 		return nil, err
 	}
@@ -248,8 +250,8 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 	return e, nil
 }
 
-func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, statsGatherer *stats.LocalMediaStatsGatherer) (*AudioOutput, error) {
-	e, err := newAudioOutput(options.AudioCodec, outputSync, isPlayingTooSlow)
+func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, statsGatherer *stats.LocalMediaStatsGatherer, eos *eosDispatcher) (*AudioOutput, error) {
+	e, err := newAudioOutput(options.AudioCodec, outputSync, isPlayingTooSlow, eos)
 	if err != nil {
 		return nil, err
 	}
@@ -354,8 +356,8 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 	return e, nil
 }
 
-func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool) (*VideoOutput, error) {
-	e, err := newOutput(outputSync, isPlayingTooSlow)
+func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, eos *eosDispatcher) (*VideoOutput, error) {
+	e, err := newOutput(outputSync, isPlayingTooSlow, eos)
 	if err != nil {
 		return nil, err
 	}
@@ -373,8 +375,8 @@ func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynch
 	return o, nil
 }
 
-func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool) (*AudioOutput, error) {
-	e, err := newOutput(outputSync, isPlayingTooSlow)
+func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, eos *eosDispatcher) (*AudioOutput, error) {
+	e, err := newOutput(outputSync, isPlayingTooSlow, eos)
 	if err != nil {
 		return nil, err
 	}
@@ -392,7 +394,7 @@ func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynch
 	return o, nil
 }
 
-func newOutput(outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool) (*Output, error) {
+func newOutput(outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, eos *eosDispatcher) (*Output, error) {
 	sink, err := app.NewAppSink()
 	if err != nil {
 		return nil, err
@@ -403,6 +405,11 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func(
 		sink:             sink,
 		outputSync:       outputSync,
 		isPlayingTooSlow: isPlayingTooSlow,
+		eos:              eos,
+	}
+
+	if e.eos != nil {
+		e.eos.AddListener(e.onSourceEOS)
 	}
 
 	e.start()
@@ -512,12 +519,29 @@ func (e *Output) QueueLength() int {
 }
 
 func (e *Output) Close() error {
+	e.logger.Debugw("Closing output")
 
 	e.closed.Break()
 	e.outputSync.Close()
 	e.queue.Close()
 
 	return nil
+}
+
+func (e *Output) onSourceEOS() {
+	e.logger.Debugw("EOS received, eventually closing queue after timeout", "output", e.localTrack.Load().StreamID())
+	go func() {
+		timer := time.NewTimer(eosQueueDrainTimeout)
+		defer timer.Stop()
+
+		select {
+		case <-timer.C:
+			e.Close()
+			e.logger.Debugw("Output closed on EOS timeout")
+		case <-e.closed.Watch():
+			// already closed as a result of handling EOS in-band
+		}
+	}()
 }
 
 func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
