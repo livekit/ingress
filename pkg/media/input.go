@@ -71,6 +71,8 @@ type Input struct {
 	gateOffset     time.Duration
 	gateTerminator sync.Once
 	latencyCaps    *gst.Caps
+
+	onEOS func()
 }
 
 type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
@@ -143,8 +145,16 @@ func (i *Input) OnOutputReady(f OutputReadyFunc) {
 	i.onOutputReady = f
 }
 
+func (i *Input) SetOnEOS(f func()) {
+	i.onEOS = f
+}
+
 func (i *Input) Start(ctx context.Context, onCloseTimeout func(ctx context.Context)) error {
 	return i.source.Start(ctx, func() {
+		if i.onEOS != nil {
+			i.onEOS()
+		}
+
 		go func() {
 			t := time.NewTimer(5 * time.Second)
 			select {

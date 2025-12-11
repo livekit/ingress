@@ -54,13 +54,14 @@ type WebRTCSink struct {
 	outputSync      *utils.OutputSynchronizer
 	spliceProcessor *SpliceProcessor
 	statsGatherer   *stats.LocalMediaStatsGatherer
+	eos             *eosDispatcher
 
 	// logging
 	tooSlowThrottle  core.Throttle
 	tooSlowLogEvents atomic.Int32
 }
 
-func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), statsGatherer *stats.LocalMediaStatsGatherer) (*WebRTCSink, error) {
+func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), statsGatherer *stats.LocalMediaStatsGatherer, eos *eosDispatcher) (*WebRTCSink, error) {
 	ctx, span := tracer.Start(ctx, "media.NewWebRTCSink")
 	defer span.End()
 
@@ -70,6 +71,7 @@ func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), stat
 		errChan:         make(chan error),
 		outputSync:      utils.NewOutputSynchronizer(),
 		statsGatherer:   statsGatherer,
+		eos:             eos,
 		tooSlowThrottle: core.NewThrottle(5 * time.Second),
 	}
 
@@ -104,7 +106,7 @@ func NewWebRTCSink(ctx context.Context, p *params.Params, onFailure func(), stat
 }
 
 func (s *WebRTCSink) addAudioTrack() (*Output, error) {
-	output, err := NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync.AddTrack(), s.isPlayingTooSlow, s.statsGatherer)
+	output, err := NewAudioOutput(s.params.AudioEncodingOptions, s.outputSync.AddTrack(), s.isPlayingTooSlow, s.statsGatherer, s.eos)
 	if err != nil {
 		logger.Errorw("could not create output", err)
 		return nil, err
@@ -190,7 +192,7 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 	sortedLayers := filterAndSortLayersByQuality(s.params.VideoEncodingOptions.Layers, w, h)
 
 	for _, layer := range sortedLayers {
-		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, s.outputSync.AddTrack(), s.isPlayingTooSlow, s.statsGatherer)
+		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, s.outputSync.AddTrack(), s.isPlayingTooSlow, s.statsGatherer, s.eos)
 		if err != nil {
 			return nil, err
 		}
