@@ -60,7 +60,7 @@ type Service struct {
 	confLock sync.Mutex
 	conf     *config.Config
 
-	monitor *stats.Monitor
+	monitor stats.Monitor
 	manager *ProcessManager
 	sm      *SessionManager
 	whipSrv *whip.WHIPServer
@@ -76,9 +76,16 @@ type Service struct {
 	shutdown core.Fuse
 }
 
-func NewService(conf *config.Config, psrpcClient rpc.IOInfoClient, bus psrpc.MessageBus, rtmpSrv *rtmp.RTMPServer, whipSrv *whip.WHIPServer, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error), listIngressTopic string) (*Service, error) {
-	monitor := stats.NewMonitor()
-
+func NewService(
+	conf *config.Config,
+	psrpcClient rpc.IOInfoClient,
+	bus psrpc.MessageBus,
+	rtmpSrv *rtmp.RTMPServer,
+	whipSrv *whip.WHIPServer,
+	monitor stats.Monitor,
+	newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error),
+	listIngressTopic string,
+) (*Service, error) {
 	s := &Service{
 		conf:        conf,
 		monitor:     monitor,

@@ -33,6 +33,7 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/ingress/version"
@@ -140,7 +141,7 @@ func runService(_ context.Context, c *cli.Command) error {
 		}
 	}
 
-	svc, err := service.NewService(conf, psrpcClient, bus, rtmpsrv, whipsrv, service.NewCmd, "")
+	svc, err := service.NewService(conf, psrpcClient, bus, rtmpsrv, whipsrv, stats.NewMonitor(),  service.NewCmd, "")
 	if err != nil {
 		return err
 	}

@@ -29,6 +29,7 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
@@ -39,7 +40,7 @@ func RunRTMPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPs
 	rtmpsrv := rtmp.NewRTMPServer()
 	relay := service.NewRelay(rtmpsrv, nil)
 
-	svc, err := service.NewService(conf.Config, psrpcClient, bus, rtmpsrv, nil, newCmd, "")
+	svc, err := service.NewService(conf.Config, psrpcClient, bus, rtmpsrv, nil,  stats.NewMonitor(), newCmd, "")
 	require.NoError(t, err)
 	go func() {
 		err := svc.Run()

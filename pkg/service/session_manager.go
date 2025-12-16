@@ -34,14 +34,14 @@ type sessionRecord struct {
 }
 
 type SessionManager struct {
-	monitor *stats.Monitor
+	monitor stats.Monitor
 	rpcSrv  rpc.IngressInternalServer
 
 	lock     sync.Mutex
 	sessions map[string]*sessionRecord // resourceId -> sessionRecord
 }
 
-func NewSessionManager(monitor *stats.Monitor, rpcSrv rpc.IngressInternalServer) *SessionManager {
+func NewSessionManager(monitor stats.Monitor, rpcSrv rpc.IngressInternalServer) *SessionManager {
 	return &SessionManager{
 		monitor:  monitor,
 		rpcSrv:   rpcSrv,

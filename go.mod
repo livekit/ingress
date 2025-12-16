@@ -4,6 +4,8 @@ go 1.25
 
 replace github.com/go-gst/go-gst => github.com/livekit/gst-go v0.0.0-20250701011214-e7f61abd14cb
 
+replace github.com/livekit/protocol => ../protocol
+
 toolchain go1.25.0
 
 require (
