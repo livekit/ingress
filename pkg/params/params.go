@@ -25,16 +25,17 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	"github.com/livekit/ingress/pkg/config"
-	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/ingress/pkg/ipc"
-	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
+
+	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/ipc"
+	"github.com/livekit/ingress/pkg/types"
 )
 
 type Params struct {
@@ -54,8 +55,9 @@ type Params struct {
 	Live                 bool
 
 	// connection info
-	WsUrl string
-	Token string
+	WsUrl         string
+	Token         string
+	ProjectID string
 
 	// extra logging fields
 	LoggingFields map[string]string
@@ -85,7 +87,7 @@ func InitLogger(conf *config.Config, info *livekit.IngressInfo, loggingFields ma
 
 	return nil
 }
-func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, relayToken string, featureFlags map[string]string, loggingFields map[string]string, ep any) (*Params, error) {
+func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, ep any) (*Params, error) {
 	var err error
 
 	// The state should have been created by the service, before launching the hander, but be defensive here.
@@ -158,6 +160,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		Live:                 getLive(info),
 		Token:                token,
 		WsUrl:                wsUrl,
+		ProjectID: projectID,
 		RelayToken:           relayToken,
 		LoggingFields:        loggingFields,
 		RelayUrl:             relayUrl,

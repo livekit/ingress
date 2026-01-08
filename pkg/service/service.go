@@ -28,15 +28,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/livekit/ingress/pkg/config"
-	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/ingress/pkg/ipc"
-	"github.com/livekit/ingress/pkg/params"
-	"github.com/livekit/ingress/pkg/rtmp"
-	"github.com/livekit/ingress/pkg/stats"
-	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/ingress/pkg/whip"
-	"github.com/livekit/ingress/version"
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -47,6 +38,16 @@ import (
 	"github.com/livekit/psrpc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
+
+	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/ipc"
+	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/rtmp"
+	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/whip"
+	"github.com/livekit/ingress/version"
 )
 
 const shutdownTimer = time.Second * 5
@@ -286,6 +287,7 @@ func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceI
 			}
 		}()
 
+		projectID := ""
 		if info == nil {
 			var resp *rpc.GetIngressInfoResponse
 			resp, err = s.psrpcClient.GetIngressInfo(ctx, &rpc.GetIngressInfoRequest{
@@ -299,11 +301,12 @@ func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceI
 			info = resp.Info
 			wsUrl = resp.WsUrl
 			token = resp.Token
+			projectID = resp.ProjectId
 			featureFlags = resp.FeatureFlags
 			loggingFields = resp.LoggingFields
 		}
 
-		p, err = s.handleNewPublisher(ctx, resourceId, inputType, info, wsUrl, token, featureFlags, loggingFields)
+		p, err = s.handleNewPublisher(ctx, resourceId, inputType, info, wsUrl, token, projectID, featureFlags, loggingFields)
 		if p != nil {
 			info = p.IngressInfo
 		}
@@ -338,7 +341,7 @@ func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceI
 	}
 }
 
-func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string, featureFlags map[string]string, loggingFields map[string]string) (*params.Params, error) {
+func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string, projectID string, featureFlags map[string]string, loggingFields map[string]string) (*params.Params, error) {
 	info.State = &livekit.IngressState{
 		Status:     livekit.IngressState_ENDPOINT_BUFFERING,
 		StartedAt:  time.Now().UnixNano(),
@@ -358,7 +361,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inp
 	}
 
 	// This validates the ingress info
-	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, "", featureFlags, loggingFields, nil)
+	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, projectID, ", featureFlags, loggingFields, nil)
 	if err != nil {
 		return nil, err
 	}
