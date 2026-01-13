@@ -361,7 +361,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inp
 	}
 
 	// This validates the ingress info
-	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, projectID, ", featureFlags, loggingFields, nil)
+	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, projectID, "", featureFlags, loggingFields, nil)
 	if err != nil {
 		return nil, err
 	}

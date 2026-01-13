@@ -17,13 +17,17 @@ package service
 import (
 	"context"
 	"sync"
+	"time"
+
+	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/observability"
+	"github.com/livekit/protocol/observability/ingressobs"
+	"github.com/livekit/protocol/rpc"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/protocol/livekit"
-	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/rpc"
 )
 
 type sessionRecord struct {
@@ -34,16 +38,18 @@ type sessionRecord struct {
 }
 
 type SessionManager struct {
-	monitor stats.Monitor
-	rpcSrv  rpc.IngressInternalServer
+	monitor  stats.Monitor
+	rpcSrv   rpc.IngressInternalServer
+	reporter ingressobs.Reporter
 
 	lock     sync.Mutex
 	sessions map[string]*sessionRecord // resourceId -> sessionRecord
 }
 
-func NewSessionManager(monitor stats.Monitor, rpcSrv rpc.IngressInternalServer) *SessionManager {
+func NewSessionManager(monitor stats.Monitor, reporter ingressobs.Reporter, rpcSrv rpc.IngressInternalServer) *SessionManager {
 	return &SessionManager{
 		monitor:  monitor,
+		reporter: reporter,
 		rpcSrv:   rpcSrv,
 		sessions: make(map[string]*sessionRecord),
 	}
@@ -61,6 +67,7 @@ func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI t
 		mediaStats:         stats.NewMediaStats(sessionAPI, livekit.IngressInput_name[int32(info.InputType)]),
 		localStatsGatherer: stats.NewLocalMediaStatsGatherer(),
 	}
+
 	r.mediaStats.RegisterGatherer(r.localStatsGatherer)
 	// Register remote gatherer, if any
 	r.mediaStats.RegisterGatherer(sessionAPI)
@@ -68,6 +75,8 @@ func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI t
 	sm.sessions[info.State.ResourceId] = r
 
 	sm.registerKillIngressSession(info.IngressId, info.State.ResourceId)
+
+	sm.startObservabilityReporter(info)
 
 	sm.monitor.IngressStarted(info)
 }
@@ -132,6 +141,18 @@ func (sm *SessionManager) ListIngress() []*rpc.IngressSession {
 		ingressIDs = append(ingressIDs, &rpc.IngressSession{IngressId: r.info.IngressId, ResourceId: resourceID})
 	}
 	return ingressIDs
+}
+
+func (sm *SessionManager) startObservabilityReporter(info *livekit.IngressInfo) {
+	ts := time.Now()
+	if info.State != nil && info.State.StartedAt > 0 {
+		ts = time.Unix(0, info.State.StartedAt) // expected path. time.Now is a guardrail
+	}
+
+	sessionTimer := observability.NewSessionTimer(ts)
+
+	sm.reporter.WithProject()
+
 }
 
 func (sm *SessionManager) registerKillIngressSession(ingressId string, resourceID string) error {

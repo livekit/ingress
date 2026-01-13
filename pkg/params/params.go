@@ -55,8 +55,8 @@ type Params struct {
 	Live                 bool
 
 	// connection info
-	WsUrl         string
-	Token         string
+	WsUrl     string
+	Token     string
 	ProjectID string
 
 	// extra logging fields
@@ -160,7 +160,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		Live:                 getLive(info),
 		Token:                token,
 		WsUrl:                wsUrl,
-		ProjectID: projectID,
+		ProjectID:            projectID,
 		RelayToken:           relayToken,
 		LoggingFields:        loggingFields,
 		RelayUrl:             relayUrl,

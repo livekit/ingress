@@ -73,6 +73,7 @@ func NewCmd(ctx context.Context, p *params.Params) (*exec.Cmd, error) {
 		"run-handler",
 		"--config-body", string(confString),
 		"--info", string(infoString),
+		"--project-id", p.ProjectID,
 		"--relay-token", p.RelayToken,
 	}
 
