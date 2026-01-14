@@ -55,7 +55,7 @@ func NewSessionManager(monitor stats.Monitor, reporter ingressobs.Reporter, rpcS
 	}
 }
 
-func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI types.SessionAPI) {
+func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, projectID string, sessionAPI types.SessionAPI) {
 	logger.Infow("ingress started", "ingressID", info.IngressId, "resourceID", info.State.ResourceId)
 
 	sm.lock.Lock()
@@ -76,7 +76,7 @@ func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI t
 
 	sm.registerKillIngressSession(info.IngressId, info.State.ResourceId)
 
-	sm.startObservabilityReporter(info)
+	sm.startObservabilityReporter(info, projectID)
 
 	sm.monitor.IngressStarted(info)
 }
@@ -143,16 +143,25 @@ func (sm *SessionManager) ListIngress() []*rpc.IngressSession {
 	return ingressIDs
 }
 
-func (sm *SessionManager) startObservabilityReporter(info *livekit.IngressInfo) {
+func (sm *SessionManager) startObservabilityReporter(info *livekit.IngressInfo, projectID string) {
+	if info.State == nil {
+		logger.Warn("no State field in IngressInfo used for reporter", errors.ErrMissingResourceId, "ingressID", info.IngressId)
+		return
+	}
+
 	ts := time.Now()
-	if info.State != nil && info.State.StartedAt > 0 {
+	if info.State.StartedAt > 0 {
 		ts = time.Unix(0, info.State.StartedAt) // expected path. time.Now is a guardrail
 	}
 
 	sessionTimer := observability.NewSessionTimer(ts)
 
-	sm.reporter.WithProject()
+	sessionReporter := sm.reporter.WithProject(projectID).WithIngress(info.IngressId).WithSession(info.State.ResourceId)
 
+	sessionReporter.Tx(func(tx ingressobs.SessionTx) {
+		tx.ReportInputType(getInputType(info.InputType))
+		tx.ReportRoomID(info.State.RoomId)
+	})
 }
 
 func (sm *SessionManager) registerKillIngressSession(ingressId string, resourceID string) error {

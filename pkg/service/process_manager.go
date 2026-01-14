@@ -28,12 +28,13 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/frostbyte73/core"
-	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/ingress/pkg/ipc"
-	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
+
+	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/ipc"
+	"github.com/livekit/ingress/pkg/params"
 )
 
 const (
@@ -101,7 +102,7 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 		},
 	}
 
-	s.sm.IngressStarted(p.IngressInfo, h)
+	s.sm.IngressStarted(p.IngressInfo, p.ProjectID, h)
 
 	s.mu.Lock()
 	s.activeHandlers[p.State.ResourceId] = h

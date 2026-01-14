@@ -199,7 +199,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
 			p.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(ctx context.Context) {
+			s.sm.IngressStarted(p.IngressInfo, p.ProjectID, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(ctx context.Context) {
 				s.whipSrv.CloseHandler(resourceId)
 			}})
 		} else {
