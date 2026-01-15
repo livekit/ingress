@@ -28,19 +28,19 @@ import (
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/rpc"
-	"github.com/livekit/protocol/utils"
+	protoutils "github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/utils"
 )
 
 type Params struct {
-	stateLock   sync.Mutex
-	psrpcClient rpc.IOInfoClient
+	stateLock     sync.Mutex
+	stateNotifier utils.StateNotifier
 
 	*livekit.IngressInfo
 	*config.Config
@@ -87,7 +87,7 @@ func InitLogger(conf *config.Config, info *livekit.IngressInfo, loggingFields ma
 
 	return nil
 }
-func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, ep any) (*Params, error) {
+func GetParams(ctx context.Context, stateNotifier utils.StateNotifier, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, ep any) (*Params, error) {
 	var err error
 
 	// The state should have been created by the service, before launching the hander, but be defensive here.
@@ -104,7 +104,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	}
 
 	if relayToken == "" {
-		relayToken = utils.NewGuid("")
+		relayToken = protoutils.NewGuid("")
 	}
 
 	l := logger.GetLogger().WithValues(getLoggerFields(info, loggingFields)...)
@@ -151,7 +151,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	}
 
 	p := &Params{
-		psrpcClient:          psrpcClient,
+		stateNotifier:        stateNotifier,
 		IngressInfo:          infoCopy,
 		logger:               l,
 		Config:               conf,
@@ -420,10 +420,7 @@ func (p *Params) SendStateUpdate(ctx context.Context) {
 
 	info.State.UpdatedAt = time.Now().UnixNano()
 
-	_, err := p.psrpcClient.UpdateIngressState(ctx, &rpc.UpdateIngressStateRequest{
-		IngressId: info.IngressId,
-		State:     info.State,
-	})
+	err := p.stateNotifier.UpdateIngressState(ctx, p.ProjectID, info.IngressId, info.State)
 	if err != nil {
 		var psrpcErr psrpc.Error
 		if !errors.As(err, &psrpcErr) || psrpcErr.Code() != psrpc.NotFound {
@@ -440,7 +437,7 @@ func (p *Params) GetLogger() logger.Logger {
 func CopyRedactedIngressInfo(info *livekit.IngressInfo) *livekit.IngressInfo {
 	infoCopy := proto.Clone(info).(*livekit.IngressInfo)
 
-	infoCopy.StreamKey = utils.RedactIdentifier(infoCopy.StreamKey)
+	infoCopy.StreamKey = protoutils.RedactIdentifier(infoCopy.StreamKey)
 
 	return infoCopy
 }

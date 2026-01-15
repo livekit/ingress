@@ -28,7 +28,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/frostbyte73/core"
-	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
 
@@ -45,7 +44,7 @@ const (
 type process struct {
 	sessionCloser
 
-	info       *livekit.IngressInfo
+	params     *params.Params
 	retryCount int
 	cmd        *exec.Cmd
 	grpcClient ipc.IngressHandlerClient
@@ -58,7 +57,7 @@ type ProcessManager struct {
 
 	mu             sync.RWMutex
 	activeHandlers map[string]*process
-	onFatal        func(info *livekit.IngressInfo, err error)
+	onFatal        func(p *params.Params, err error)
 }
 
 func NewProcessManager(sm *SessionManager, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) *ProcessManager {
@@ -69,7 +68,7 @@ func NewProcessManager(sm *SessionManager, newCmd func(ctx context.Context, p *p
 	}
 }
 
-func (s *ProcessManager) onFatalError(f func(info *livekit.IngressInfo, err error)) {
+func (s *ProcessManager) onFatalError(f func(p *params.Params, err error)) {
 	s.onFatal = f
 }
 
@@ -79,7 +78,7 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 	defer span.End()
 
 	h := &process{
-		info: p.IngressInfo,
+		params: p,
 		sessionCloser: func(ctx context.Context) {
 			if closeSession != nil {
 				closeSession(ctx)
@@ -93,9 +92,9 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 				s.mu.Unlock()
 
 				if h != nil && !h.closed.IsBroken() && h.cmd != nil {
-					logger.Infow("killing handler process still present after termination was requested", "ingressID", h.info.IngressId, "resourceID", p.State.ResourceId, "startedAt", p.State.StartedAt)
+					logger.Infow("killing handler process still present after termination was requested", "ingressID", h.params.IngressId, "resourceID", p.State.ResourceId, "startedAt", p.State.StartedAt)
 					if err := h.cmd.Process.Signal(syscall.SIGKILL); err != nil {
-						logger.Infow("failed to kill process", "error", err, "ingressID", h.info.IngressId)
+						logger.Infow("failed to kill process", "error", err, "ingressID", h.params.IngressId)
 					}
 				}
 			}()
@@ -127,14 +126,14 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 
 	defer func() {
 		h.closed.Break()
-		s.sm.IngressEnded(h.info.State.ResourceId)
+		s.sm.IngressEnded(h.params.State.ResourceId)
 
 		if p.TmpDir != "" {
 			os.RemoveAll(p.TmpDir)
 		}
 
 		s.mu.Lock()
-		delete(s.activeHandlers, h.info.State.ResourceId)
+		delete(s.activeHandlers, h.params.State.ResourceId)
 		s.mu.Unlock()
 	}()
 
@@ -180,7 +179,7 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 		default:
 			logger.Errorw("could not launch handler", err)
 			if s.onFatal != nil {
-				s.onFatal(h.info, err)
+				s.onFatal(h.params, err)
 			}
 			return
 		}
@@ -195,7 +194,7 @@ func (s *ProcessManager) killAll() {
 	for _, h := range s.activeHandlers {
 		if !h.closed.IsBroken() {
 			if err := h.cmd.Process.Signal(syscall.SIGINT); err != nil {
-				logger.Errorw("failed to kill process", err, "ingressID", h.info.IngressId)
+				logger.Errorw("failed to kill process", err, "ingressID", h.params.IngressId)
 			}
 		}
 	}

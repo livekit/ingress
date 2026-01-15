@@ -67,9 +67,10 @@ type Service struct {
 	whipSrv *whip.WHIPServer
 	rtmpSrv *rtmp.RTMPServer
 
-	psrpcClient rpc.IOInfoClient
-	rpcSrv      rpc.IngressInternalServer
-	bus         psrpc.MessageBus
+	psrpcClient   rpc.IOInfoClient
+	stateNotifier utils.StateNotifier
+	rpcSrv        rpc.IngressInternalServer
+	bus           psrpc.MessageBus
 
 	promServer *http.Server
 
@@ -80,6 +81,7 @@ type Service struct {
 func NewService(
 	conf *config.Config,
 	psrpcClient rpc.IOInfoClient,
+	stateNotifier utils.StateNotifier,
 	bus psrpc.MessageBus,
 	rtmpSrv *rtmp.RTMPServer,
 	whipSrv *whip.WHIPServer,
@@ -88,12 +90,13 @@ func NewService(
 	listIngressTopic string,
 ) (*Service, error) {
 	s := &Service{
-		conf:        conf,
-		monitor:     monitor,
-		whipSrv:     whipSrv,
-		rtmpSrv:     rtmpSrv,
-		psrpcClient: psrpcClient,
-		bus:         bus,
+		conf:          conf,
+		monitor:       monitor,
+		whipSrv:       whipSrv,
+		rtmpSrv:       rtmpSrv,
+		psrpcClient:   psrpcClient,
+		stateNotifier: stateNotifier,
+		bus:           bus,
 	}
 
 	srv, err := rpc.NewIngressInternalServer(s, bus)
@@ -112,8 +115,14 @@ func NewService(
 	s.manager = NewProcessManager(s.sm, newCmd)
 	s.isActive.Store(true)
 
-	s.manager.onFatalError(func(info *livekit.IngressInfo, err error) {
-		s.sendUpdate(context.Background(), info, err)
+	// TODO replace info with Params
+	s.manager.onFatalError(func(p *params.Params, err error) {
+		if err != nil {
+			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
+			logger.Warnw("ingress failed", err)
+		}
+
+		p.SendStateUpdate(context.Background())
 
 		s.Stop(false)
 	})
@@ -361,7 +370,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inp
 	}
 
 	// This validates the ingress info
-	p, err := params.GetParams(ctx, s.psrpcClient, conf, info, wsUrl, token, projectID, "", featureFlags, loggingFields, nil)
+	p, err := params.GetParams(ctx, s.stateNotifier, conf, info, wsUrl, token, projectID, "", featureFlags, loggingFields, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -428,7 +437,7 @@ func (s *Service) Run() error {
 	return nil
 }
 
-func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err error) {
+func (s *Service) sendUpdate(ctx context.Context, projectID string, info *livekit.IngressInfo, err error) {
 	var state *livekit.IngressState
 	if info == nil {
 		return
@@ -445,10 +454,7 @@ func (s *Service) sendUpdate(ctx context.Context, info *livekit.IngressInfo, err
 
 	state.UpdatedAt = time.Now().UnixNano()
 
-	_, err = s.psrpcClient.UpdateIngressState(ctx, &rpc.UpdateIngressStateRequest{
-		IngressId: info.IngressId,
-		State:     state,
-	})
+	err = s.stateNotifier.UpdateIngressState(ctx, projectID, info.IngressId, state)
 	if err != nil {
 		logger.Errorw("failed to send update", err)
 	}
