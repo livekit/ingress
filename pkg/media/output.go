@@ -506,7 +506,7 @@ func (e *Output) start() {
 				return
 			}
 			err = e.writeSample(s)
-			if err != nil {
+			if err != nil && !errors.Is(err, io.EOF) {
 				// Store the first write error
 				e.pipelineErr.CompareAndSwap(nil, &err)
 			}
