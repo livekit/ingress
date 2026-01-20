@@ -71,7 +71,6 @@ type Service struct {
 	psrpcClient   rpc.IOInfoClient
 	stateNotifier utils.StateNotifier
 	rpcSrv        rpc.IngressInternalServer
-	bus           psrpc.MessageBus
 
 	promServer *http.Server
 
@@ -97,7 +96,6 @@ func NewService(
 		rtmpSrv:       rtmpSrv,
 		psrpcClient:   psrpcClient,
 		stateNotifier: stateNotifier,
-		bus:           bus,
 	}
 
 	srv, err := rpc.NewIngressInternalServer(s, bus)

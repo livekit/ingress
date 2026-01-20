@@ -17,9 +17,10 @@ package utils
 import (
 	"context"
 
-	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/rpc"
+
+	"github.com/livekit/ingress/pkg/ipc"
 )
 
 type StateNotifier interface {
@@ -67,4 +68,15 @@ func (sn *handlerStateNotifier) UpdateIngressState(ctx context.Context, projectI
 	_, err := sn.ipcClient.UpdateIngressState(ctx, req)
 
 	return err
+}
+
+type noopStateNotifier struct {
+}
+
+func NewNoopStateNotifier() StateNotifier {
+	return &noopStateNotifier{}
+}
+
+func (sn *noopStateNotifier) UpdateIngressState(ctx context.Context, projectID string, ingressID string, state *livekit.IngressState) error {
+	return nil
 }

@@ -26,21 +26,23 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/livekit/ingress/pkg/params"
-	"github.com/livekit/ingress/pkg/rtmp"
-	"github.com/livekit/ingress/pkg/service"
-	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/psrpc"
+
+	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/rtmp"
+	"github.com/livekit/ingress/pkg/service"
+	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/ingress/pkg/utils"
 )
 
 func RunRTMPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
 	rtmpsrv := rtmp.NewRTMPServer()
 	relay := service.NewRelay(rtmpsrv, nil)
 
-	svc, err := service.NewService(conf.Config, psrpcClient, bus, rtmpsrv, nil,  stats.NewMonitor(), newCmd, "")
+	svc, err := service.NewService(conf.Config, psrpcClient, utils.NewNoopStateNotifier(), bus, rtmpsrv, nil, stats.NewMonitor(), newCmd, "")
 	require.NoError(t, err)
 	go func() {
 		err := svc.Run()

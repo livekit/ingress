@@ -27,14 +27,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/livekit/ingress/pkg/params"
-	"github.com/livekit/ingress/pkg/service"
-	"github.com/livekit/ingress/pkg/stats"
-	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/psrpc"
+
+	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/service"
+	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/ingress/pkg/utils"
+	"github.com/livekit/ingress/pkg/whip"
 )
 
 const (
@@ -46,7 +48,7 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPs
 	require.NoError(t, err)
 	relay := service.NewRelay(nil, whipsrv)
 
-	svc, err := service.NewService(conf.Config, psrpcClient, bus, nil, whipsrv, stats.NewMonitor(),  newCmd, "")
+	svc, err := service.NewService(conf.Config, psrpcClient, utils.NewNoopStateNotifier(), bus, nil, whipsrv, stats.NewMonitor(), newCmd, "")
 	require.NoError(t, err)
 	go func() {
 		err := svc.Run()

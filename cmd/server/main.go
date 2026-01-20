@@ -145,7 +145,9 @@ func runService(_ context.Context, c *cli.Command) error {
 		}
 	}
 
-	svc, err := service.NewService(conf, psrpcClient, bus, rtmpsrv, whipsrv, stats.NewMonitor(), service.NewCmd, "")
+	sn := utils.NewServiceStateNotifier(psrpcClient)
+
+	svc, err := service.NewService(conf, psrpcClient, sn, bus, rtmpsrv, whipsrv, stats.NewMonitor(), service.NewCmd, "")
 	if err != nil {
 		return err
 	}
