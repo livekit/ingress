@@ -34,7 +34,6 @@ import (
 
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/service"
-	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/ingress/pkg/whip"
 )
@@ -48,7 +47,7 @@ func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPs
 	require.NoError(t, err)
 	relay := service.NewRelay(nil, whipsrv)
 
-	svc, err := service.NewService(conf.Config, psrpcClient, utils.NewNoopStateNotifier(), bus, nil, whipsrv, stats.NewMonitor(), newCmd, "")
+	svc, err := service.NewService(conf.Config, psrpcClient, utils.NewNoopStateNotifier(), bus, nil, whipsrv, newCmd, "")
 	require.NoError(t, err)
 	go func() {
 		err := svc.Run()

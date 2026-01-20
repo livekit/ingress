@@ -62,7 +62,7 @@ type Service struct {
 	confLock sync.Mutex
 	conf     *config.Config
 
-	monitor stats.Monitor
+	monitor *stats.Monitor
 	manager *ProcessManager
 	sm      *SessionManager
 	whipSrv *whip.WHIPServer
@@ -85,10 +85,11 @@ func NewService(
 	bus psrpc.MessageBus,
 	rtmpSrv *rtmp.RTMPServer,
 	whipSrv *whip.WHIPServer,
-	monitor stats.Monitor,
 	newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error),
 	listIngressTopic string,
 ) (*Service, error) {
+	monitor := stats.NewMonitor()
+
 	s := &Service{
 		conf:          conf,
 		monitor:       monitor,
@@ -207,7 +208,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
 			p.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(p.IngressInfo, p.ProjectID, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(ctx context.Context) {
+			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(ctx context.Context) {
 				s.whipSrv.CloseHandler(resourceId)
 			}})
 		} else {

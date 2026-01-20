@@ -37,27 +37,10 @@ const (
 	defaultMinIdle float64 = 0.3 // Target at least 30% idle CPU
 )
 
-type Monitor interface {
-	Start(conf *config.Config) error
-	UpdateCostConfig(cpuCostConfig *config.CPUCostConfig) error
-	Stop()
-	Shutdown()
-
-	CanAccept() bool
-	CanAcceptIngress(info *livekit.IngressInfo) bool
-	AcceptIngress(info *livekit.IngressInfo) bool
-	GetAvailableCPU() float64
-
-	IngressStarted(info *livekit.IngressInfo)
-	IngressEnded(info *livekit.IngressInfo)
-}
-
-type monitorImpl struct {
+type Monitor struct {
 	costConfigLock sync.Mutex
 	cpuCostConfig  config.CPUCostConfig
 	maxCost        float64
-
-	region string
 
 	promCPULoad       prometheus.Gauge
 	requestGauge      *prometheus.GaugeVec
@@ -71,11 +54,11 @@ type monitorImpl struct {
 	shutdown core.Fuse
 }
 
-func NewMonitor() Monitor {
-	return &monitorImpl{}
+func NewMonitor() *Monitor {
+	return &Monitor{}
 }
 
-func (m *monitorImpl) Start(conf *config.Config) error {
+func (m *Monitor) Start(conf *config.Config) error {
 	cpuStats, err := hwstats.NewCPUStats(func(idle float64) {
 		m.promCPULoad.Set(1 - idle/float64(m.cpuStats.NumCPU()))
 	})
@@ -125,7 +108,7 @@ func (m *monitorImpl) Start(conf *config.Config) error {
 	return nil
 }
 
-func (m *monitorImpl) UpdateCostConfig(cpuCostConfig *config.CPUCostConfig) error {
+func (m *Monitor) UpdateCostConfig(cpuCostConfig *config.CPUCostConfig) error {
 	m.costConfigLock.Lock()
 	defer m.costConfigLock.Unlock()
 
@@ -141,12 +124,12 @@ func (m *monitorImpl) UpdateCostConfig(cpuCostConfig *config.CPUCostConfig) erro
 }
 
 // Server is shutting down, but may stay up for some time for draining
-func (m *monitorImpl) Shutdown() {
+func (m *Monitor) Shutdown() {
 	m.shutdown.Break()
 }
 
 // Stop the monitor before server termination
-func (m *monitorImpl) Stop() {
+func (m *Monitor) Stop() {
 	if m.cpuStats != nil {
 		m.cpuStats.Stop()
 	}
@@ -156,7 +139,7 @@ func (m *monitorImpl) Stop() {
 	prometheus.Unregister(m.promNodeAvailable)
 }
 
-func (m *monitorImpl) checkCPUConfig() error {
+func (m *Monitor) checkCPUConfig() error {
 	// Not started
 	if m.cpuStats == nil {
 		return nil
@@ -234,11 +217,11 @@ func (m *monitorImpl) checkCPUConfig() error {
 	return nil
 }
 
-func (m *monitorImpl) GetAvailableCPU() float64 {
+func (m *Monitor) GetAvailableCPU() float64 {
 	return m.getAvailable(m.cpuCostConfig.MinIdleRatio)
 }
 
-func (m *monitorImpl) CanAccept() bool {
+func (m *Monitor) CanAccept() bool {
 	if !m.started.IsBroken() || m.shutdown.IsBroken() {
 		return false
 	}
@@ -249,7 +232,7 @@ func (m *monitorImpl) CanAccept() bool {
 	return m.getAvailable(m.cpuCostConfig.MinIdleRatio) > m.maxCost
 }
 
-func (m *monitorImpl) canAcceptIngress(info *livekit.IngressInfo, alreadyCommitted bool) (bool, float64, float64) {
+func (m *Monitor) canAcceptIngress(info *livekit.IngressInfo, alreadyCommitted bool) (bool, float64, float64) {
 	if !m.started.IsBroken() || m.shutdown.IsBroken() {
 		return false, 0, 0
 	}
@@ -292,7 +275,7 @@ func (m *monitorImpl) canAcceptIngress(info *livekit.IngressInfo, alreadyCommitt
 	return accept, cpuHold, available
 }
 
-func (m *monitorImpl) CanAcceptIngress(info *livekit.IngressInfo) bool {
+func (m *Monitor) CanAcceptIngress(info *livekit.IngressInfo) bool {
 	params.UpdateTranscodingEnabled(info)
 
 	accept, _, _ := m.canAcceptIngress(info, false)
@@ -300,7 +283,7 @@ func (m *monitorImpl) CanAcceptIngress(info *livekit.IngressInfo) bool {
 	return accept
 }
 
-func (m *monitorImpl) AcceptIngress(info *livekit.IngressInfo) bool {
+func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 	accept, cpuHold, available := m.canAcceptIngress(info, true)
 
 	if accept {
@@ -312,7 +295,7 @@ func (m *monitorImpl) AcceptIngress(info *livekit.IngressInfo) bool {
 	return accept
 }
 
-func (m *monitorImpl) IngressStarted(info *livekit.IngressInfo) {
+func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
 		m.requestGauge.With(prometheus.Labels{"type": "rtmp", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
@@ -324,7 +307,7 @@ func (m *monitorImpl) IngressStarted(info *livekit.IngressInfo) {
 	}
 }
 
-func (m *monitorImpl) IngressEnded(info *livekit.IngressInfo) {
+func (m *Monitor) IngressEnded(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
 		m.requestGauge.With(prometheus.Labels{"type": "rtmp", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
@@ -335,6 +318,6 @@ func (m *monitorImpl) IngressEnded(info *livekit.IngressInfo) {
 	}
 }
 
-func (m *monitorImpl) getAvailable(minIdleRatio float64) float64 {
+func (m *Monitor) getAvailable(minIdleRatio float64) float64 {
 	return m.cpuStats.GetCPUIdle() - m.pendingCPUs.Load() - minIdleRatio*m.cpuStats.NumCPU()
 }

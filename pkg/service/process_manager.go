@@ -101,7 +101,7 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 		},
 	}
 
-	s.sm.IngressStarted(p.IngressInfo, p.ProjectID, h)
+	s.sm.IngressStarted(p.IngressInfo, h)
 
 	s.mu.Lock()
 	s.activeHandlers[p.State.ResourceId] = h

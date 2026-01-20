@@ -40,7 +40,6 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/service"
-	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/ingress/version"
@@ -147,7 +146,7 @@ func runService(_ context.Context, c *cli.Command) error {
 
 	sn := utils.NewServiceStateNotifier(psrpcClient)
 
-	svc, err := service.NewService(conf, psrpcClient, sn, bus, rtmpsrv, whipsrv, stats.NewMonitor(), service.NewCmd, "")
+	svc, err := service.NewService(conf, psrpcClient, sn, bus, rtmpsrv, whipsrv, service.NewCmd, "")
 	if err != nil {
 		return err
 	}
@@ -264,13 +263,9 @@ func runHandler(_ context.Context, c *cli.Command) error {
 		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, extraParams any) error
 	}
 
-	bus := psrpc.NewRedisMessageBus(rc)
-	rpcClient, err := rpc.NewIOInfoClient(bus)
-	if err != nil {
-		return err
-	}
-	handler = service.NewHandler(conf, rpcClient)
+	handler = service.NewHandler(conf)
 
+	bus := psrpc.NewRedisMessageBus(rc)
 	setupHandlerRPCHandlers(conf, handler.(*service.Handler), bus, info, ep)
 
 	killChan := make(chan os.Signal, 1)

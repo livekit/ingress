@@ -20,7 +20,6 @@ import (
 
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/observability/ingressobs"
 	"github.com/livekit/protocol/rpc"
 
 	"github.com/livekit/ingress/pkg/errors"
@@ -36,15 +35,14 @@ type sessionRecord struct {
 }
 
 type SessionManager struct {
-	monitor  stats.Monitor
-	rpcSrv   rpc.IngressInternalServer
-	reporter ingressobs.Reporter
+	monitor *stats.Monitor
+	rpcSrv  rpc.IngressInternalServer
 
 	lock     sync.Mutex
 	sessions map[string]*sessionRecord // resourceId -> sessionRecord
 }
 
-func NewSessionManager(monitor stats.Monitor, rpcSrv rpc.IngressInternalServer) *SessionManager {
+func NewSessionManager(monitor *stats.Monitor, rpcSrv rpc.IngressInternalServer) *SessionManager {
 	return &SessionManager{
 		monitor:  monitor,
 		rpcSrv:   rpcSrv,
@@ -52,7 +50,7 @@ func NewSessionManager(monitor stats.Monitor, rpcSrv rpc.IngressInternalServer) 
 	}
 }
 
-func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, projectID string, sessionAPI types.SessionAPI) {
+func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI types.SessionAPI) {
 	logger.Infow("ingress started", "ingressID", info.IngressId, "resourceID", info.State.ResourceId)
 
 	sm.lock.Lock()
@@ -64,7 +62,6 @@ func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, projectID st
 		mediaStats:         stats.NewMediaStats(sessionAPI, livekit.IngressInput_name[int32(info.InputType)]),
 		localStatsGatherer: stats.NewLocalMediaStatsGatherer(),
 	}
-
 	r.mediaStats.RegisterGatherer(r.localStatsGatherer)
 	// Register remote gatherer, if any
 	r.mediaStats.RegisterGatherer(sessionAPI)
