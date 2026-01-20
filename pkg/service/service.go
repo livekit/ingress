@@ -26,7 +26,6 @@ import (
 
 	"github.com/frostbyte73/core"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
@@ -520,12 +519,6 @@ func (s *Service) StartIngressAffinity(ctx context.Context, req *rpc.StartIngres
 	}
 
 	return 1
-}
-
-func (s *Service) KillIngressSession(ctx context.Context, req *rpc.KillIngressSessionRequest) (*emptypb.Empty, error) {
-	s.sm.IngressEnded(req.Session.ResourceId)
-
-	return &emptypb.Empty{}, nil
 }
 
 func (s *Service) GetHealthHandlers() whip.HealthHandlers {

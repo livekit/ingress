@@ -247,6 +247,20 @@ func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStats
 	return &google_protobuf2.Empty{}, nil
 }
 
+func (h *Handler) KillIngress(ctx context.Context, req *ipc.KillIngressRequest) (*ipc.KillIngressResponse, error) {
+	_, span := tracer.Start(ctx, "Handler.KillIngress")
+	defer span.End()
+
+	state, err := h.killAndReturnState(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ipc.KillIngressResponse{
+		State: state,
+	}, nil
+}
+
 func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, extraParams any) (*media.Pipeline, error) {
 	ctx, span := tracer.Start(ctx, "Handler.buildPipeline")
 	defer span.End()

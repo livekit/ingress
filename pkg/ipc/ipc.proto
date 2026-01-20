@@ -35,6 +35,7 @@ service IngressHandler {
   rpc GetPProf(PProfRequest) returns (PProfResponse) {};
   rpc GatherMediaStats(GatherMediaStatsRequest) returns (GatherMediaStatsResponse) {};
   rpc UpdateMediaStats(UpdateMediaStatsRequest) returns (google.protobuf.Empty) {};
+  rpc KillIngress(KillIngressRequest) returns (KillIngressResponse) {};
 }
 
 message GstPipelineDebugDotRequest {}
@@ -87,3 +88,12 @@ message JitterStats {
   double p90 = 2;
   double p99 = 3;
 }
+
+message KillIngressRequest {
+  string ingress_id = 1;
+}
+
+message KillIngressResponse {
+  livekit.IngressState state = 1;
+}
+
