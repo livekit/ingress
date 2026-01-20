@@ -17,11 +17,9 @@ package service
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/observability"
 	"github.com/livekit/protocol/observability/ingressobs"
 	"github.com/livekit/protocol/rpc"
 
@@ -46,10 +44,9 @@ type SessionManager struct {
 	sessions map[string]*sessionRecord // resourceId -> sessionRecord
 }
 
-func NewSessionManager(monitor stats.Monitor, reporter ingressobs.Reporter, rpcSrv rpc.IngressInternalServer) *SessionManager {
+func NewSessionManager(monitor stats.Monitor, rpcSrv rpc.IngressInternalServer) *SessionManager {
 	return &SessionManager{
 		monitor:  monitor,
-		reporter: reporter,
 		rpcSrv:   rpcSrv,
 		sessions: make(map[string]*sessionRecord),
 	}
@@ -75,8 +72,6 @@ func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, projectID st
 	sm.sessions[info.State.ResourceId] = r
 
 	sm.registerKillIngressSession(info.IngressId, info.State.ResourceId)
-
-	sm.startObservabilityReporter(info, projectID)
 
 	sm.monitor.IngressStarted(info)
 }
@@ -141,27 +136,6 @@ func (sm *SessionManager) ListIngress() []*rpc.IngressSession {
 		ingressIDs = append(ingressIDs, &rpc.IngressSession{IngressId: r.info.IngressId, ResourceId: resourceID})
 	}
 	return ingressIDs
-}
-
-func (sm *SessionManager) startObservabilityReporter(info *livekit.IngressInfo, projectID string) {
-	if info.State == nil {
-		logger.Warn("no State field in IngressInfo used for reporter", errors.ErrMissingResourceId, "ingressID", info.IngressId)
-		return
-	}
-
-	ts := time.Now()
-	if info.State.StartedAt > 0 {
-		ts = time.Unix(0, info.State.StartedAt) // expected path. time.Now is a guardrail
-	}
-
-	sessionTimer := observability.NewSessionTimer(ts)
-
-	sessionReporter := sm.reporter.WithProject(projectID).WithIngress(info.IngressId).WithSession(info.State.ResourceId)
-
-	sessionReporter.Tx(func(tx ingressobs.SessionTx) {
-		tx.ReportInputType(getInputType(info.InputType))
-		tx.ReportRoomID(info.State.RoomId)
-	})
 }
 
 func (sm *SessionManager) registerKillIngressSession(ingressId string, resourceID string) error {

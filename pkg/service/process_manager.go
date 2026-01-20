@@ -16,28 +16,24 @@ package service
 
 import (
 	"context"
-	"net"
 	"os"
 	"os/exec"
-	"path"
 	"sync"
 	"syscall"
 	"time"
 
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-
 	"github.com/frostbyte73/core"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/tracer"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/utils"
 )
 
 const (
-	network    = "unix"
 	maxRetries = 3
 )
 
@@ -52,17 +48,21 @@ type process struct {
 }
 
 type ProcessManager struct {
-	sm     *SessionManager
-	newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)
+	ipc.UnimplementedIngressServiceServer
+
+	sm            *SessionManager
+	stateNotifier utils.StateNotifier
+	newCmd        func(ctx context.Context, p *params.Params) (*exec.Cmd, error)
 
 	mu             sync.RWMutex
 	activeHandlers map[string]*process
 	onFatal        func(p *params.Params, err error)
 }
 
-func NewProcessManager(sm *SessionManager, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) *ProcessManager {
+func NewProcessManager(sm *SessionManager, stateNotifier utils.StateNotifier, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) *ProcessManager {
 	return &ProcessManager{
 		sm:             sm,
+		stateNotifier:  stateNotifier,
 		newCmd:         newCmd,
 		activeHandlers: make(map[string]*process),
 	}
@@ -124,9 +124,19 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 	_, span := tracer.Start(ctx, "Service.runHandler")
 	defer span.End()
 
+	grpcServer, err := ipc.StartServiceServer(p.TmpDir, s)
+	if err != nil {
+		span.RecordError(err)
+		logger.Errorw("could start grpc service", err)
+
+		return
+	}
+
 	defer func() {
 		h.closed.Break()
 		s.sm.IngressEnded(h.params.State.ResourceId)
+
+		grpcServer.Stop()
 
 		if p.TmpDir != "" {
 			os.RemoveAll(p.TmpDir)
@@ -138,19 +148,13 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 	}()
 
 	for h.retryCount = 0; h.retryCount < maxRetries; h.retryCount++ {
-		socketAddr := getSocketAddress(p.TmpDir)
-		os.Remove(socketAddr)
-		conn, err := grpc.Dial(socketAddr,
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
-				return net.Dial(network, addr)
-			}),
-		)
+		var err error
+		h.grpcClient, err = ipc.GetHandlerClient(h.params.TmpDir)
 		if err != nil {
 			span.RecordError(err)
 			logger.Errorw("could not dial grpc handler", err)
+			return
 		}
-		h.grpcClient = ipc.NewIngressHandlerClient(conn)
 
 		cmd, err := s.newCmd(ctx, p)
 		if err != nil {
@@ -200,6 +204,10 @@ func (s *ProcessManager) killAll() {
 	}
 }
 
+func (s *ProcessManager) UpdateIngressState(ctx context.Context, req *ipc.UpdateIngressStateRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, s.stateNotifier.UpdateIngressState(ctx, req.ProjectId, req.IngressId, req.State)
+}
+
 func (p *process) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {
 	req := &ipc.PProfRequest{
 		ProfileName: profileName,
@@ -245,8 +253,4 @@ func (p *process) GatherStats(ctx context.Context) (*ipc.MediaStats, error) {
 	}
 
 	return s.Stats, nil
-}
-
-func getSocketAddress(handlerTmpDir string) string {
-	return path.Join(handlerTmpDir, "service_rpc.sock")
 }

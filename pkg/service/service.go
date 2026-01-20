@@ -34,7 +34,7 @@ import (
 	"github.com/livekit/protocol/pprof"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
-	"github.com/livekit/protocol/utils"
+	protoutils "github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
@@ -46,6 +46,7 @@ import (
 	"github.com/livekit/ingress/pkg/rtmp"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/ingress/version"
 )
@@ -112,7 +113,7 @@ func NewService(
 
 	s.sm = NewSessionManager(monitor, srv)
 
-	s.manager = NewProcessManager(s.sm, newCmd)
+	s.manager = NewProcessManager(s.sm, stateNotifier, newCmd)
 	s.isActive.Store(true)
 
 	// TODO replace info with Params
@@ -335,7 +336,7 @@ func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceI
 		}
 
 		// Send update for URL ingress as well to make sure the state gets updated even if CreateIngress fails because the ingress already exists
-		s.sendUpdate(ctx, info, err)
+		s.sendUpdate(ctx, projectID, info, err)
 
 		if info != nil {
 			logger.Infow("received ingress info", "ingressID", info.IngressId, "streamKey", info.StreamKey, "resourceID", info.State.ResourceId, "ingressInfo", params.CopyRedactedIngressInfo(info))
@@ -511,7 +512,7 @@ func (s *Service) ListActiveIngress(ctx context.Context, _ *rpc.ListActiveIngres
 }
 
 func (s *Service) StartIngress(ctx context.Context, req *rpc.StartIngressRequest) (*livekit.IngressInfo, error) {
-	return s.HandleURLPublishRequest(ctx, utils.NewGuid(utils.URLResourcePrefix), req)
+	return s.HandleURLPublishRequest(ctx, protoutils.NewGuid(protoutils.URLResourcePrefix), req)
 }
 
 func (s *Service) StartIngressAffinity(ctx context.Context, req *rpc.StartIngressRequest) float32 {

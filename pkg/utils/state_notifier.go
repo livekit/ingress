@@ -17,6 +17,7 @@ package utils
 import (
 	"context"
 
+	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/rpc"
 )
@@ -25,23 +26,45 @@ type StateNotifier interface {
 	UpdateIngressState(ctx context.Context, projectID string, ingressID string, state *livekit.IngressState) error
 }
 
-type stateNotifier struct {
+type serviceStateNotifier struct {
 	psrpcClient rpc.IOInfoClient
 }
 
-func NewStateNotifier(psrpcClient rpc.IOInfoClient) StateNotifier {
-	return &stateNotifier{
+func NewServiceStateNotifier(psrpcClient rpc.IOInfoClient) StateNotifier {
+	return &serviceStateNotifier{
 		psrpcClient: psrpcClient,
 	}
 }
 
-func (sn *stateNotifier) UpdateIngressState(ctx context.Context, projectID string, ingressID string, state *livekit.IngressState) error {
+func (sn *serviceStateNotifier) UpdateIngressState(ctx context.Context, projectID string, ingressID string, state *livekit.IngressState) error {
 	req := &rpc.UpdateIngressStateRequest{
 		IngressId: ingressID,
 		State:     state,
 	}
 
 	_, err := sn.psrpcClient.UpdateIngressState(ctx, req)
+
+	return err
+}
+
+type handlerStateNotifier struct {
+	ipcClient ipc.IngressServiceClient
+}
+
+func NewHandlerStateNotifier(ipcClient ipc.IngressServiceClient) StateNotifier {
+	return &handlerStateNotifier{
+		ipcClient: ipcClient,
+	}
+}
+
+func (sn *handlerStateNotifier) UpdateIngressState(ctx context.Context, projectID string, ingressID string, state *livekit.IngressState) error {
+	req := &ipc.UpdateIngressStateRequest{
+		ProjectId: projectID,
+		IngressId: ingressID,
+		State:     state,
+	}
+
+	_, err := sn.ipcClient.UpdateIngressState(ctx, req)
 
 	return err
 }
