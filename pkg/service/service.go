@@ -111,7 +111,11 @@ func NewService(
 
 	s.sm = NewSessionManager(monitor, srv)
 
-	s.manager = NewProcessManager(s.sm, stateNotifier, newCmd)
+	s.manager, err = NewProcessManager(s.sm, stateNotifier, bus, newCmd)
+	if err != nil {
+		return nil, err
+	}
+
 	s.isActive.Store(true)
 
 	// TODO replace info with Params

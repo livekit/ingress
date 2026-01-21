@@ -90,7 +90,6 @@ message JitterStats {
 }
 
 message KillIngressRequest {
-  string ingress_id = 1;
 }
 
 message KillIngressResponse {

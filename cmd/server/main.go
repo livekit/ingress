@@ -230,12 +230,6 @@ func runHandler(_ context.Context, c *cli.Command) error {
 	defer span.End()
 	logger.Debugw("handler launched")
 
-	rc, err := redis.GetRedisClient(conf.Redis)
-	if err != nil {
-		span.RecordError(err)
-		return err
-	}
-
 	info := &livekit.IngressInfo{}
 	infoString := c.String("info")
 	err = protojson.Unmarshal([]byte(infoString), info)
@@ -313,15 +307,6 @@ func translateRetryableError(err error) error {
 	}
 
 	return err
-}
-
-func setupHandlerRPCHandlers(conf *config.Config, handler *service.Handler, bus psrpc.MessageBus, info *livekit.IngressInfo, ep any) error {
-	rpcServer, err := rpc.NewIngressHandlerServer(handler, bus)
-	if err != nil {
-		return err
-	}
-
-	return utils.RegisterIngressRpcHandlers(rpcServer, info)
 }
 
 func getConfig(c *cli.Command, initialize bool) (*config.Config, error) {

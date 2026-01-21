@@ -627,7 +627,6 @@ func (x *JitterStats) GetP99() float64 {
 
 type KillIngressRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	IngressId     string                 `protobuf:"bytes,1,opt,name=ingress_id,json=ingressId,proto3" json:"ingress_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -660,13 +659,6 @@ func (x *KillIngressRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use KillIngressRequest.ProtoReflect.Descriptor instead.
 func (*KillIngressRequest) Descriptor() ([]byte, []int) {
 	return file_ipc_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *KillIngressRequest) GetIngressId() string {
-	if x != nil {
-		return x.IngressId
-	}
-	return ""
 }
 
 type KillIngressResponse struct {
@@ -763,10 +755,8 @@ const file_ipc_proto_rawDesc = "" +
 	"\vJitterStats\x12\x10\n" +
 	"\x03p50\x18\x01 \x01(\x01R\x03p50\x12\x10\n" +
 	"\x03p90\x18\x02 \x01(\x01R\x03p90\x12\x10\n" +
-	"\x03p99\x18\x03 \x01(\x01R\x03p99\"3\n" +
-	"\x12KillIngressRequest\x12\x1d\n" +
-	"\n" +
-	"ingress_id\x18\x01 \x01(\tR\tingressId\"B\n" +
+	"\x03p99\x18\x03 \x01(\x01R\x03p99\"\x14\n" +
+	"\x12KillIngressRequest\"B\n" +
 	"\x13KillIngressResponse\x12+\n" +
 	"\x05state\x18\x01 \x01(\v2\x15.livekit.IngressStateR\x05state2^\n" +
 	"\x0eIngressService\x12L\n" +

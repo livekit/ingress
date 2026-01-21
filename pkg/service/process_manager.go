@@ -23,9 +23,13 @@ import (
 	"time"
 
 	"github.com/frostbyte73/core"
+	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
+	"github.com/livekit/psrpc"
 	"google.golang.org/protobuf/types/known/emptypb"
+	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/ipc"
@@ -44,6 +48,7 @@ type process struct {
 	retryCount int
 	cmd        *exec.Cmd
 	grpcClient ipc.IngressHandlerClient
+	rpcServer  rpc.IngressHandlerServer
 	closed     core.Fuse
 }
 
@@ -52,6 +57,7 @@ type ProcessManager struct {
 
 	sm            *SessionManager
 	stateNotifier utils.StateNotifier
+	bus           psrpc.MessageBus
 	newCmd        func(ctx context.Context, p *params.Params) (*exec.Cmd, error)
 
 	mu             sync.RWMutex
@@ -59,13 +65,16 @@ type ProcessManager struct {
 	onFatal        func(p *params.Params, err error)
 }
 
-func NewProcessManager(sm *SessionManager, stateNotifier utils.StateNotifier, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) *ProcessManager {
-	return &ProcessManager{
+func NewProcessManager(sm *SessionManager, stateNotifier utils.StateNotifier, bus psrpc.MessageBus, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) (*ProcessManager, error) {
+	pm := &ProcessManager{
 		sm:             sm,
+		bus:            bus,
 		stateNotifier:  stateNotifier,
 		newCmd:         newCmd,
 		activeHandlers: make(map[string]*process),
 	}
+
+	return pm, nil
 }
 
 func (s *ProcessManager) onFatalError(f func(p *params.Params, err error)) {
@@ -101,7 +110,15 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 		},
 	}
 
+	rpcServer, err := rpc.NewIngressHandlerServer(h, s.bus)
+	if err != nil {
+		return err
+	}
+
+	utils.RegisterIngressRpcHandlers(rpcServer, p.IngressInfo)
 	s.sm.IngressStarted(p.IngressInfo, h)
+
+	h.rpcServer = rpcServer
 
 	s.mu.Lock()
 	s.activeHandlers[p.State.ResourceId] = h
@@ -141,6 +158,8 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 		if p.TmpDir != "" {
 			os.RemoveAll(p.TmpDir)
 		}
+
+		utils.DeregisterIngressRpcHandlers(h.rpcServer, p.IngressInfo)
 
 		s.mu.Lock()
 		delete(s.activeHandlers, h.params.State.ResourceId)
@@ -206,6 +225,44 @@ func (s *ProcessManager) killAll() {
 
 func (s *ProcessManager) UpdateIngressState(ctx context.Context, req *ipc.UpdateIngressStateRequest) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, s.stateNotifier.UpdateIngressState(ctx, req.ProjectId, req.IngressId, req.State)
+}
+
+func (p *process) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
+	resp, err := p.grpcClient.KillIngress(ctx, &ipc.KillIngressRequest{})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.State, nil
+}
+
+func (p *process) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
+	resp, err := p.grpcClient.KillIngress(ctx, &ipc.KillIngressRequest{})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return resp.State, nil
+}
+
+func (p *process) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {
+	_, err := p.grpcClient.KillIngress(ctx, &ipc.KillIngressRequest{})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &google_protobuf2.Empty{}, nil
+}
+
+func (p *process) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
+	return &rpc.ICERestartWHIPResourceResponse{}, nil
+}
+
+func (p *process) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
+	return &google_protobuf2.Empty{}, nil
 }
 
 func (p *process) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {

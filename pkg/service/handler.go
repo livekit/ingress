@@ -26,7 +26,6 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/pprof"
-	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/tracer"
 
 	"github.com/livekit/ingress/pkg/config"
@@ -132,41 +131,6 @@ func (h *Handler) killAndReturnState(ctx context.Context) (*livekit.IngressState
 	case <-h.done.Watch():
 		return h.pipeline.CopyInfo().State, nil
 	}
-}
-
-func (h *Handler) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
-	_, span := tracer.Start(ctx, "Handler.UpdateIngress")
-	defer span.End()
-	return h.killAndReturnState(ctx)
-}
-
-func (h *Handler) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
-	_, span := tracer.Start(ctx, "Handler.DeleteIngress")
-	defer span.End()
-	return h.killAndReturnState(ctx)
-}
-
-func (h *Handler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {
-	_, span := tracer.Start(ctx, "Handler.DeleteWHIPResource")
-	defer span.End()
-
-	h.killAndReturnState(ctx)
-
-	return &google_protobuf2.Empty{}, nil
-}
-
-func (h *Handler) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
-	_, span := tracer.Start(ctx, "Handler.ICERestartWHIPResource")
-	defer span.End()
-
-	return &rpc.ICERestartWHIPResourceResponse{}, nil
-}
-
-func (h *Handler) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
-	_, span := tracer.Start(ctx, "Handler.WHIPRTCConnectionNotify")
-	defer span.End()
-
-	return &google_protobuf2.Empty{}, nil
 }
 
 func (h *Handler) GetPProf(ctx context.Context, req *ipc.PProfRequest) (*ipc.PProfResponse, error) {
