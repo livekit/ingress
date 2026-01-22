@@ -30,8 +30,7 @@ const (
 )
 
 func GetServiceClient(tmpDir string) (IngressServiceClient, error) {
-	socketAddr := getSocketAddress(tmpDir)
-	os.Remove(socketAddr)
+	socketAddr := getServiceSocketAddress(tmpDir)
 	conn, err := grpc.Dial(socketAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
@@ -49,7 +48,10 @@ func GetServiceClient(tmpDir string) (IngressServiceClient, error) {
 }
 
 func StartServiceServer(tmpDir string, h IngressServiceServer) (*grpc.Server, error) {
-	listener, err := net.Listen(network, getSocketAddress(tmpDir))
+	socketAddr := getServiceSocketAddress(tmpDir)
+	os.Remove(socketAddr)
+
+	listener, err := net.Listen(network, socketAddr)
 	if err != nil {
 		return nil, err
 	}
@@ -69,8 +71,9 @@ func StartServiceServer(tmpDir string, h IngressServiceServer) (*grpc.Server, er
 }
 
 func GetHandlerClient(tmpDir string) (IngressHandlerClient, error) {
-	socketAddr := getSocketAddress(tmpDir)
+	socketAddr := getHandlerSocketAddress(tmpDir)
 	os.Remove(socketAddr)
+
 	conn, err := grpc.Dial(socketAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
@@ -88,7 +91,7 @@ func GetHandlerClient(tmpDir string) (IngressHandlerClient, error) {
 }
 
 func StartHandlerServer(tmpDir string, h IngressHandlerServer) error {
-	listener, err := net.Listen(network, getSocketAddress(tmpDir))
+	listener, err := net.Listen(network, getHandlerSocketAddress(tmpDir))
 	if err != nil {
 		return err
 	}
@@ -107,6 +110,10 @@ func StartHandlerServer(tmpDir string, h IngressHandlerServer) error {
 	return nil
 }
 
-func getSocketAddress(handlerTmpDir string) string {
-	return path.Join(handlerTmpDir, "service_rpc.sock")
+func getServiceSocketAddress(handlerTmpDir string) string {
+	return path.Join(handlerTmpDir, "service_ipc.sock")
+}
+
+func getHandlerSocketAddress(handlerTmpDir string) string {
+	return path.Join(handlerTmpDir, "handler_ipc.sock")
 }

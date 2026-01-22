@@ -62,6 +62,14 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	ctx, span := tracer.Start(ctx, "Handler.HandleRequest")
 	defer span.End()
 
+	var err error
+	h.ipcClient, err = ipc.GetServiceClient(params.GetTmpDir(info))
+	if err != nil {
+		span.RecordError(err)
+		logger.Errorw("failed building service client", err)
+		return err
+	}
+
 	p, err := h.buildPipeline(ctx, info, wsUrl, token, projectID, relayToken, featureFlags, loggingFields, extraParams)
 	if err != nil {
 		span.RecordError(err)
@@ -84,13 +92,6 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 
 		p.SendStateUpdate(ctx)
 	}()
-
-	h.ipcClient, err = ipc.GetServiceClient(p.TmpDir)
-	if err != nil {
-		span.RecordError(err)
-		logger.Errorw("failed building service client", err)
-		return err
-	}
 
 	err = ipc.StartHandlerServer(p.TmpDir, h)
 	if err != nil {

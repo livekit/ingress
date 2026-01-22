@@ -87,6 +87,11 @@ func InitLogger(conf *config.Config, info *livekit.IngressInfo, loggingFields ma
 
 	return nil
 }
+
+func GetTmpDir(info *livekit.IngressInfo) string {
+	return path.Join(os.TempDir(), info.State.ResourceId)
+}
+
 func GetParams(ctx context.Context, stateNotifier utils.StateNotifier, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, ep any) (*Params, error) {
 	var err error
 
@@ -109,7 +114,7 @@ func GetParams(ctx context.Context, stateNotifier utils.StateNotifier, conf *con
 
 	l := logger.GetLogger().WithValues(getLoggerFields(info, loggingFields)...)
 
-	tmpDir := path.Join(os.TempDir(), info.State.ResourceId)
+	tmpDir := GetTmpDir(info)
 
 	err = ingress.Validate(info)
 	if err != nil {
