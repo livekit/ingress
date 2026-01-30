@@ -457,7 +457,7 @@ func (s *Service) sendUpdate(ctx context.Context, projectID string, info *liveki
 
 	state.UpdatedAt = time.Now().UnixNano()
 
-	err = s.stateNotifier.UpdateIngressState(ctx, projectID, info.IngressId, state)
+	err = s.stateNotifier.UpdateIngressState(ctx, projectID, info)
 	if err != nil {
 		logger.Errorw("failed to send update", err)
 	}

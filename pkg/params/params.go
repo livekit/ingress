@@ -425,7 +425,7 @@ func (p *Params) SendStateUpdate(ctx context.Context) {
 
 	info.State.UpdatedAt = time.Now().UnixNano()
 
-	err := p.stateNotifier.UpdateIngressState(ctx, p.ProjectID, info.IngressId, info.State)
+	err := p.stateNotifier.UpdateIngressState(ctx, p.ProjectID, info)
 	if err != nil {
 		var psrpcErr psrpc.Error
 		if !errors.As(err, &psrpcErr) || psrpcErr.Code() != psrpc.NotFound {

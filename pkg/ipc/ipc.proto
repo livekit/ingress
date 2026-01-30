@@ -26,8 +26,7 @@ service IngressService {
 
 message UpdateIngressStateRequest {
   string project_id = 1;
-  string ingress_id = 2;
-  livekit.IngressState state = 3;
+  livekit.IngressInfo info = 2;
 }
 
 service IngressHandler {

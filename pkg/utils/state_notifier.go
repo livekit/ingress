@@ -24,7 +24,7 @@ import (
 )
 
 type StateNotifier interface {
-	UpdateIngressState(ctx context.Context, projectID string, ingressID string, state *livekit.IngressState) error
+	UpdateIngressState(ctx context.Context, projectID string, info *livekit.IngressInfo) error
 }
 
 type serviceStateNotifier struct {
@@ -37,10 +37,10 @@ func NewServiceStateNotifier(psrpcClient rpc.IOInfoClient) StateNotifier {
 	}
 }
 
-func (sn *serviceStateNotifier) UpdateIngressState(ctx context.Context, projectID string, ingressID string, state *livekit.IngressState) error {
+func (sn *serviceStateNotifier) UpdateIngressState(ctx context.Context, projectID string, info *livekit.IngressInfo) error {
 	req := &rpc.UpdateIngressStateRequest{
-		IngressId: ingressID,
-		State:     state,
+		IngressId: info.IngressId,
+		State:     info.State,
 	}
 
 	_, err := sn.psrpcClient.UpdateIngressState(ctx, req)
@@ -58,11 +58,10 @@ func NewHandlerStateNotifier(ipcClient ipc.IngressServiceClient) StateNotifier {
 	}
 }
 
-func (sn *handlerStateNotifier) UpdateIngressState(ctx context.Context, projectID string, ingressID string, state *livekit.IngressState) error {
+func (sn *handlerStateNotifier) UpdateIngressState(ctx context.Context, projectID string, info *livekit.IngressInfo) error {
 	req := &ipc.UpdateIngressStateRequest{
 		ProjectId: projectID,
-		IngressId: ingressID,
-		State:     state,
+		Info:      info,
 	}
 
 	_, err := sn.ipcClient.UpdateIngressState(ctx, req)
@@ -77,6 +76,6 @@ func NewNoopStateNotifier() StateNotifier {
 	return &noopStateNotifier{}
 }
 
-func (sn *noopStateNotifier) UpdateIngressState(ctx context.Context, projectID string, ingressID string, state *livekit.IngressState) error {
+func (sn *noopStateNotifier) UpdateIngressState(ctx context.Context, projectID string, info *livekit.IngressInfo) error {
 	return nil
 }

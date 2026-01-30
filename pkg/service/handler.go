@@ -268,8 +268,7 @@ func (h *Handler) sendUpdate(ctx context.Context, projectID string, info *liveki
 
 	_, err := h.ipcClient.UpdateIngressState(ctx, &ipc.UpdateIngressStateRequest{
 		ProjectId: projectID,
-		IngressId: info.IngressId,
-		State:     info.State,
+		Info:      info,
 	})
 	if err != nil {
 		logger.Errorw("failed to send update", err)

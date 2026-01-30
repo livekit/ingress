@@ -40,8 +40,7 @@ const (
 type UpdateIngressStateRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	IngressId     string                 `protobuf:"bytes,2,opt,name=ingress_id,json=ingressId,proto3" json:"ingress_id,omitempty"`
-	State         *livekit.IngressState  `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	Info          *livekit.IngressInfo   `protobuf:"bytes,2,opt,name=info,proto3" json:"info,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -83,16 +82,9 @@ func (x *UpdateIngressStateRequest) GetProjectId() string {
 	return ""
 }
 
-func (x *UpdateIngressStateRequest) GetIngressId() string {
+func (x *UpdateIngressStateRequest) GetInfo() *livekit.IngressInfo {
 	if x != nil {
-		return x.IngressId
-	}
-	return ""
-}
-
-func (x *UpdateIngressStateRequest) GetState() *livekit.IngressState {
-	if x != nil {
-		return x.State
+		return x.Info
 	}
 	return nil
 }
@@ -709,13 +701,11 @@ var File_ipc_proto protoreflect.FileDescriptor
 
 const file_ipc_proto_rawDesc = "" +
 	"\n" +
-	"\tipc.proto\x12\x03ipc\x1a\x1bgoogle/protobuf/empty.proto\x1a\x15livekit_ingress.proto\"\x86\x01\n" +
+	"\tipc.proto\x12\x03ipc\x1a\x1bgoogle/protobuf/empty.proto\x1a\x15livekit_ingress.proto\"d\n" +
 	"\x19UpdateIngressStateRequest\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1d\n" +
-	"\n" +
-	"ingress_id\x18\x02 \x01(\tR\tingressId\x12+\n" +
-	"\x05state\x18\x03 \x01(\v2\x15.livekit.IngressStateR\x05state\"\x1c\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12(\n" +
+	"\x04info\x18\x02 \x01(\v2\x14.livekit.IngressInfoR\x04info\"\x1c\n" +
 	"\x1aGstPipelineDebugDotRequest\"8\n" +
 	"\x1bGstPipelineDebugDotResponse\x12\x19\n" +
 	"\bdot_file\x18\x01 \x01(\tR\adotFile\"a\n" +
@@ -796,16 +786,17 @@ var file_ipc_proto_goTypes = []any{
 	(*KillIngressRequest)(nil),          // 11: ipc.KillIngressRequest
 	(*KillIngressResponse)(nil),         // 12: ipc.KillIngressResponse
 	nil,                                 // 13: ipc.MediaStats.TrackStatsEntry
-	(*livekit.IngressState)(nil),        // 14: livekit.IngressState
-	(*emptypb.Empty)(nil),               // 15: google.protobuf.Empty
+	(*livekit.IngressInfo)(nil),         // 14: livekit.IngressInfo
+	(*livekit.IngressState)(nil),        // 15: livekit.IngressState
+	(*emptypb.Empty)(nil),               // 16: google.protobuf.Empty
 }
 var file_ipc_proto_depIdxs = []int32{
-	14, // 0: ipc.UpdateIngressStateRequest.state:type_name -> livekit.IngressState
+	14, // 0: ipc.UpdateIngressStateRequest.info:type_name -> livekit.IngressInfo
 	8,  // 1: ipc.GatherMediaStatsResponse.stats:type_name -> ipc.MediaStats
 	8,  // 2: ipc.UpdateMediaStatsRequest.stats:type_name -> ipc.MediaStats
 	13, // 3: ipc.MediaStats.track_stats:type_name -> ipc.MediaStats.TrackStatsEntry
 	10, // 4: ipc.TrackStats.jitter:type_name -> ipc.JitterStats
-	14, // 5: ipc.KillIngressResponse.state:type_name -> livekit.IngressState
+	15, // 5: ipc.KillIngressResponse.state:type_name -> livekit.IngressState
 	9,  // 6: ipc.MediaStats.TrackStatsEntry.value:type_name -> ipc.TrackStats
 	0,  // 7: ipc.IngressService.UpdateIngressState:input_type -> ipc.UpdateIngressStateRequest
 	1,  // 8: ipc.IngressHandler.GetPipelineDot:input_type -> ipc.GstPipelineDebugDotRequest
@@ -813,11 +804,11 @@ var file_ipc_proto_depIdxs = []int32{
 	5,  // 10: ipc.IngressHandler.GatherMediaStats:input_type -> ipc.GatherMediaStatsRequest
 	7,  // 11: ipc.IngressHandler.UpdateMediaStats:input_type -> ipc.UpdateMediaStatsRequest
 	11, // 12: ipc.IngressHandler.KillIngress:input_type -> ipc.KillIngressRequest
-	15, // 13: ipc.IngressService.UpdateIngressState:output_type -> google.protobuf.Empty
+	16, // 13: ipc.IngressService.UpdateIngressState:output_type -> google.protobuf.Empty
 	2,  // 14: ipc.IngressHandler.GetPipelineDot:output_type -> ipc.GstPipelineDebugDotResponse
 	4,  // 15: ipc.IngressHandler.GetPProf:output_type -> ipc.PProfResponse
 	6,  // 16: ipc.IngressHandler.GatherMediaStats:output_type -> ipc.GatherMediaStatsResponse
-	15, // 17: ipc.IngressHandler.UpdateMediaStats:output_type -> google.protobuf.Empty
+	16, // 17: ipc.IngressHandler.UpdateMediaStats:output_type -> google.protobuf.Empty
 	12, // 18: ipc.IngressHandler.KillIngress:output_type -> ipc.KillIngressResponse
 	13, // [13:19] is the sub-list for method output_type
 	7,  // [7:13] is the sub-list for method input_type
