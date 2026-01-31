@@ -20,9 +20,10 @@ import (
 	"os"
 	"path"
 
-	"github.com/livekit/protocol/logger"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+
+	"github.com/livekit/protocol/logger"
 )
 
 const (

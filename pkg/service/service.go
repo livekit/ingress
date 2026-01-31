@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"github.com/frostbyte73/core"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/livekit/protocol/ingress"
@@ -35,8 +37,6 @@ import (
 	"github.com/livekit/protocol/tracer"
 	protoutils "github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/collectors"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
