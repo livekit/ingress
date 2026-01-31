@@ -118,7 +118,6 @@ func NewService(
 
 	s.isActive.Store(true)
 
-	// TODO replace info with Params
 	s.manager.onFatalError(func(p *params.Params, err error) {
 		if err != nil {
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
@@ -448,6 +447,7 @@ func (s *Service) sendUpdate(ctx context.Context, projectID string, info *liveki
 	state = info.State
 	if state == nil {
 		state = &livekit.IngressState{}
+		info.State = state
 	}
 	if err != nil {
 		state.Status = livekit.IngressState_ENDPOINT_ERROR
