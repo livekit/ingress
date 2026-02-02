@@ -15,7 +15,6 @@
 package ipc
 
 import (
-	"context"
 	"net"
 	"os"
 	"path"
@@ -32,13 +31,10 @@ const (
 
 func GetServiceClient(tmpDir string) (IngressServiceClient, error) {
 	socketAddr := getServiceSocketAddress(tmpDir)
-	conn, err := grpc.Dial(socketAddr,
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
-			return net.Dial(network, addr)
-		}),
-	)
 
+	conn, err := grpc.NewClient(socketAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -71,24 +67,32 @@ func StartServiceServer(tmpDir string, h IngressServiceServer) (*grpc.Server, er
 	return grpcServer, nil
 }
 
-func GetHandlerClient(tmpDir string) (IngressHandlerClient, error) {
+type IngressHandlerClientWrapper struct {
+	IngressHandlerClient
+	conn *grpc.ClientConn
+}
+
+func GetHandlerClient(tmpDir string) (*IngressHandlerClientWrapper, error) {
 	socketAddr := getHandlerSocketAddress(tmpDir)
 	os.Remove(socketAddr)
 
-	conn, err := grpc.Dial(socketAddr,
+	conn, err := grpc.NewClient(socketAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(func(_ context.Context, addr string) (net.Conn, error) {
-			return net.Dial(network, addr)
-		}),
 	)
-
 	if err != nil {
 		return nil, err
 	}
 
 	grpcClient := NewIngressHandlerClient(conn)
 
-	return grpcClient, nil
+	return &IngressHandlerClientWrapper{
+		IngressHandlerClient: grpcClient,
+		conn:                 conn,
+	}, nil
+}
+
+func (ihc *IngressHandlerClientWrapper) Close() error {
+	return ihc.conn.Close()
 }
 
 func StartHandlerServer(tmpDir string, h IngressHandlerServer) error {

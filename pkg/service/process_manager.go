@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -48,7 +49,7 @@ type process struct {
 	params     *params.Params
 	retryCount int
 	cmd        *exec.Cmd
-	grpcClient ipc.IngressHandlerClient
+	grpcClient atomic.Pointer[ipc.IngressHandlerClient]
 	rpcServer  rpc.IngressHandlerServer
 	closed     core.Fuse
 }
@@ -168,47 +169,62 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 	}()
 
 	for h.retryCount = 0; h.retryCount < maxRetries; h.retryCount++ {
-		var err error
-		h.grpcClient, err = ipc.GetHandlerClient(h.params.TmpDir)
-		if err != nil {
-			span.RecordError(err)
-			logger.Errorw("could not dial grpc handler", err)
+		retry, _ := s.runHandlerTry(ctx, h, p)
+		if !retry {
 			return
 		}
 
-		cmd, err := s.newCmd(ctx, p)
-		if err != nil {
-			span.RecordError(err)
-			return
-		}
-		h.cmd = cmd
-
-		var exitErr *exec.ExitError
-
-		err = h.cmd.Run()
-		switch {
-		case err == nil:
-			// success
-			return
-		case errors.As(err, &exitErr):
-			if exitErr.ProcessState.ExitCode() == 1 {
-				logger.Infow("relaunching handler process after retryable failure")
-			} else if err.Error() == "signal: killed" {
-				logger.Infow("handler killed")
-				return
-			} else {
-				logger.Errorw("unknown handler exit code", err)
-				return
-			}
-		default:
-			logger.Errorw("could not launch handler", err)
-			if s.onFatal != nil {
-				s.onFatal(h.params, err)
-			}
-			return
-		}
 	}
+}
 
+func (s *ProcessManager) runHandlerTry(ctx context.Context, h *process, p *params.Params) (bool, error) {
+	_, span := tracer.Start(ctx, "Service.runHandlerTry")
+	defer span.End()
+
+	var err error
+	grpcClient, err := ipc.GetHandlerClient(h.params.TmpDir)
+	if err != nil {
+		span.RecordError(err)
+		logger.Errorw("could not dial grpc handler", err)
+		return false, err
+
+	}
+	defer grpcClient.Close()
+
+	h.grpcClient.Store(&grpcClient.IngressHandlerClient)
+
+	cmd, err := s.newCmd(ctx, p)
+	if err != nil {
+		span.RecordError(err)
+		return false, err
+	}
+	h.cmd = cmd
+
+	var exitErr *exec.ExitError
+
+	err = h.cmd.Run()
+	switch {
+	case err == nil:
+		// success
+		return false, nil
+	case errors.As(err, &exitErr):
+		if exitErr.ProcessState.ExitCode() == 1 {
+			logger.Infow("relaunching handler process after retryable failure")
+			return true, err
+		} else if err.Error() == "signal: killed" {
+			logger.Infow("handler killed")
+			return false, err
+		} else {
+			logger.Errorw("unknown handler exit code", err)
+			return false, err
+		}
+	default:
+		logger.Errorw("could not launch handler", err)
+		if s.onFatal != nil {
+			s.onFatal(h.params, err)
+		}
+		return false, err
+	}
 }
 
 func (s *ProcessManager) killAll() {
@@ -229,7 +245,12 @@ func (s *ProcessManager) UpdateIngressState(ctx context.Context, req *ipc.Update
 }
 
 func (p *process) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
-	resp, err := p.grpcClient.KillIngress(ctx, &ipc.KillIngressRequest{})
+	grpcClient := p.grpcClient.Load()
+	if grpcClient == nil {
+		return nil, errors.ErrIngressNotFound
+	}
+
+	resp, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{})
 
 	if err != nil {
 		return nil, err
@@ -239,7 +260,12 @@ func (p *process) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressR
 }
 
 func (p *process) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
-	resp, err := p.grpcClient.KillIngress(ctx, &ipc.KillIngressRequest{})
+	grpcClient := p.grpcClient.Load()
+	if grpcClient == nil {
+		return nil, errors.ErrIngressNotFound
+	}
+
+	resp, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{})
 
 	if err != nil {
 		return nil, err
@@ -249,7 +275,12 @@ func (p *process) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressR
 }
 
 func (p *process) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {
-	_, err := p.grpcClient.KillIngress(ctx, &ipc.KillIngressRequest{})
+	grpcClient := p.grpcClient.Load()
+	if grpcClient == nil {
+		return nil, errors.ErrIngressNotFound
+	}
+
+	_, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{})
 
 	if err != nil {
 		return nil, err
@@ -267,13 +298,18 @@ func (p *process) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCC
 }
 
 func (p *process) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {
+	grpcClient := p.grpcClient.Load()
+	if grpcClient == nil {
+		return nil, errors.ErrIngressNotFound
+	}
+
 	req := &ipc.PProfRequest{
 		ProfileName: profileName,
 		Timeout:     int32(timeout),
 		Debug:       int32(debug),
 	}
 
-	resp, err := p.grpcClient.GetPProf(ctx, req)
+	resp, err := (*grpcClient).GetPProf(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -282,9 +318,14 @@ func (p *process) GetProfileData(ctx context.Context, profileName string, timeou
 }
 
 func (p *process) GetPipelineDot(ctx context.Context) (string, error) {
+	grpcClient := p.grpcClient.Load()
+	if grpcClient == nil {
+		return "", errors.ErrIngressNotFound
+	}
+
 	req := &ipc.GstPipelineDebugDotRequest{}
 
-	resp, err := p.grpcClient.GetPipelineDot(ctx, req)
+	resp, err := (*grpcClient).GetPipelineDot(ctx, req)
 	if err != nil {
 		return "", err
 	}
@@ -293,19 +334,29 @@ func (p *process) GetPipelineDot(ctx context.Context) (string, error) {
 }
 
 func (p *process) UpdateMediaStats(ctx context.Context, s *ipc.MediaStats) error {
+	grpcClient := p.grpcClient.Load()
+	if grpcClient == nil {
+		return errors.ErrIngressNotFound
+	}
+
 	req := &ipc.UpdateMediaStatsRequest{
 		Stats: s,
 	}
 
-	_, err := p.grpcClient.UpdateMediaStats(ctx, req)
+	_, err := (*grpcClient).UpdateMediaStats(ctx, req)
 
 	return err
 }
 
 func (p *process) GatherStats(ctx context.Context) (*ipc.MediaStats, error) {
+	grpcClient := p.grpcClient.Load()
+	if grpcClient == nil {
+		return nil, errors.ErrIngressNotFound
+	}
+
 	req := &ipc.GatherMediaStatsRequest{}
 
-	s, err := p.grpcClient.GatherMediaStats(ctx, req)
+	s, err := (*grpcClient).GatherMediaStats(ctx, req)
 	if err != nil {
 		return nil, err
 	}

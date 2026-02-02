@@ -427,8 +427,8 @@ func (p *Params) SendStateUpdate(ctx context.Context) {
 
 	err := p.stateNotifier.UpdateIngressState(ctx, p.ProjectID, info)
 	if err != nil {
-		var psrpcErr psrpc.Error
-		if !errors.As(err, &psrpcErr) || psrpcErr.Code() != psrpc.NotFound {
+		code, _ := psrpc.GetErrorCode(err)
+		if code != psrpc.NotFound {
 			// Ingress was deleted
 			p.logger.Errorw("failed to send update", err)
 		}
