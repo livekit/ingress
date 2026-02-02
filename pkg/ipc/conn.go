@@ -32,7 +32,7 @@ const (
 func GetServiceClient(tmpDir string) (IngressServiceClient, error) {
 	socketAddr := getServiceSocketAddress(tmpDir)
 
-	conn, err := grpc.NewClient(socketAddr,
+	conn, err := grpc.NewClient("unix://"+socketAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
@@ -76,7 +76,7 @@ func GetHandlerClient(tmpDir string) (*IngressHandlerClientWrapper, error) {
 	socketAddr := getHandlerSocketAddress(tmpDir)
 	os.Remove(socketAddr)
 
-	conn, err := grpc.NewClient(socketAddr,
+	conn, err := grpc.NewClient("unix://"+socketAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	if err != nil {
