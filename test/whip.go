@@ -42,12 +42,12 @@ const (
 	whipClientPath = "livekit-whip-bot/cmd/whip-client/whip-client"
 )
 
-func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
+func RunWHIPTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient, sn utils.StateNotifier, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
 	whipsrv, err := whip.NewWHIPServer(bus)
 	require.NoError(t, err)
 	relay := service.NewRelay(nil, whipsrv)
 
-	svc, err := service.NewService(conf.Config, psrpcClient, utils.NewNoopStateNotifier(), bus, nil, whipsrv, newCmd, "")
+	svc, err := service.NewService(conf.Config, psrpcClient, sn, bus, nil, whipsrv, newCmd, "")
 	require.NoError(t, err)
 	go func() {
 		err := svc.Run()

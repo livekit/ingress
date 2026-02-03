@@ -34,8 +34,8 @@ import (
 	"github.com/livekit/ingress/pkg/utils"
 )
 
-func RunURLTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
-	svc, err := service.NewService(conf.Config, psrpcClient, utils.NewNoopStateNotifier(), bus, nil, nil, newCmd, "")
+func RunURLTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient, sn utils.StateNotifier, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
+	svc, err := service.NewService(conf.Config, psrpcClient, sn, bus, nil, nil, newCmd, "")
 	require.NoError(t, err)
 	svc.StartDebugHandlers()
 
