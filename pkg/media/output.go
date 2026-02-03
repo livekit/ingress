@@ -87,12 +87,11 @@ type AudioOutput struct {
 }
 
 func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, statsGatherer *stats.LocalMediaStatsGatherer, eos *eosDispatcher) (*VideoOutput, error) {
-	e, err := newVideoOutput(codec, outputSync, isPlayingTooSlow, eos)
+	log := logger.GetLogger().WithValues("kind", "video", "layer", layer.Quality.String())
+	e, err := newVideoOutput(codec, outputSync, isPlayingTooSlow, eos, log)
 	if err != nil {
 		return nil, err
 	}
-
-	e.logger = logger.GetLogger().WithValues("kind", "video", "layer", layer.Quality.String())
 
 	e.trackStatsGatherer = statsGatherer.RegisterTrackStats(fmt.Sprintf("%s.%s", stats.OutputVideo, layer.Quality.String()))
 
@@ -251,12 +250,11 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 }
 
 func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, statsGatherer *stats.LocalMediaStatsGatherer, eos *eosDispatcher) (*AudioOutput, error) {
-	e, err := newAudioOutput(options.AudioCodec, outputSync, isPlayingTooSlow, eos)
+	log := logger.GetLogger().WithValues("kind", "audio")
+	e, err := newAudioOutput(options.AudioCodec, outputSync, isPlayingTooSlow, eos, log)
 	if err != nil {
 		return nil, err
 	}
-
-	e.logger = logger.GetLogger().WithValues("kind", "audio")
 
 	e.trackStatsGatherer = statsGatherer.RegisterTrackStats(stats.OutputAudio)
 
@@ -356,8 +354,8 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 	return e, nil
 }
 
-func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, eos *eosDispatcher) (*VideoOutput, error) {
-	e, err := newOutput(outputSync, isPlayingTooSlow, eos)
+func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, eos *eosDispatcher, log logger.Logger) (*VideoOutput, error) {
+	e, err := newOutput(outputSync, isPlayingTooSlow, eos, log)
 	if err != nil {
 		return nil, err
 	}
@@ -375,8 +373,8 @@ func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynch
 	return o, nil
 }
 
-func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, eos *eosDispatcher) (*AudioOutput, error) {
-	e, err := newOutput(outputSync, isPlayingTooSlow, eos)
+func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, eos *eosDispatcher, log logger.Logger) (*AudioOutput, error) {
+	e, err := newOutput(outputSync, isPlayingTooSlow, eos, log)
 	if err != nil {
 		return nil, err
 	}
@@ -394,10 +392,14 @@ func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynch
 	return o, nil
 }
 
-func newOutput(outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, eos *eosDispatcher) (*Output, error) {
+func newOutput(outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, eos *eosDispatcher, log logger.Logger) (*Output, error) {
 	sink, err := app.NewAppSink()
 	if err != nil {
 		return nil, err
+	}
+
+	if log == nil {
+		log = logger.GetLogger().WithValues("kind", "output")
 	}
 
 	e := &Output{
@@ -406,6 +408,7 @@ func newOutput(outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func(
 		outputSync:       outputSync,
 		isPlayingTooSlow: isPlayingTooSlow,
 		eos:              eos,
+		logger:           log,
 	}
 
 	if e.eos != nil {
