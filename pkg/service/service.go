@@ -440,8 +440,6 @@ func (s *Service) Run() error {
 }
 
 func (s *Service) sendUpdate(ctx context.Context, projectID string, info *livekit.IngressInfo, err error) {
-	logger.Errorw("SEND UPDATE", nil, "info", info, "err", err)
-
 	var state *livekit.IngressState
 	if info == nil {
 		return
