@@ -15,15 +15,26 @@
 syntax = "proto3";
 
 import "google/protobuf/empty.proto";
+import "livekit_ingress.proto";
 
 package ipc;
 option go_package = "github.com/livekit/ingress/pkg/ipc";
+
+service IngressService {
+  rpc UpdateIngressState(UpdateIngressStateRequest) returns (google.protobuf.Empty);
+}
+
+message UpdateIngressStateRequest {
+  string project_id = 1;
+  livekit.IngressInfo info = 2;
+}
 
 service IngressHandler {
   rpc GetPipelineDot(GstPipelineDebugDotRequest) returns (GstPipelineDebugDotResponse) {};
   rpc GetPProf(PProfRequest) returns (PProfResponse) {};
   rpc GatherMediaStats(GatherMediaStatsRequest) returns (GatherMediaStatsResponse) {};
   rpc UpdateMediaStats(UpdateMediaStatsRequest) returns (google.protobuf.Empty) {};
+  rpc KillIngress(KillIngressRequest) returns (KillIngressResponse) {};
 }
 
 message GstPipelineDebugDotRequest {}
@@ -72,7 +83,15 @@ message TrackStats {
 }
 
 message JitterStats {
-  double p50 = 1; // in ms
+  double p50 = 1;  // in ms
   double p90 = 2;
   double p99 = 3;
 }
+
+message KillIngressRequest {
+}
+
+message KillIngressResponse {
+  livekit.IngressState state = 1;
+}
+

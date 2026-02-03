@@ -24,12 +24,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"go.uber.org/atomic"
 
-	"github.com/livekit/ingress/pkg/config"
-	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/utils/hwstats"
+
+	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/params"
 )
 
 const (

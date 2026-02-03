@@ -22,9 +22,10 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"gopkg.in/yaml.v3"
 
+	"github.com/livekit/protocol/logger"
+
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/utils"
-	"github.com/livekit/protocol/logger"
 )
 
 func NewCmd(ctx context.Context, p *params.Params) (*exec.Cmd, error) {
@@ -72,6 +73,7 @@ func NewCmd(ctx context.Context, p *params.Params) (*exec.Cmd, error) {
 		"run-handler",
 		"--config-body", string(confString),
 		"--info", string(infoString),
+		"--project-id", p.ProjectID,
 		"--relay-token", p.RelayToken,
 	}
 

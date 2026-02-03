@@ -18,12 +18,13 @@ import (
 	"context"
 	"sync"
 
-	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/ingress/pkg/stats"
-	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
+
+	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/ingress/pkg/types"
 )
 
 type sessionRecord struct {
@@ -67,8 +68,6 @@ func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI t
 
 	sm.sessions[info.State.ResourceId] = r
 
-	sm.registerKillIngressSession(info.IngressId, info.State.ResourceId)
-
 	sm.monitor.IngressStarted(info)
 }
 
@@ -80,7 +79,6 @@ func (sm *SessionManager) IngressEnded(resourceID string) {
 	if p != nil {
 		logger.Infow("ingress ended", "ingressID", p.info.IngressId, "resourceID", resourceID)
 
-		sm.deregisterKillIngressSession(p.info.IngressId, resourceID)
 		delete(sm.sessions, p.info.State.ResourceId)
 		p.sessionAPI.CloseSession(context.Background())
 		p.mediaStats.Close()
@@ -132,12 +130,4 @@ func (sm *SessionManager) ListIngress() []*rpc.IngressSession {
 		ingressIDs = append(ingressIDs, &rpc.IngressSession{IngressId: r.info.IngressId, ResourceId: resourceID})
 	}
 	return ingressIDs
-}
-
-func (sm *SessionManager) registerKillIngressSession(ingressId string, resourceID string) error {
-	return sm.rpcSrv.RegisterKillIngressSessionTopic(ingressId, resourceID)
-}
-
-func (sm *SessionManager) deregisterKillIngressSession(ingressId string, resourceID string) {
-	sm.rpcSrv.DeregisterKillIngressSessionTopic(ingressId, resourceID)
 }

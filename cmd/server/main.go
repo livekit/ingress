@@ -28,6 +28,13 @@ import (
 	"github.com/urfave/cli/v3"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/redis"
+	"github.com/livekit/protocol/rpc"
+	"github.com/livekit/protocol/tracer"
+	"github.com/livekit/psrpc"
+
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
@@ -36,12 +43,6 @@ import (
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/ingress/version"
-	"github.com/livekit/protocol/livekit"
-	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/redis"
-	"github.com/livekit/protocol/rpc"
-	"github.com/livekit/protocol/tracer"
-	"github.com/livekit/psrpc"
 )
 
 func main() {
@@ -63,6 +64,9 @@ func main() {
 					},
 					&cli.StringFlag{
 						Name: "token",
+					},
+					&cli.StringFlag{
+						Name: "project-id",
 					},
 					&cli.StringFlag{
 						Name: "relay-token",
@@ -140,7 +144,9 @@ func runService(_ context.Context, c *cli.Command) error {
 		}
 	}
 
-	svc, err := service.NewService(conf, psrpcClient, bus, rtmpsrv, whipsrv, service.NewCmd, "")
+	sn := utils.NewServiceStateNotifier(psrpcClient)
+
+	svc, err := service.NewService(conf, psrpcClient, sn, bus, rtmpsrv, whipsrv, service.NewCmd, "")
 	if err != nil {
 		return err
 	}
@@ -224,12 +230,6 @@ func runHandler(_ context.Context, c *cli.Command) error {
 	defer span.End()
 	logger.Debugw("handler launched")
 
-	rc, err := redis.GetRedisClient(conf.Redis)
-	if err != nil {
-		span.RecordError(err)
-		return err
-	}
-
 	info := &livekit.IngressInfo{}
 	infoString := c.String("info")
 	err = protojson.Unmarshal([]byte(infoString), info)
@@ -254,17 +254,10 @@ func runHandler(_ context.Context, c *cli.Command) error {
 
 	var handler interface {
 		Kill()
-		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, featureFlags map[string]string, loggingFields map[string]string, extraParams any) error
+		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, extraParams any) error
 	}
 
-	bus := psrpc.NewRedisMessageBus(rc)
-	rpcClient, err := rpc.NewIOInfoClient(bus)
-	if err != nil {
-		return err
-	}
-	handler = service.NewHandler(conf, rpcClient)
-
-	setupHandlerRPCHandlers(conf, handler.(*service.Handler), bus, info, ep)
+	handler = service.NewHandler(conf)
 
 	killChan := make(chan os.Signal, 1)
 	signal.Notify(killChan, syscall.SIGINT)
@@ -302,7 +295,7 @@ func runHandler(_ context.Context, c *cli.Command) error {
 		cancel()
 	}()
 
-	err = handler.HandleIngress(ctx, info, wsUrl, token, c.String("relay-token"), featureFlags, loggingFields, ep)
+	err = handler.HandleIngress(ctx, info, wsUrl, token, c.String("project-id"), c.String("relay-token"), featureFlags, loggingFields, ep)
 	return translateRetryableError(err)
 }
 
@@ -314,15 +307,6 @@ func translateRetryableError(err error) error {
 	}
 
 	return err
-}
-
-func setupHandlerRPCHandlers(conf *config.Config, handler *service.Handler, bus psrpc.MessageBus, info *livekit.IngressInfo, ep any) error {
-	rpcServer, err := rpc.NewIngressHandlerServer(handler, bus)
-	if err != nil {
-		return err
-	}
-
-	return utils.RegisterIngressRpcHandlers(rpcServer, info)
 }
 
 func getConfig(c *cli.Command, initialize bool) (*config.Config, error) {

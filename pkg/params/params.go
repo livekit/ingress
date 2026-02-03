@@ -25,21 +25,22 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
+	"github.com/livekit/protocol/ingress"
+	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/logger"
+	protoutils "github.com/livekit/protocol/utils"
+	"github.com/livekit/psrpc"
+
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/protocol/ingress"
-	"github.com/livekit/protocol/livekit"
-	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/rpc"
-	"github.com/livekit/protocol/utils"
-	"github.com/livekit/psrpc"
+	"github.com/livekit/ingress/pkg/utils"
 )
 
 type Params struct {
-	stateLock   sync.Mutex
-	psrpcClient rpc.IOInfoClient
+	stateLock     sync.Mutex
+	stateNotifier utils.StateNotifier
 
 	*livekit.IngressInfo
 	*config.Config
@@ -54,8 +55,9 @@ type Params struct {
 	Live                 bool
 
 	// connection info
-	WsUrl string
-	Token string
+	WsUrl     string
+	Token     string
+	ProjectID string
 
 	// extra logging fields
 	LoggingFields map[string]string
@@ -85,7 +87,12 @@ func InitLogger(conf *config.Config, info *livekit.IngressInfo, loggingFields ma
 
 	return nil
 }
-func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, relayToken string, featureFlags map[string]string, loggingFields map[string]string, ep any) (*Params, error) {
+
+func GetTmpDir(info *livekit.IngressInfo) string {
+	return path.Join(os.TempDir(), info.State.ResourceId)
+}
+
+func GetParams(ctx context.Context, stateNotifier utils.StateNotifier, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, ep any) (*Params, error) {
 	var err error
 
 	// The state should have been created by the service, before launching the hander, but be defensive here.
@@ -102,12 +109,12 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	}
 
 	if relayToken == "" {
-		relayToken = utils.NewGuid("")
+		relayToken = protoutils.NewGuid("")
 	}
 
 	l := logger.GetLogger().WithValues(getLoggerFields(info, loggingFields)...)
 
-	tmpDir := path.Join(os.TempDir(), info.State.ResourceId)
+	tmpDir := GetTmpDir(info)
 
 	err = ingress.Validate(info)
 	if err != nil {
@@ -149,7 +156,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 	}
 
 	p := &Params{
-		psrpcClient:          psrpcClient,
+		stateNotifier:        stateNotifier,
 		IngressInfo:          infoCopy,
 		logger:               l,
 		Config:               conf,
@@ -158,6 +165,7 @@ func GetParams(ctx context.Context, psrpcClient rpc.IOInfoClient, conf *config.C
 		Live:                 getLive(info),
 		Token:                token,
 		WsUrl:                wsUrl,
+		ProjectID:            projectID,
 		RelayToken:           relayToken,
 		LoggingFields:        loggingFields,
 		RelayUrl:             relayUrl,
@@ -417,13 +425,10 @@ func (p *Params) SendStateUpdate(ctx context.Context) {
 
 	info.State.UpdatedAt = time.Now().UnixNano()
 
-	_, err := p.psrpcClient.UpdateIngressState(ctx, &rpc.UpdateIngressStateRequest{
-		IngressId: info.IngressId,
-		State:     info.State,
-	})
+	err := p.stateNotifier.UpdateIngressState(ctx, p.ProjectID, info)
 	if err != nil {
-		var psrpcErr psrpc.Error
-		if !errors.As(err, &psrpcErr) || psrpcErr.Code() != psrpc.NotFound {
+		code, _ := psrpc.GetErrorCode(err)
+		if code != psrpc.NotFound {
 			// Ingress was deleted
 			p.logger.Errorw("failed to send update", err)
 		}
@@ -437,7 +442,7 @@ func (p *Params) GetLogger() logger.Logger {
 func CopyRedactedIngressInfo(info *livekit.IngressInfo) *livekit.IngressInfo {
 	infoCopy := proto.Clone(info).(*livekit.IngressInfo)
 
-	infoCopy.StreamKey = utils.RedactIdentifier(infoCopy.StreamKey)
+	infoCopy.StreamKey = protoutils.RedactIdentifier(infoCopy.StreamKey)
 
 	return infoCopy
 }

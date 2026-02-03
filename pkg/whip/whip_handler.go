@@ -31,12 +31,6 @@ import (
 	"github.com/pion/webrtc/v4"
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/ingress/pkg/lksdk_output"
-	"github.com/livekit/ingress/pkg/params"
-	"github.com/livekit/ingress/pkg/stats"
-	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -46,6 +40,13 @@ import (
 	putils "github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 	"github.com/livekit/server-sdk-go/v2/pkg/synchronizer"
+
+	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/lksdk_output"
+	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/stats"
+	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/utils"
 )
 
 const (

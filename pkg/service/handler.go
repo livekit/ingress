@@ -16,56 +16,61 @@ package service
 
 import (
 	"context"
-	"net"
 	"time"
 
-	"google.golang.org/grpc"
+	"github.com/frostbyte73/core"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/frostbyte73/core"
+	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/logger"
+	"github.com/livekit/protocol/pprof"
+	"github.com/livekit/protocol/tracer"
+
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/media"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
-	"github.com/livekit/protocol/livekit"
-	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/pprof"
-	"github.com/livekit/protocol/rpc"
-	"github.com/livekit/protocol/tracer"
+	"github.com/livekit/ingress/pkg/utils"
 )
 
 type Handler struct {
 	ipc.UnimplementedIngressHandlerServer
 
-	conf      *config.Config
-	pipeline  *media.Pipeline
-	rpcClient rpc.IOInfoClient
+	conf     *config.Config
+	pipeline *media.Pipeline
 
 	statsGatherer *stats.LocalMediaStatsGatherer
 
-	grpcServer *grpc.Server
-	kill       core.Fuse
-	done       core.Fuse
+	ipcClient ipc.IngressServiceClient
+
+	kill core.Fuse
+	done core.Fuse
 }
 
-func NewHandler(conf *config.Config, rpcClient rpc.IOInfoClient) *Handler {
+func NewHandler(conf *config.Config) *Handler {
 	return &Handler{
 		conf:          conf,
-		rpcClient:     rpcClient,
 		statsGatherer: stats.NewLocalMediaStatsGatherer(),
-		grpcServer:    grpc.NewServer(),
 	}
 }
 
-func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, featureFlags map[string]string, loggingFields map[string]string, extraParams any) error {
+func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, extraParams any) error {
 	ctx, span := tracer.Start(ctx, "Handler.HandleRequest")
 	defer span.End()
 
-	p, err := h.buildPipeline(ctx, info, wsUrl, token, relayToken, featureFlags, loggingFields, extraParams)
+	var err error
+	h.ipcClient, err = ipc.GetServiceClient(params.GetTmpDir(info))
+	if err != nil {
+		span.RecordError(err)
+		logger.Errorw("failed building service client", err)
+		return err
+	}
+
+	p, err := h.buildPipeline(ctx, info, wsUrl, token, projectID, relayToken, featureFlags, loggingFields, extraParams)
 	if err != nil {
 		span.RecordError(err)
 		return err
@@ -88,22 +93,12 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 		p.SendStateUpdate(ctx)
 	}()
 
-	listener, err := net.Listen(network, getSocketAddress(p.TmpDir))
+	err = ipc.StartHandlerServer(p.TmpDir, h)
 	if err != nil {
 		span.RecordError(err)
-		logger.Errorw("failed starting grpc listener", err)
+		logger.Errorw("failed starting hander server", err)
 		return err
 	}
-
-	ipc.RegisterIngressHandlerServer(h.grpcServer, h)
-
-	go func() {
-		err := h.grpcServer.Serve(listener)
-		if err != nil {
-			span.RecordError(err)
-			logger.Errorw("failed statrting grpc handler", err)
-		}
-	}()
 
 	// start ingress
 	result := make(chan error, 1)
@@ -137,41 +132,6 @@ func (h *Handler) killAndReturnState(ctx context.Context) (*livekit.IngressState
 	case <-h.done.Watch():
 		return h.pipeline.CopyInfo().State, nil
 	}
-}
-
-func (h *Handler) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
-	_, span := tracer.Start(ctx, "Handler.UpdateIngress")
-	defer span.End()
-	return h.killAndReturnState(ctx)
-}
-
-func (h *Handler) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
-	_, span := tracer.Start(ctx, "Handler.DeleteIngress")
-	defer span.End()
-	return h.killAndReturnState(ctx)
-}
-
-func (h *Handler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {
-	_, span := tracer.Start(ctx, "Handler.DeleteWHIPResource")
-	defer span.End()
-
-	h.killAndReturnState(ctx)
-
-	return &google_protobuf2.Empty{}, nil
-}
-
-func (h *Handler) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
-	_, span := tracer.Start(ctx, "Handler.ICERestartWHIPResource")
-	defer span.End()
-
-	return &rpc.ICERestartWHIPResourceResponse{}, nil
-}
-
-func (h *Handler) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
-	_, span := tracer.Start(ctx, "Handler.WHIPRTCConnectionNotify")
-	defer span.End()
-
-	return &google_protobuf2.Empty{}, nil
 }
 
 func (h *Handler) GetPProf(ctx context.Context, req *ipc.PProfRequest) (*ipc.PProfResponse, error) {
@@ -252,13 +212,27 @@ func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStats
 	return &google_protobuf2.Empty{}, nil
 }
 
-func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, relayToken string, featureFlags map[string]string, loggingFields map[string]string, extraParams any) (*media.Pipeline, error) {
+func (h *Handler) KillIngress(ctx context.Context, req *ipc.KillIngressRequest) (*ipc.KillIngressResponse, error) {
+	_, span := tracer.Start(ctx, "Handler.KillIngress")
+	defer span.End()
+
+	state, err := h.killAndReturnState(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ipc.KillIngressResponse{
+		State: state,
+	}, nil
+}
+
+func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, extraParams any) (*media.Pipeline, error) {
 	ctx, span := tracer.Start(ctx, "Handler.buildPipeline")
 	defer span.End()
 
 	// build/verify params
 	var p *media.Pipeline
-	params, err := params.GetParams(ctx, h.rpcClient, h.conf, info, wsUrl, token, relayToken, featureFlags, loggingFields, extraParams)
+	params, err := params.GetParams(ctx, utils.NewHandlerStateNotifier(h.ipcClient), h.conf, info, wsUrl, token, projectID, relayToken, featureFlags, loggingFields, extraParams)
 	if err == nil {
 		// create the pipeline
 		p, err = media.New(ctx, h.conf, params, h.statsGatherer)
@@ -271,14 +245,14 @@ func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, 
 
 		info.State.Error = err.Error()
 		info.State.Status = livekit.IngressState_ENDPOINT_ERROR
-		h.sendUpdate(ctx, info)
+		h.sendUpdate(ctx, projectID, info)
 		return nil, err
 	}
 
 	return p, nil
 }
 
-func (h *Handler) sendUpdate(ctx context.Context, info *livekit.IngressInfo) {
+func (h *Handler) sendUpdate(ctx context.Context, projectID string, info *livekit.IngressInfo) {
 	switch info.State.Status {
 	case livekit.IngressState_ENDPOINT_ERROR:
 		logger.Warnw("ingress failed", errors.New(info.State.Error),
@@ -292,9 +266,9 @@ func (h *Handler) sendUpdate(ctx context.Context, info *livekit.IngressInfo) {
 
 	info.State.UpdatedAt = time.Now().UnixNano()
 
-	_, err := h.rpcClient.UpdateIngressState(ctx, &rpc.UpdateIngressStateRequest{
-		IngressId: info.IngressId,
-		State:     info.State,
+	_, err := h.ipcClient.UpdateIngressState(ctx, &ipc.UpdateIngressStateRequest{
+		ProjectId: projectID,
+		Info:      info,
 	})
 	if err != nil {
 		logger.Errorw("failed to send update", err)
