@@ -34,6 +34,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/utils"
 )
 
 type TestConfig struct {
@@ -132,7 +133,7 @@ func getConfig(t *testing.T) *TestConfig {
 	return tc
 }
 
-func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
+func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, getStateNotifier func(psrpcClient rpc.IOInfoClient) utils.StateNotifier, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
 	psrpcClient, err := rpc.NewIOInfoClient(bus)
 	require.NoError(t, err)
 
@@ -142,19 +143,21 @@ func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, newCmd f
 	commandPsrpcClient, err := rpc.NewIngressHandlerClient(bus, psrpc.WithClientTimeout(5*time.Second))
 	require.NoError(t, err)
 
+	sn := getStateNotifier(psrpcClient)
+
 	if !conf.WhipOnly && !conf.URLOnly {
 		t.Run("RTMP", func(t *testing.T) {
-			RunRTMPTest(t, conf, bus, commandPsrpcClient, psrpcClient, newCmd)
+			RunRTMPTest(t, conf, bus, commandPsrpcClient, psrpcClient, sn, newCmd)
 		})
 	}
 	if !conf.RtmpOnly && !conf.URLOnly {
 		t.Run("WHIP", func(t *testing.T) {
-			RunWHIPTest(t, conf, bus, commandPsrpcClient, psrpcClient, newCmd)
+			RunWHIPTest(t, conf, bus, commandPsrpcClient, psrpcClient, sn, newCmd)
 		})
 	}
 	if !conf.RtmpOnly && !conf.WhipOnly {
 		t.Run("URL pul", func(t *testing.T) {
-			RunURLTest(t, conf, bus, commandPsrpcClient, psrpcClient, newCmd)
+			RunURLTest(t, conf, bus, commandPsrpcClient, psrpcClient, sn, newCmd)
 		})
 	}
 
