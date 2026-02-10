@@ -21,10 +21,11 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/pprof"
 	"github.com/livekit/psrpc"
+
+	"github.com/livekit/ingress/pkg/errors"
 )
 
 const (
@@ -80,14 +81,22 @@ func (s *Service) handlePProf(w http.ResponseWriter, r *http.Request) {
 	var err error
 	var b []byte
 
-	timeout, _ := strconv.Atoi(r.URL.Query().Get("timeout"))
-	debug, _ := strconv.Atoi(r.URL.Query().Get("debug"))
+	timeout, err := strconv.ParseInt(r.URL.Query().Get("timeout"), 10, 32)
+	if err != nil {
+		http.Error(w, "malformed timeout", http.StatusBadRequest)
+		return
+	}
+	debug, err := strconv.ParseInt(r.URL.Query().Get("debug"), 10, 32)
+	if err != nil {
+		http.Error(w, "malformed debug", http.StatusBadRequest)
+		return
+	}
 
 	pathElements := strings.Split(r.URL.Path, "/")
 	switch len(pathElements) {
 	case 3:
 		// profile main service
-		b, err = pprof.GetProfileData(context.Background(), pathElements[2], timeout, debug)
+		b, err = pprof.GetProfileData(context.Background(), pathElements[2], int(timeout), int(debug))
 
 	case 4:
 		resourceID := pathElements[2]
@@ -97,7 +106,7 @@ func (s *Service) handlePProf(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		b, err = api.GetProfileData(context.Background(), pathElements[3], timeout, debug)
+		b, err = api.GetProfileData(context.Background(), pathElements[3], int32(timeout), int32(debug))
 		if err != nil {
 			return
 		}
