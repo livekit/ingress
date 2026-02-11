@@ -562,8 +562,8 @@ type localSessionAPI struct {
 	sessionCloser
 }
 
-func (a *localSessionAPI) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {
-	return pprof.GetProfileData(ctx, profileName, timeout, debug)
+func (a *localSessionAPI) GetProfileData(ctx context.Context, profileName string, timeout int32, debug int32) (b []byte, err error) {
+	return pprof.GetProfileData(ctx, profileName, int(timeout), int(debug))
 }
 
 func (a *localSessionAPI) GetPipelineDot(ctx context.Context) (string, error) {

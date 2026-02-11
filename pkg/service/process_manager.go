@@ -297,7 +297,7 @@ func (p *process) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCC
 	return &google_protobuf2.Empty{}, nil
 }
 
-func (p *process) GetProfileData(ctx context.Context, profileName string, timeout int, debug int) (b []byte, err error) {
+func (p *process) GetProfileData(ctx context.Context, profileName string, timeout int32, debug int32) (b []byte, err error) {
 	grpcClient := p.grpcClient.Load()
 	if grpcClient == nil {
 		return nil, errors.ErrIngressNotFound
