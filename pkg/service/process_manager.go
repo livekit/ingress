@@ -290,7 +290,7 @@ func (p *process) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPRes
 }
 
 func (p *process) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
-	return &rpc.ICERestartWHIPResourceResponse{}, nil
+	return &rpc.ICERestartWHIPResourceResponse{}, psrpc.NewErrorf(psrpc.UnprocessableEntity, "Trickle-ICE and ICE restart not supported")
 }
 
 func (p *process) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
