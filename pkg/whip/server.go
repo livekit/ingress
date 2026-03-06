@@ -220,9 +220,9 @@ func (s *WHIPServer) Start(
 			RawTrickleIceSdpfrag: string(body),
 			IfMatch:              r.Header.Get("If-Match"),
 		}, psrpc.WithRequestTimeout(5*time.Second))
-		if err == psrpc.ErrNoResponse {
+		if err != nil {
 			s.handleError(err, w)
-			logger.Infow("WHIP ICE Restart failed no such session", "error", err, "streamKey", streamKey, "resourceID", resourceID)
+			logger.Infow("WHIP ICE restart failed", "error", err, "streamKey", streamKey, "resourceID", resourceID)
 			return
 		}
 
