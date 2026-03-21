@@ -18,7 +18,6 @@ package test
 
 import (
 	"context"
-	"io/ioutil"
 	"os"
 	"os/exec"
 	"testing"
@@ -122,7 +121,7 @@ func getConfig(t *testing.T) *TestConfig {
 	if confString == "" {
 		confFile := os.Getenv("INGRESS_CONFIG_FILE")
 		require.NotEmpty(t, confFile)
-		b, err := ioutil.ReadFile(confFile)
+		b, err := os.ReadFile(confFile)
 		require.NoError(t, err)
 		confString = string(b)
 	}

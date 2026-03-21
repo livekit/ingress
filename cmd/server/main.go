@@ -18,7 +18,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"os/signal"
@@ -316,7 +315,7 @@ func getConfig(c *cli.Command, initialize bool) (*config.Config, error) {
 		if configFile == "" {
 			return nil, errors.ErrNoConfig
 		}
-		content, err := ioutil.ReadFile(configFile)
+		content, err := os.ReadFile(configFile)
 		if err != nil {
 			return nil, err
 		}
