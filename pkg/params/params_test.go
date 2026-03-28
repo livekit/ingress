@@ -17,8 +17,10 @@ package params
 import (
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/livekit/protocol/livekit"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 func TestPopulateAudioEncodingOptionsDefaults(t *testing.T) {
@@ -45,7 +47,7 @@ func TestPopulateVideoEncodingOptionsDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, livekit.VideoCodec_H264_BASELINE, out.VideoCodec)
 	require.Equal(t, float64(30), out.FrameRate)
-	require.Equal(t, expectedDefaultLayers, out.Layers)
+	require.Empty(t, cmp.Diff(expectedDefaultLayers, out.Layers, protocmp.Transform()))
 
 	in.FrameRate = 15
 	in.Layers = []*livekit.VideoLayer{
@@ -79,5 +81,5 @@ func TestPopulateVideoEncodingOptionsDefaults(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, livekit.VideoCodec_H264_BASELINE, out.VideoCodec)
 	require.Equal(t, float64(15), out.FrameRate)
-	require.Equal(t, expected, out.Layers)
+	require.Empty(t, cmp.Diff(expected, out.Layers, protocmp.Transform()))
 }

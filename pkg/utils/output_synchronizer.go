@@ -46,7 +46,7 @@ func NewOutputSynchronizer() *OutputSynchronizer {
 	return &OutputSynchronizer{}
 }
 
-// TODO adjust timer deadline when zeroTime is adjusted
+// ScheduleEvent TODO adjust timer deadline when zeroTime is adjusted
 func (os *OutputSynchronizer) ScheduleEvent(ctx context.Context, pts time.Duration, event func()) error {
 	os.lock.Lock()
 

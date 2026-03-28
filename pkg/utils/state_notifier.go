@@ -37,7 +37,7 @@ func NewServiceStateNotifier(psrpcClient rpc.IOInfoClient) StateNotifier {
 	}
 }
 
-func (sn *serviceStateNotifier) UpdateIngressState(ctx context.Context, projectID string, info *livekit.IngressInfo) error {
+func (sn *serviceStateNotifier) UpdateIngressState(ctx context.Context, _ string, info *livekit.IngressInfo) error {
 	req := &rpc.UpdateIngressStateRequest{
 		IngressId: info.IngressId,
 		State:     info.State,
@@ -76,6 +76,6 @@ func NewNoopStateNotifier() StateNotifier {
 	return &noopStateNotifier{}
 }
 
-func (sn *noopStateNotifier) UpdateIngressState(ctx context.Context, projectID string, info *livekit.IngressInfo) error {
+func (sn *noopStateNotifier) UpdateIngressState(_ context.Context, _ string, _ *livekit.IngressInfo) error {
 	return nil
 }

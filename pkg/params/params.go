@@ -92,6 +92,7 @@ func GetTmpDir(info *livekit.IngressInfo) string {
 	return path.Join(os.TempDir(), info.State.ResourceId)
 }
 
+//nolint:revive // TODO(milos): reduce argument count
 func GetParams(ctx context.Context, stateNotifier utils.StateNotifier, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, ep any) (*Params, error) {
 	var err error
 
@@ -121,7 +122,7 @@ func GetParams(ctx context.Context, stateNotifier utils.StateNotifier, conf *con
 		return nil, err
 	}
 
-	infoCopy := proto.Clone(info).(*livekit.IngressInfo)
+	infoCopy := protoutils.CloneProto(info)
 
 	infoCopy.State.Status = livekit.IngressState_ENDPOINT_BUFFERING
 	if infoCopy.State.StartedAt == 0 {
@@ -186,7 +187,7 @@ func UpdateTranscodingEnabled(info *livekit.IngressInfo) {
 	// Default to enabling transcoding for WHIP
 	switch info.InputType {
 	case livekit.IngressInput_WHIP_INPUT:
-		b := !info.BypassTranscoding
+		b := !info.BypassTranscoding //nolint:staticcheck // backward compat with deprecated field
 		info.EnableTranscoding = &b
 	default:
 		t := true
@@ -197,11 +198,7 @@ func UpdateTranscodingEnabled(info *livekit.IngressInfo) {
 func getLive(info *livekit.IngressInfo) bool {
 	switch info.InputType {
 	case livekit.IngressInput_URL_INPUT:
-		if strings.HasPrefix(info.Url, "http://") || strings.HasPrefix(info.Url, "https://") {
-			return false
-		} else {
-			return true
-		}
+		return !strings.HasPrefix(info.Url, "http://") && !strings.HasPrefix(info.Url, "https://")
 	default:
 		// TODO RTMP and WHIP should use the live mode but more work is needed on the pipeline sample timestamp fugding/dropping to avoid A/V sync issues
 		return false
@@ -240,7 +237,7 @@ func getAudioEncodingOptions(options *livekit.IngressAudioOptions) (*livekit.Ing
 }
 
 func populateAudioEncodingOptionsDefaults(options *livekit.IngressAudioEncodingOptions) (*livekit.IngressAudioEncodingOptions, error) {
-	o := proto.Clone(options).(*livekit.IngressAudioEncodingOptions)
+	o := protoutils.CloneProto(options)
 
 	// Use Opus by default
 	if o.AudioCodec == livekit.AudioCodec_DEFAULT_AC {
@@ -282,7 +279,7 @@ func getVideoEncodingOptions(options *livekit.IngressVideoOptions) (*livekit.Ing
 }
 
 func populateVideoEncodingOptionsDefaults(options *livekit.IngressVideoEncodingOptions) (*livekit.IngressVideoEncodingOptions, error) {
-	o := proto.Clone(options).(*livekit.IngressVideoEncodingOptions)
+	o := protoutils.CloneProto(options)
 
 	// Use Opus by default
 	if o.VideoCodec == livekit.VideoCodec_DEFAULT_VC {
@@ -316,7 +313,7 @@ func (p *Params) CopyInfo() *livekit.IngressInfo {
 	p.stateLock.Lock()
 	defer p.stateLock.Unlock()
 
-	info := proto.Clone(p.IngressInfo).(*livekit.IngressInfo)
+	info := protoutils.CloneProto(p.IngressInfo)
 	if info.State != nil && p.err != nil {
 		info.State.Error = p.err.Error()
 	}
@@ -324,7 +321,7 @@ func (p *Params) CopyInfo() *livekit.IngressInfo {
 	return info
 }
 
-// Useful in some paths where the extanded params are not known at creation time
+// SetExtraParams - useful in some paths where the extanded params are not known at creation time
 func (p *Params) SetExtraParams(ep any) {
 	p.ExtraParams = ep
 }
@@ -440,7 +437,7 @@ func (p *Params) GetLogger() logger.Logger {
 }
 
 func CopyRedactedIngressInfo(info *livekit.IngressInfo) *livekit.IngressInfo {
-	infoCopy := proto.Clone(info).(*livekit.IngressInfo)
+	infoCopy := protoutils.CloneProto(info)
 
 	infoCopy.StreamKey = protoutils.RedactIdentifier(infoCopy.StreamKey)
 

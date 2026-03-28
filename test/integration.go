@@ -49,35 +49,35 @@ type ioServer struct {
 	updateIngressState func(*rpc.UpdateIngressStateRequest) error
 }
 
-func (s *ioServer) CreateEgress(ctx context.Context, info *livekit.EgressInfo) (*emptypb.Empty, error) {
+func (s *ioServer) CreateEgress(_ context.Context, _ *livekit.EgressInfo) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
 }
 
-func (s *ioServer) GetEgress(ctx context.Context, req *rpc.GetEgressRequest) (*livekit.EgressInfo, error) {
+func (s *ioServer) GetEgress(_ context.Context, _ *rpc.GetEgressRequest) (*livekit.EgressInfo, error) {
 	return nil, nil
 }
 
-func (s *ioServer) ListEgress(ctx context.Context, req *livekit.ListEgressRequest) (*livekit.ListEgressResponse, error) {
+func (s *ioServer) ListEgress(_ context.Context, _ *livekit.ListEgressRequest) (*livekit.ListEgressResponse, error) {
 	return nil, nil
 }
 
-func (s *ioServer) UpdateEgress(ctx context.Context, info *livekit.EgressInfo) (*emptypb.Empty, error) {
+func (s *ioServer) UpdateEgress(_ context.Context, _ *livekit.EgressInfo) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
 }
 
-func (s *ioServer) UpdateMetrics(ctx context.Context, req *rpc.UpdateMetricsRequest) (*emptypb.Empty, error) {
+func (s *ioServer) UpdateMetrics(_ context.Context, _ *rpc.UpdateMetricsRequest) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
 }
 
-func (s *ioServer) GetIngressInfo(ctx context.Context, req *rpc.GetIngressInfoRequest) (*rpc.GetIngressInfoResponse, error) {
+func (s *ioServer) GetIngressInfo(_ context.Context, req *rpc.GetIngressInfoRequest) (*rpc.GetIngressInfoResponse, error) {
 	return s.getIngressInfo(req)
 }
 
-func (s *ioServer) CreateIngress(ctx context.Context, req *livekit.IngressInfo) (*emptypb.Empty, error) {
+func (s *ioServer) CreateIngress(_ context.Context, _ *livekit.IngressInfo) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
 }
 
-func (s *ioServer) UpdateIngressState(ctx context.Context, req *rpc.UpdateIngressStateRequest) (*emptypb.Empty, error) {
+func (s *ioServer) UpdateIngressState(_ context.Context, req *rpc.UpdateIngressStateRequest) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, s.updateIngressState(req)
 }
 
@@ -97,7 +97,7 @@ func (s *ioServer) RecordCallContext(context.Context, *rpc.RecordCallContextRequ
 	return &emptypb.Empty{}, nil
 }
 
-func GetDefaultConfig(t *testing.T) *TestConfig {
+func getDefaultConfig() *TestConfig {
 	tc := &TestConfig{
 		Config: &config.Config{
 			ServiceConfig:  &config.ServiceConfig{},
@@ -115,7 +115,7 @@ func GetDefaultConfig(t *testing.T) *TestConfig {
 }
 
 func getConfig(t *testing.T) *TestConfig {
-	tc := GetDefaultConfig(t)
+	tc := getDefaultConfig()
 
 	confString := os.Getenv("INGRESS_CONFIG_BODY")
 	if confString == "" {
@@ -136,8 +136,8 @@ func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, getState
 	psrpcClient, err := rpc.NewIOInfoClient(bus)
 	require.NoError(t, err)
 
-	conf.Config.RTCConfig.Validate(conf.Development)
-	conf.Config.RTCConfig.EnableLoopbackCandidate = true
+	conf.RTCConfig.Validate(conf.Development)
+	conf.RTCConfig.EnableLoopbackCandidate = true
 
 	commandPsrpcClient, err := rpc.NewIngressHandlerClient(bus, psrpc.WithClientTimeout(5*time.Second))
 	require.NoError(t, err)

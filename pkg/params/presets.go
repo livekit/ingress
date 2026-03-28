@@ -19,6 +19,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
+	protoutils "github.com/livekit/protocol/utils"
 )
 
 const (
@@ -148,15 +149,15 @@ func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livek
 }
 
 func computeVideoLayers(highLayer *livekit.VideoLayer, layerCount int) []*livekit.VideoLayer {
-	layerCopy := *highLayer
+	layerCopy := protoutils.CloneProto(highLayer)
 	layerCopy.Quality = livekit.VideoQuality_HIGH
 
 	layers := []*livekit.VideoLayer{
-		&layerCopy,
+		layerCopy,
 	}
 
 	for i := 1; i < layerCount; i++ {
-		w := layerCopy.Width >> i // each layer has dimentions half of the previous one
+		w := layerCopy.Width >> i // each layer has dimensions half of the previous one
 		h := layerCopy.Height >> i
 
 		rate := getBitrateForParams(layerCopy.Bitrate, layerCopy.Width, layerCopy.Height, 1, w, h, 1)

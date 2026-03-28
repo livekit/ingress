@@ -114,6 +114,11 @@ func Test() error {
 	return run("go test -v ./pkg/...")
 }
 
+func Lint() error {
+	return run("go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.3",
+		"golangci-lint run --timeout=5m")
+}
+
 func BuildDocker() error {
 	return mageutil.Run(context.Background(),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-dev", gstVersion),

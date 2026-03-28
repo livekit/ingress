@@ -203,10 +203,10 @@ func (t *RelayWhipTrackHandler) startRTCPReceiver() {
 				_ = t.receiver.SetReadDeadline(time.Now().Add(time.Millisecond * 500))
 				pkts, _, err := t.receiver.ReadRTCP()
 
-				switch {
-				case err == nil:
+				switch err {
+				case nil:
 					// continue
-				case err == io.EOF:
+				case io.EOF:
 					return
 				default:
 					if netErr, ok := err.(net.Error); ok && netErr.Timeout() {

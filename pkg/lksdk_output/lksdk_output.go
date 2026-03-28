@@ -26,15 +26,18 @@ import (
 	"github.com/pion/webrtc/v4"
 	"github.com/pion/webrtc/v4/pkg/media"
 
+	"go.opentelemetry.io/otel"
+
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/mediatransportutil/pkg/pacer"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/logger/medialogutils"
-	"github.com/livekit/protocol/tracer"
 	lksdk "github.com/livekit/server-sdk-go/v2"
 )
+
+var tracer = otel.Tracer("github.com/livekit/ingress/pkg/lksdk_output")
 
 const (
 	watchdogDeadline = time.Minute
@@ -117,7 +120,7 @@ type LKSDKOutput struct {
 }
 
 func NewLKSDKOutput(ctx context.Context, onDisconnected func(), p *params.Params) (*LKSDKOutput, error) {
-	ctx, span := tracer.Start(ctx, "lksdk.NewLKSDKOutput")
+	_, span := tracer.Start(ctx, "lksdk.NewLKSDKOutput")
 	defer span.End()
 
 	s := &LKSDKOutput{
@@ -138,7 +141,7 @@ func NewLKSDKOutput(ctx context.Context, onDisconnected func(), p *params.Params
 	}, watchdogDeadline)
 
 	s.mediaWatchdog = NewMediaWatchdog(func() {
-		s.logger.Infow("no media recieved after timeout", errors.ErrSourceNotReady)
+		s.logger.Infow("no media received after timeout", errors.ErrSourceNotReady)
 
 		select {
 		case s.errChan <- errors.ErrSourceNotReady:

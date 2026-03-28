@@ -22,15 +22,15 @@ func ReplaceRTCPPacketSSRC(pkt rtcp.Packet, newSSRC uint32) (rtcp.Packet, error)
 		cpkt.SSRC = newSSRC
 	case *rtcp.ReceiverReport:
 		cpkt.SSRC = newSSRC
-		for i, _ := range cpkt.Reports {
+		for i := range cpkt.Reports {
 			cpkt.Reports[i].SSRC = newSSRC
 		}
 	case *rtcp.SourceDescription:
-		for i, _ := range cpkt.Chunks {
+		for i := range cpkt.Chunks {
 			cpkt.Chunks[i].Source = newSSRC
 		}
 	case *rtcp.Goodbye:
-		for i, _ := range cpkt.Sources {
+		for i := range cpkt.Sources {
 			cpkt.Sources[i] = newSSRC
 		}
 	case *rtcp.TransportLayerNack:
@@ -76,7 +76,7 @@ func handleExtendedReports(reports []rtcp.ReportBlock, newSSRC uint32) error {
 		case *rtcp.PacketReceiptTimesReportBlock:
 			r.SSRC = newSSRC
 		case *rtcp.DLRRReportBlock:
-			for i, _ := range r.Reports {
+			for i := range r.Reports {
 				r.Reports[i].SSRC = newSSRC
 			}
 		case *rtcp.StatisticsSummaryReportBlock:
