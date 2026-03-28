@@ -123,7 +123,7 @@ func (m *Monitor) UpdateCostConfig(cpuCostConfig *config.CPUCostConfig) error {
 	return m.checkCPUConfig()
 }
 
-// Server is shutting down, but may stay up for some time for draining
+// Shutdown - server is shutting down, but may stay up for some time for draining
 func (m *Monitor) Shutdown() {
 	m.shutdown.Break()
 }

@@ -25,13 +25,13 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v3"
+	"go.opentelemetry.io/otel"
 	"google.golang.org/protobuf/encoding/protojson"
 
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/redis"
 	"github.com/livekit/protocol/rpc"
-	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/psrpc"
 
 	"github.com/livekit/ingress/pkg/config"
@@ -43,6 +43,8 @@ import (
 	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/ingress/version"
 )
+
+var tracer = otel.Tracer("github.com/livekit/ingress/cmd/server")
 
 func main() {
 	cmd := &cli.Command{
@@ -251,12 +253,7 @@ func runHandler(_ context.Context, c *cli.Command) error {
 
 	token := c.String("token")
 
-	var handler interface {
-		Kill()
-		HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, extraParams any) error
-	}
-
-	handler = service.NewHandler(conf)
+	handler := service.NewHandler(conf)
 
 	killChan := make(chan os.Signal, 1)
 	signal.Notify(killChan, syscall.SIGINT)

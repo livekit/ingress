@@ -29,12 +29,13 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
+	"go.opentelemetry.io/otel"
+
 	"github.com/livekit/protocol/ingress"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/pprof"
 	"github.com/livekit/protocol/rpc"
-	"github.com/livekit/protocol/tracer"
 	protoutils "github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 
@@ -49,6 +50,8 @@ import (
 	"github.com/livekit/ingress/pkg/whip"
 	"github.com/livekit/ingress/version"
 )
+
+var tracer = otel.Tracer("github.com/livekit/ingress/pkg/service")
 
 const shutdownTimer = time.Second * 5
 
@@ -143,7 +146,7 @@ func NewService(
 		}
 
 		// Unregister the default Go collector before registering detailed runtime metrics
-		prometheus.Unregister(prometheus.NewGoCollector())
+		prometheus.Unregister(collectors.NewGoCollector())
 		if err := prometheus.Register(collectors.NewGoCollector(collectors.WithGoCollectorRuntimeMetrics(collectors.MetricsAll))); err != nil {
 			if _, ok := err.(prometheus.AlreadyRegisteredError); !ok {
 				logger.Errorw("failed to register go collector", err)
@@ -169,7 +172,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 		return nil, nil, err
 	}
 
-	err = s.manager.startIngress(ctx, p, func(ctx context.Context) {
+	err = s.manager.startIngress(ctx, p, func(_ context.Context) {
 		s.rtmpSrv.CloseHandler(resourceId)
 	})
 	if err != nil {
@@ -210,7 +213,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
 			p.SendStateUpdate(ctx)
 
-			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(ctx context.Context) {
+			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(_ context.Context) {
 				s.whipSrv.CloseHandler(resourceId)
 			}})
 		} else {
@@ -218,7 +221,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 				MimeTypes: mimeTypes,
 			})
 
-			err := s.manager.startIngress(ctx, p, func(ctx context.Context) {
+			err := s.manager.startIngress(ctx, p, func(_ context.Context) {
 				s.whipSrv.CloseHandler(resourceId)
 			})
 			if err != nil {
@@ -247,7 +250,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			}
 
 			p.SendStateUpdate(ctx)
-			s.sm.IngressEnded(p.IngressInfo.State.ResourceId)
+			s.sm.IngressEnded(p.State.ResourceId)
 		}
 	}
 
@@ -271,6 +274,7 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 	return p.IngressInfo, nil
 }
 
+//nolint:revive // TODO(milos) reduce argument count
 func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string, featureFlags map[string]string, loggingFields map[string]string) (p *params.Params, err error) {
 
 	ctx, span := tracer.Start(ctx, "Service.HandleRequest")
@@ -352,6 +356,7 @@ func (s *Service) handleRequest(ctx context.Context, streamKey string, resourceI
 	}
 }
 
+//nolint:revive // TODO(milos) reduce argument count
 func (s *Service) handleNewPublisher(ctx context.Context, resourceId string, inputType livekit.IngressInput, info *livekit.IngressInfo, wsUrl string, token string, projectID string, featureFlags map[string]string, loggingFields map[string]string) (*params.Params, error) {
 	info.State = &livekit.IngressState{
 		Status:     livekit.IngressState_ENDPOINT_BUFFERING,
@@ -503,7 +508,7 @@ func (s *Service) ListActiveIngress(ctx context.Context, _ *rpc.ListActiveIngres
 	sessions := s.ListIngress()
 	ids := make([]string, 0, len(sessions))
 	for _, s := range sessions {
-		// backward compatiblity
+		// backward compatibility
 		ids = append(ids, s.IngressId)
 	}
 
@@ -517,7 +522,7 @@ func (s *Service) StartIngress(ctx context.Context, req *rpc.StartIngressRequest
 	return s.HandleURLPublishRequest(ctx, protoutils.NewGuid(protoutils.URLResourcePrefix), req)
 }
 
-func (s *Service) StartIngressAffinity(ctx context.Context, req *rpc.StartIngressRequest) float32 {
+func (s *Service) StartIngressAffinity(_ context.Context, req *rpc.StartIngressRequest) float32 {
 	if !s.isActive.Load() || !s.monitor.CanAcceptIngress(req.Info) {
 		return -1
 	}
@@ -532,7 +537,7 @@ func (s *Service) GetHealthHandlers() whip.HealthHandlers {
 	}
 }
 
-func (s *Service) AvailabilityHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Service) AvailabilityHandler(w http.ResponseWriter, _ *http.Request) {
 	if !s.CanAccept() {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte("No availability"))
@@ -541,11 +546,11 @@ func (s *Service) AvailabilityHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("Available"))
 }
 
-func (s *Service) HealthHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Service) HealthHandler(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("Healthy"))
 }
 
-func (s *Service) GetWhipProxyEnabled(ctx context.Context, featureFlags map[string]string) bool {
+func (s *Service) GetWhipProxyEnabled(_ context.Context, _ map[string]string) bool {
 	return s.conf.WHIPProxyEnabled
 }
 
@@ -566,12 +571,12 @@ func (a *localSessionAPI) GetProfileData(ctx context.Context, profileName string
 	return pprof.GetProfileData(ctx, profileName, int(timeout), int(debug))
 }
 
-func (a *localSessionAPI) GetPipelineDot(ctx context.Context) (string, error) {
+func (a *localSessionAPI) GetPipelineDot(_ context.Context) (string, error) {
 	// No dot file if transcoding is disabled
 	return "", errors.ErrIngressNotFound
 }
 
-func (a *localSessionAPI) GatherStats(ctx context.Context) (*ipc.MediaStats, error) {
+func (a *localSessionAPI) GatherStats(_ context.Context) (*ipc.MediaStats, error) {
 	// Return a nil stats map. Use the local gatherer in the session manager for local stats
 
 	return nil, nil

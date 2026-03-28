@@ -237,26 +237,7 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 	i.lock.Unlock()
 
 	// don't need this pad, link to fakesink
-	if newPad {
-		if !i.bin.AddPad(ghostPad.Pad) {
-			logger.Errorw("failed to add ghost pad", nil)
-			return
-		}
-		pad = ghostPad.Pad
-		padName := pad.GetName()
-
-		logger.Debugw("input ghost pad added", "padName", padName)
-
-		if i.enableStreamLatencyReduction {
-			state := timingState
-			i.registerGatePad(padName, state)
-			i.addGateProbe(pad, padName, state)
-			i.addSegmentEventProbe(pad, padName, state)
-		}
-
-		// Gather bitrate stats & attach latency meta from the pipeline
-		i.addStatsCollectionProbe(kind)
-	} else {
+	if !newPad {
 		var sink *gst.Element
 
 		sink, err = gst.NewElement("fakesink")
@@ -270,6 +251,25 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 		pad.Link(pads[0])
 		return
 	}
+
+	if !i.bin.AddPad(ghostPad.Pad) {
+		logger.Errorw("failed to add ghost pad", nil)
+		return
+	}
+	pad = ghostPad.Pad
+	padName := pad.GetName()
+
+	logger.Debugw("input ghost pad added", "padName", padName)
+
+	if i.enableStreamLatencyReduction {
+		state := timingState
+		i.registerGatePad(padName, state)
+		i.addGateProbe(pad, padName, state)
+		i.addSegmentEventProbe(pad, padName, state)
+	}
+
+	// Gather bitrate stats & attach latency meta from the pipeline
+	i.addStatsCollectionProbe(kind)
 
 	if i.onOutputReady != nil {
 		i.onOutputReady(pad, kind)
@@ -303,7 +303,7 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 			g := i.trackStatsGatherer[kind]
 
 			if padKind == kind {
-				pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+				pad.AddProbe(gst.PadProbeTypeBuffer, func(_ *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
 					buffer := info.GetBuffer()
 					if buffer == nil {
 						return gst.PadProbeOK
@@ -332,7 +332,7 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 }
 
 func shouldEnableStreamLatencyReduction(p *params.Params) bool {
-	enableGate := p.Config.EnableStreamLatencyReduction
+	enableGate := p.EnableStreamLatencyReduction
 	if !enableGate {
 		return false
 	}

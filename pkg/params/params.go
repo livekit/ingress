@@ -92,6 +92,7 @@ func GetTmpDir(info *livekit.IngressInfo) string {
 	return path.Join(os.TempDir(), info.State.ResourceId)
 }
 
+//nolint:revive // argument-limit: refactoring signature would be a larger change
 func GetParams(ctx context.Context, stateNotifier utils.StateNotifier, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, ep any) (*Params, error) {
 	var err error
 
@@ -186,7 +187,7 @@ func UpdateTranscodingEnabled(info *livekit.IngressInfo) {
 	// Default to enabling transcoding for WHIP
 	switch info.InputType {
 	case livekit.IngressInput_WHIP_INPUT:
-		b := !info.BypassTranscoding
+		b := !info.BypassTranscoding //nolint:staticcheck // backward compat with deprecated field
 		info.EnableTranscoding = &b
 	default:
 		t := true
@@ -197,11 +198,7 @@ func UpdateTranscodingEnabled(info *livekit.IngressInfo) {
 func getLive(info *livekit.IngressInfo) bool {
 	switch info.InputType {
 	case livekit.IngressInput_URL_INPUT:
-		if strings.HasPrefix(info.Url, "http://") || strings.HasPrefix(info.Url, "https://") {
-			return false
-		} else {
-			return true
-		}
+		return !strings.HasPrefix(info.Url, "http://") && !strings.HasPrefix(info.Url, "https://")
 	default:
 		// TODO RTMP and WHIP should use the live mode but more work is needed on the pipeline sample timestamp fugding/dropping to avoid A/V sync issues
 		return false
@@ -324,7 +321,7 @@ func (p *Params) CopyInfo() *livekit.IngressInfo {
 	return info
 }
 
-// Useful in some paths where the extanded params are not known at creation time
+// SetExtraParams - useful in some paths where the extanded params are not known at creation time
 func (p *Params) SetExtraParams(ep any) {
 	p.ExtraParams = ep
 }

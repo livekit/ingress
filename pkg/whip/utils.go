@@ -48,11 +48,7 @@ func createJitterBuffer(
 	}
 
 	switch strings.ToLower(track.Codec().MimeType) {
-	case strings.ToLower(webrtc.MimeTypeVP8):
-		maxLatency = maxVideoLatency
-		options = append(options, jitter.WithPacketLossHandler(func() { writePLI(track.SSRC()) }))
-
-	case strings.ToLower(webrtc.MimeTypeH264):
+	case strings.ToLower(webrtc.MimeTypeH264), strings.ToLower(webrtc.MimeTypeVP8):
 		maxLatency = maxVideoLatency
 		options = append(options, jitter.WithPacketLossHandler(func() { writePLI(track.SSRC()) }))
 
@@ -72,9 +68,10 @@ func createJitterBuffer(
 func extractICEDetails(in []byte) (ufrag string, pwd string, err error) {
 	scanAttributes := func(attributes []sdp.Attribute) {
 		for _, a := range attributes {
-			if a.Key == "ice-ufrag" {
+			switch a.Key {
+			case "ice-ufrag":
 				ufrag = a.Value
-			} else if a.Key == "ice-pwd" {
+			case "ice-pwd":
 				pwd = a.Value
 			}
 		}
@@ -97,9 +94,10 @@ func replaceICEDetails(in, ufrag, pwd string) (string, error) {
 	var parsed sdp.SessionDescription
 	replaceAttributes := func(attributes []sdp.Attribute) {
 		for i := range attributes {
-			if attributes[i].Key == "ice-ufrag" {
+			switch attributes[i].Key {
+			case "ice-ufrag":
 				attributes[i].Value = ufrag
-			} else if attributes[i].Key == "ice-pwd" {
+			case "ice-pwd":
 				attributes[i].Value = pwd
 			}
 		}

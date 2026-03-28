@@ -29,7 +29,6 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
-	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/psrpc"
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
@@ -98,7 +97,7 @@ func getErrorCodeForStatus(statusCode int) psrpc.ErrorCode {
 	}
 }
 
-func (h *proxyWhipHandler) Init(ctx context.Context, sdpOffer string) (string, error) {
+func (h *proxyWhipHandler) Init(_ context.Context, sdpOffer string) (string, error) {
 	protocol := "http"
 	urlBase := ""
 	switch {
@@ -175,10 +174,10 @@ func (h *proxyWhipHandler) Init(ctx context.Context, sdpOffer string) (string, e
 	return string(b), nil
 }
 
-func (h *proxyWhipHandler) SetMediaStatsGatherer(st *stats.LocalMediaStatsGatherer) {
+func (h *proxyWhipHandler) SetMediaStatsGatherer(_ *stats.LocalMediaStatsGatherer) {
 }
 
-func (h *proxyWhipHandler) Start(ctx context.Context) (map[types.StreamKind]string, error) {
+func (h *proxyWhipHandler) Start(_ context.Context) (map[types.StreamKind]string, error) {
 	return nil, nil
 }
 
@@ -250,14 +249,14 @@ func (h *proxyWhipHandler) WaitForSessionEnd(ctx context.Context) error {
 	return nil
 }
 
-func (h *proxyWhipHandler) AssociateRelay(kind types.StreamKind, token string, w io.WriteCloser) error {
+func (h *proxyWhipHandler) AssociateRelay(_ types.StreamKind, _ string, _ io.WriteCloser) error {
 	return nil
 }
 
-func (h *proxyWhipHandler) DissociateRelay(kind types.StreamKind) {
+func (h *proxyWhipHandler) DissociateRelay(_ types.StreamKind) {
 }
 
-func (h *proxyWhipHandler) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
+func (h *proxyWhipHandler) UpdateIngress(ctx context.Context, _ *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
 	_, span := tracer.Start(ctx, "proxyWhipHandler.UpdateIngress")
 	defer span.End()
 
@@ -266,7 +265,7 @@ func (h *proxyWhipHandler) UpdateIngress(ctx context.Context, req *livekit.Updat
 	return h.params.CopyInfo().State, nil
 }
 
-func (h *proxyWhipHandler) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
+func (h *proxyWhipHandler) DeleteIngress(ctx context.Context, _ *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
 	_, span := tracer.Start(ctx, "proxyWhipHandler.DeleteIngress")
 	defer span.End()
 
@@ -288,7 +287,7 @@ func (h *proxyWhipHandler) DeleteWHIPResource(ctx context.Context, req *rpc.Dele
 	return &google_protobuf2.Empty{}, nil
 }
 
-func (h *proxyWhipHandler) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
+func (h *proxyWhipHandler) ICERestartWHIPResource(_ context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
 
 	h.logger.Infow("closing WHIP session", "location", h.location)
 
@@ -329,7 +328,7 @@ func (h *proxyWhipHandler) ICERestartWHIPResource(ctx context.Context, req *rpc.
 	}, nil
 }
 
-func (h *proxyWhipHandler) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
+func (h *proxyWhipHandler) WHIPRTCConnectionNotify(_ context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
 	tctx, done := context.WithTimeout(context.Background(), 10*time.Second)
 	defer done()
 

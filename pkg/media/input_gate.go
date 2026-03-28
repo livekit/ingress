@@ -39,7 +39,7 @@ type padTimingState struct {
 }
 
 func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState) {
-	pad.AddProbe(gst.PadProbeTypeBuffer, func(pad *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+	pad.AddProbe(gst.PadProbeTypeBuffer, func(_ *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
 		ok, pts, duration := extractBufferTiming(info, state)
 		if !ok {
 			return gst.PadProbeDrop

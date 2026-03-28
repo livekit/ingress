@@ -24,11 +24,14 @@ import (
 	"github.com/go-gst/go-gst/gst/app"
 	"go.uber.org/atomic"
 
+	"go.opentelemetry.io/otel"
+
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/tracer"
 )
+
+var tracer = otel.Tracer("github.com/livekit/ingress/pkg/media/rtmp")
 
 const (
 	FlvAppSource = "flvAppSrc"
@@ -43,7 +46,7 @@ type RTMPRelaySource struct {
 }
 
 func NewRTMPRelaySource(ctx context.Context, p *params.Params) (*RTMPRelaySource, error) {
-	ctx, span := tracer.Start(ctx, "RTMPRelaySource.New")
+	_, span := tracer.Start(ctx, "RTMPRelaySource.New")
 	defer span.End()
 
 	s := &RTMPRelaySource{

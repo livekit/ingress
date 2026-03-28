@@ -26,7 +26,6 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/pprof"
-	"github.com/livekit/protocol/tracer"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
@@ -58,6 +57,7 @@ func NewHandler(conf *config.Config) *Handler {
 	}
 }
 
+//nolint:revive // TODO(milos) reduce argument count
 func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, extraParams any) error {
 	ctx, span := tracer.Start(ctx, "Handler.HandleRequest")
 	defer span.End()
@@ -152,8 +152,8 @@ func (h *Handler) GetPProf(ctx context.Context, req *ipc.PProfRequest) (*ipc.PPr
 	}, nil
 }
 
-func (h *Handler) GetPipelineDot(ctx context.Context, in *ipc.GstPipelineDebugDotRequest) (*ipc.GstPipelineDebugDotResponse, error) {
-	ctx, span := tracer.Start(ctx, "Handler.GetPipelineDot")
+func (h *Handler) GetPipelineDot(ctx context.Context, _ *ipc.GstPipelineDebugDotRequest) (*ipc.GstPipelineDebugDotResponse, error) {
+	_, span := tracer.Start(ctx, "Handler.GetPipelineDot")
 	defer span.End()
 
 	if h.pipeline == nil {
@@ -177,7 +177,7 @@ func (h *Handler) GetPipelineDot(ctx context.Context, in *ipc.GstPipelineDebugDo
 
 }
 
-func (h *Handler) GatherMediaStats(ctx context.Context, in *ipc.GatherMediaStatsRequest) (*ipc.GatherMediaStatsResponse, error) {
+func (h *Handler) GatherMediaStats(ctx context.Context, _ *ipc.GatherMediaStatsRequest) (*ipc.GatherMediaStatsResponse, error) {
 	st, err := h.statsGatherer.GatherStats(ctx)
 	if err != nil {
 		return nil, err
@@ -212,7 +212,7 @@ func (h *Handler) UpdateMediaStats(ctx context.Context, in *ipc.UpdateMediaStats
 	return &google_protobuf2.Empty{}, nil
 }
 
-func (h *Handler) KillIngress(ctx context.Context, req *ipc.KillIngressRequest) (*ipc.KillIngressResponse, error) {
+func (h *Handler) KillIngress(ctx context.Context, _ *ipc.KillIngressRequest) (*ipc.KillIngressResponse, error) {
 	_, span := tracer.Start(ctx, "Handler.KillIngress")
 	defer span.End()
 
@@ -226,6 +226,7 @@ func (h *Handler) KillIngress(ctx context.Context, req *ipc.KillIngressRequest) 
 	}, nil
 }
 
+//nolint:revive // TODO(milos) reduce argument count
 func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, extraParams any) (*media.Pipeline, error) {
 	ctx, span := tracer.Start(ctx, "Handler.buildPipeline")
 	defer span.End()
@@ -235,7 +236,7 @@ func (h *Handler) buildPipeline(ctx context.Context, info *livekit.IngressInfo, 
 	params, err := params.GetParams(ctx, utils.NewHandlerStateNotifier(h.ipcClient), h.conf, info, wsUrl, token, projectID, relayToken, featureFlags, loggingFields, extraParams)
 	if err == nil {
 		// create the pipeline
-		p, err = media.New(ctx, h.conf, params, h.statsGatherer)
+		p, err = media.New(ctx, params, h.statsGatherer)
 	}
 
 	if err != nil {

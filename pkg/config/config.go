@@ -31,9 +31,9 @@ import (
 )
 
 const (
-	DefaultRTMPPort      int = 1935
-	DefaultWHIPPort          = 8080
-	DefaultHTTPRelayPort     = 9090
+	DefaultRTMPPort      = 1935
+	DefaultWHIPPort      = 8080
+	DefaultHTTPRelayPort = 9090
 )
 
 var (
@@ -109,18 +109,18 @@ func NewConfig(confString string) (*Config, error) {
 
 	return conf, nil
 }
-func (conf *ServiceConfig) InitDefaults() error {
-	if conf.RTMPPort == 0 {
-		conf.RTMPPort = DefaultRTMPPort
+func (c *ServiceConfig) InitDefaults() error {
+	if c.RTMPPort == 0 {
+		c.RTMPPort = DefaultRTMPPort
 	}
-	if conf.HTTPRelayPort == 0 {
-		conf.HTTPRelayPort = DefaultHTTPRelayPort
+	if c.HTTPRelayPort == 0 {
+		c.HTTPRelayPort = DefaultHTTPRelayPort
 	}
-	if conf.WHIPPort == 0 {
-		conf.WHIPPort = DefaultWHIPPort
+	if c.WHIPPort == 0 {
+		c.WHIPPort = DefaultWHIPPort
 	}
 
-	err := conf.InitWhipConf()
+	err := c.InitWhipConf()
 	if err != nil {
 		return err
 	}
@@ -146,19 +146,15 @@ func (c *ServiceConfig) InitWhipConf() error {
 	return nil
 }
 
-func (conf *Config) Init() error {
-	conf.NodeID = utils.NewGuid("NE_")
+func (c *Config) Init() error {
+	c.NodeID = utils.NewGuid("NE_")
 
-	err := conf.InitDefaults()
+	err := c.InitDefaults()
 	if err != nil {
 		return err
 	}
 
-	if err := conf.InitLogger(); err != nil {
-		return err
-	}
-
-	return nil
+	return c.InitLogger()
 }
 
 func (c *Config) InitLogger(values ...interface{}) error {
@@ -180,7 +176,7 @@ func (c *Config) getLoggerValues() []interface{} {
 	return []interface{}{"nodeID", c.NodeID}
 }
 
-// To use with logrus
+// GetLoggerFields - to use with logrus
 func (c *Config) GetLoggerFields() logrus.Fields {
 	fields := logrus.Fields{
 		"logger": c.ServiceName,

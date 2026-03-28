@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM livekit/gstreamer:1.26.7-dev
+ARG LINT_VERSION=v2.11.3
+
+FROM livekit/gstreamer:1.26.7-dev AS builder
 
 ARG TARGETPLATFORM
 
@@ -21,21 +23,46 @@ WORKDIR /workspace
 # install deps
 RUN apt-get update && \
     apt-get install -y \
-    curl 
+    curl
 
 RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then GOARCH=arm64; else GOARCH=amd64; fi && \
     curl -L -o /tmp/go.tar.gz "https://go.dev/dl/go1.25.0.linux-$GOARCH.tar.gz"
 RUN tar -C /usr/local -xzf /tmp/go.tar.gz
 ENV PATH="$PATH:/usr/local/go/bin"
 
+ENV GOMODCACHE=/go/pkg/mod \
+    GOCACHE=/go/build-cache
+
 # download go modules
 COPY go.mod .
 COPY go.sum .
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/go/build-cache \
+    go mod download
 
 # copy source
 COPY pkg/ pkg/
 COPY version/ version/
+
+FROM golangci/golangci-lint:${LINT_VERSION} AS golangci
+
+FROM builder AS lint
+
+COPY --from=golangci /usr/bin/golangci-lint /usr/local/bin/golangci-lint
+COPY .golangci.yaml .
+
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/go/build-cache \
+    CGO_ENABLED=1 \
+    golangci-lint run \
+        --timeout=5m \
+        --modules-download-mode=mod
+RUN echo ok >/lint_ok
+
+FROM builder
+
+# Force lint stage to run successfully
+COPY --from=lint /lint_ok /__lint_ok
 
 COPY build/test/entrypoint.sh .
 ENTRYPOINT ["./entrypoint.sh"]
