@@ -19,7 +19,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/protocol/livekit"
-	"google.golang.org/protobuf/proto"
+	protoutils "github.com/livekit/protocol/utils"
 )
 
 const (
@@ -149,7 +149,7 @@ func getOptionsForVideoPreset(preset livekit.IngressVideoEncodingPreset) (*livek
 }
 
 func computeVideoLayers(highLayer *livekit.VideoLayer, layerCount int) []*livekit.VideoLayer {
-	layerCopy := proto.Clone(highLayer).(*livekit.VideoLayer)
+	layerCopy := protoutils.CloneProto(highLayer)
 	layerCopy.Quality = livekit.VideoQuality_HIGH
 
 	layers := []*livekit.VideoLayer{

@@ -92,7 +92,7 @@ func GetTmpDir(info *livekit.IngressInfo) string {
 	return path.Join(os.TempDir(), info.State.ResourceId)
 }
 
-//nolint:revive // argument-limit: refactoring signature would be a larger change
+//nolint:revive // TODO(milos): reduce argument count
 func GetParams(ctx context.Context, stateNotifier utils.StateNotifier, conf *config.Config, info *livekit.IngressInfo, wsUrl, token, projectID, relayToken string, featureFlags map[string]string, loggingFields map[string]string, ep any) (*Params, error) {
 	var err error
 
@@ -122,7 +122,7 @@ func GetParams(ctx context.Context, stateNotifier utils.StateNotifier, conf *con
 		return nil, err
 	}
 
-	infoCopy := proto.Clone(info).(*livekit.IngressInfo)
+	infoCopy := protoutils.CloneProto(info)
 
 	infoCopy.State.Status = livekit.IngressState_ENDPOINT_BUFFERING
 	if infoCopy.State.StartedAt == 0 {
@@ -237,7 +237,7 @@ func getAudioEncodingOptions(options *livekit.IngressAudioOptions) (*livekit.Ing
 }
 
 func populateAudioEncodingOptionsDefaults(options *livekit.IngressAudioEncodingOptions) (*livekit.IngressAudioEncodingOptions, error) {
-	o := proto.Clone(options).(*livekit.IngressAudioEncodingOptions)
+	o := protoutils.CloneProto(options)
 
 	// Use Opus by default
 	if o.AudioCodec == livekit.AudioCodec_DEFAULT_AC {
@@ -279,7 +279,7 @@ func getVideoEncodingOptions(options *livekit.IngressVideoOptions) (*livekit.Ing
 }
 
 func populateVideoEncodingOptionsDefaults(options *livekit.IngressVideoEncodingOptions) (*livekit.IngressVideoEncodingOptions, error) {
-	o := proto.Clone(options).(*livekit.IngressVideoEncodingOptions)
+	o := protoutils.CloneProto(options)
 
 	// Use Opus by default
 	if o.VideoCodec == livekit.VideoCodec_DEFAULT_VC {
@@ -313,7 +313,7 @@ func (p *Params) CopyInfo() *livekit.IngressInfo {
 	p.stateLock.Lock()
 	defer p.stateLock.Unlock()
 
-	info := proto.Clone(p.IngressInfo).(*livekit.IngressInfo)
+	info := protoutils.CloneProto(p.IngressInfo)
 	if info.State != nil && p.err != nil {
 		info.State.Error = p.err.Error()
 	}
@@ -437,7 +437,7 @@ func (p *Params) GetLogger() logger.Logger {
 }
 
 func CopyRedactedIngressInfo(info *livekit.IngressInfo) *livekit.IngressInfo {
-	infoCopy := proto.Clone(info).(*livekit.IngressInfo)
+	infoCopy := protoutils.CloneProto(info)
 
 	infoCopy.StreamKey = protoutils.RedactIdentifier(infoCopy.StreamKey)
 
