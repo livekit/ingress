@@ -280,16 +280,11 @@ func (s *WHIPServer) AssociateRelay(resourceId string, kind types.StreamKind, to
 	s.handlersLock.Lock()
 	h, ok := s.handlers[resourceId]
 	s.handlersLock.Unlock()
-	if ok && h != nil {
-		err := h.AssociateRelay(kind, token, w)
-		if err != nil {
-			return err
-		}
-	} else {
+	if !ok || h == nil {
 		return errors.ErrIngressNotFound
 	}
 
-	return nil
+	return h.AssociateRelay(kind, token, w)
 }
 
 func (s *WHIPServer) DissociateRelay(resourceId string, kind types.StreamKind) {
@@ -372,7 +367,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) 
 			// RPC is handled in the handler process when transcoding
 			bus = s.bus
 		}
-		h, err = NewWHIPHandler(p, s.webRTCConfig, bus)
+		h, err = newWHIPHandler(p, s.webRTCConfig, bus)
 		if err != nil {
 			return "", "", err
 		}
@@ -450,7 +445,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) 
 	return resourceId, sdpResponse, nil
 }
 
-func setCORSHeaders(w http.ResponseWriter, r *http.Request, resourceEndpoint bool) {
+func setCORSHeaders(w http.ResponseWriter, _ *http.Request, resourceEndpoint bool) {
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("Access-Control-Allow-Headers", "*")
 	if resourceEndpoint {

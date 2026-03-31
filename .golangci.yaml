@@ -1,0 +1,68 @@
+version: "2"
+run:
+  build-tags:
+    - integration
+  tests: true
+linters:
+  default: none
+  enable:
+    - asasalint
+    - dupl
+    - errname
+    - fatcontext
+    - goconst
+    - govet
+    - misspell
+    - nilerr
+    - revive
+    - staticcheck
+  settings:
+    staticcheck:
+      checks:
+        - "all"
+        - "-ST1000" # package comments — not useful for internal packages
+        - "-ST1003" # naming conventions — would break exported API
+    misspell:
+      mode: default
+      locale: US
+    revive:
+      confidence: 0.8
+      severity: warning
+      rules:
+        - name: argument-limit
+        - name: atomic
+        - name: blank-imports
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: deep-exit
+        - name: defer
+        - name: dot-imports
+        - name: early-return
+        - name: errorf
+        - name: error-strings
+        - name: if-return
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: range
+        - name: range-val-address
+        - name: receiver-naming
+        - name: superfluous-else
+        - name: unexported-return
+        - name: unused-parameter
+        - name: var-declaration
+        - name: waitgroup-by-value
+        - name: datarace
+        - name: identical-branches
+        - name: identical-switch-branches
+        - name: unconditional-recursion
+        - name: unreachable-code
+        - name: empty-block
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

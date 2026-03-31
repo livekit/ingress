@@ -17,8 +17,10 @@ package params
 import (
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
 	"github.com/livekit/protocol/livekit"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/testing/protocmp"
 )
 
 var (
@@ -47,13 +49,13 @@ var (
 func TestComputeVideoLayers(t *testing.T) {
 
 	l := computeVideoLayers(expectedDefaultLayers[0], 3)
-	require.Equal(t, expectedDefaultLayers, l)
+	require.Empty(t, cmp.Diff(expectedDefaultLayers, l, protocmp.Transform()))
 
 	expectedDefaultLayers[1].Quality = livekit.VideoQuality_LOW
 	l = computeVideoLayers(expectedDefaultLayers[0], 2)
-	require.Equal(t, expectedDefaultLayers[:2], l)
+	require.Empty(t, cmp.Diff(expectedDefaultLayers[:2], l, protocmp.Transform()))
 
 	l = computeVideoLayers(expectedDefaultLayers[0], 1)
-	require.Equal(t, expectedDefaultLayers[:1], l)
+	require.Empty(t, cmp.Diff(expectedDefaultLayers[:1], l, protocmp.Transform()))
 
 }

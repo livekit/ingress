@@ -35,7 +35,7 @@ func NewRTMPRelayHandler(rtmpServer *RTMPServer) *RTMPRelayHandler {
 }
 
 func (h *RTMPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	resourceId := strings.TrimLeft(r.URL.Path, "/rtmp/")
+	resourceId := strings.TrimPrefix(r.URL.Path, "/rtmp/")
 	token := r.URL.Query().Get("token")
 
 	log := logger.Logger(logger.GetLogger().WithValues("resourceID", resourceId))

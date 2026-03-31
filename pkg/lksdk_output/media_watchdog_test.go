@@ -32,7 +32,7 @@ func TestMediaWatchdog(t *testing.T) {
 
 }
 
-func testWatchDog(t *testing.T, mediaReceived int64) bool {
+func testWatchDog(_ *testing.T, mediaReceived int64) bool {
 	var triggered atomic.Bool
 	var done core.Fuse
 

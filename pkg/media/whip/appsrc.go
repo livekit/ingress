@@ -25,13 +25,16 @@ import (
 	"github.com/frostbyte73/core"
 	"github.com/go-gst/go-gst/gst"
 	"github.com/go-gst/go-gst/gst/app"
+	"github.com/pion/webrtc/v4"
+	"go.opentelemetry.io/otel"
+
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/tracer"
-	"github.com/pion/webrtc/v4"
 )
+
+var tracer = otel.Tracer("github.com/livekit/ingress/pkg/media/whip")
 
 type whipAppSource struct {
 	appSrc     *app.Source
@@ -49,8 +52,8 @@ type readResult struct {
 	err  error
 }
 
-func NewWHIPAppSource(ctx context.Context, resourceId string, trackKind types.StreamKind, mimeType string, relayUrl string) (*whipAppSource, error) {
-	ctx, span := tracer.Start(ctx, "WHIPRelaySource.New")
+func newWHIPAppSource(ctx context.Context, resourceId string, trackKind types.StreamKind, mimeType string, relayUrl string) (*whipAppSource, error) {
+	_, span := tracer.Start(ctx, "WHIPRelaySource.New")
 	defer span.End()
 
 	w := &whipAppSource{
@@ -83,7 +86,7 @@ func NewWHIPAppSource(ctx context.Context, resourceId string, trackKind types.St
 }
 
 func (w *whipAppSource) Start(ctx context.Context, getCorrectedTs func(time.Duration) time.Duration, onClose func()) error {
-	ctx, span := tracer.Start(ctx, "WHIPAppSource.Start")
+	_, span := tracer.Start(ctx, "WHIPAppSource.Start")
 	defer span.End()
 
 	logger.Debugw("starting WHIP app source", "resourceID", w.resourceId, "kind", w.trackKind)
@@ -171,10 +174,9 @@ func (w *whipAppSource) copyRelayedData(r io.Reader, getCorrectedTs func(time.Du
 			if w.fuse.IsBroken() {
 				// client closed the peer connection at the same time as it sent the DELETE request
 				return io.EOF
-			} else {
-				// relay stopped without a clean session shutdown
-				return io.ErrUnexpectedEOF
 			}
+			// relay stopped without a clean session shutdown
+			return io.ErrUnexpectedEOF
 		default:
 			return re.err
 		}

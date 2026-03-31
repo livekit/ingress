@@ -25,12 +25,10 @@ import (
 
 	"github.com/frostbyte73/core"
 	"google.golang.org/protobuf/types/known/emptypb"
-	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
-	"github.com/livekit/protocol/tracer"
 	"github.com/livekit/psrpc"
 
 	"github.com/livekit/ingress/pkg/errors"
@@ -208,16 +206,17 @@ func (s *ProcessManager) runHandlerTry(ctx context.Context, h *process, p *param
 		// success
 		return false, nil
 	case errors.As(err, &exitErr):
-		if exitErr.ProcessState.ExitCode() == 1 {
+		if exitErr.ExitCode() == 1 {
 			logger.Infow("relaunching handler process after retryable failure")
 			return true, err
-		} else if err.Error() == "signal: killed" {
+		}
+		if err.Error() == "signal: killed" {
 			logger.Infow("handler killed")
 			return false, err
-		} else {
-			logger.Errorw("unknown handler exit code", err)
-			return false, err
 		}
+		logger.Errorw("unknown handler exit code", err)
+		return false, err
+
 	default:
 		logger.Errorw("could not launch handler", err)
 		if s.onFatal != nil {
@@ -244,7 +243,7 @@ func (s *ProcessManager) UpdateIngressState(ctx context.Context, req *ipc.Update
 	return &emptypb.Empty{}, s.stateNotifier.UpdateIngressState(ctx, req.ProjectId, req.Info)
 }
 
-func (p *process) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
+func (p *process) UpdateIngress(ctx context.Context, _ *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
 	grpcClient := p.grpcClient.Load()
 	if grpcClient == nil {
 		return nil, errors.ErrIngressNotFound
@@ -259,7 +258,7 @@ func (p *process) UpdateIngress(ctx context.Context, req *livekit.UpdateIngressR
 	return resp.State, nil
 }
 
-func (p *process) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
+func (p *process) DeleteIngress(ctx context.Context, _ *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
 	grpcClient := p.grpcClient.Load()
 	if grpcClient == nil {
 		return nil, errors.ErrIngressNotFound
@@ -274,7 +273,7 @@ func (p *process) DeleteIngress(ctx context.Context, req *livekit.DeleteIngressR
 	return resp.State, nil
 }
 
-func (p *process) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {
+func (p *process) DeleteWHIPResource(ctx context.Context, _ *rpc.DeleteWHIPResourceRequest) (*emptypb.Empty, error) {
 	grpcClient := p.grpcClient.Load()
 	if grpcClient == nil {
 		return nil, errors.ErrIngressNotFound
@@ -286,15 +285,15 @@ func (p *process) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPRes
 		return nil, err
 	}
 
-	return &google_protobuf2.Empty{}, nil
+	return &emptypb.Empty{}, nil
 }
 
-func (p *process) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
+func (p *process) ICERestartWHIPResource(_ context.Context, _ *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
 	return &rpc.ICERestartWHIPResourceResponse{}, psrpc.NewErrorf(psrpc.UnprocessableEntity, "Trickle-ICE and ICE restart not supported")
 }
 
-func (p *process) WHIPRTCConnectionNotify(ctx context.Context, req *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
-	return &google_protobuf2.Empty{}, nil
+func (p *process) WHIPRTCConnectionNotify(_ context.Context, _ *rpc.WHIPRTCConnectionNotifyRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
 }
 
 func (p *process) GetProfileData(ctx context.Context, profileName string, timeout int32, debug int32) (b []byte, err error) {
