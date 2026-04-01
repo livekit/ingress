@@ -19,7 +19,7 @@ require (
 	github.com/livekit/protocol v1.44.1-0.20260130235027-d35d87c63fbb
 	github.com/livekit/psrpc v0.7.1
 	github.com/livekit/server-sdk-go/v2 v2.13.0
-	github.com/pion/dtls/v3 v3.0.7
+	github.com/pion/dtls/v3 v3.0.11
 	github.com/pion/interceptor v0.1.42
 	github.com/pion/rtcp v1.2.16
 	github.com/pion/rtp v1.8.25
@@ -40,6 +40,7 @@ require (
 require (
 	buf.build/go/protovalidate v1.0.1 // indirect
 	github.com/moby/sys/user v0.4.0 // indirect
+	github.com/pion/transport/v4 v4.0.1 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/metric v1.39.0 // indirect
 	go.opentelemetry.io/otel/trace v1.39.0 // indirect
