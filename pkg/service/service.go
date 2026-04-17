@@ -80,6 +80,18 @@ type Service struct {
 	shutdown core.Fuse
 }
 
+type requestParams struct {
+	streamKey     string
+	resourceID    string
+	inputType     livekit.IngressInput
+	info          *livekit.IngressInfo
+	wsURL         string
+	token         string
+	projectID     string
+	featureFlags  map[string]string
+	loggingFields map[string]string
+}
+
 func NewService(
 	conf *config.Config,
 	psrpcClient rpc.IOInfoClient,
@@ -169,7 +181,7 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 
 	p, err := s.handleRequest(ctx, requestParams{
 		streamKey:  streamKey,
-		resourceId: resourceId,
+		resourceID: resourceId,
 		inputType:  livekit.IngressInput_RTMP_INPUT,
 	})
 	if err != nil {
@@ -197,7 +209,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 
 	p, err = s.handleRequest(ctx, requestParams{
 		streamKey:  streamKey,
-		resourceId: resourceId,
+		resourceID: resourceId,
 		inputType:  livekit.IngressInput_WHIP_INPUT,
 	})
 	if err != nil {
@@ -270,11 +282,11 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 	defer span.End()
 
 	p, err := s.handleRequest(ctx, requestParams{
-		resourceId:    resourceId,
+		resourceID:    resourceId,
 		inputType:     livekit.IngressInput_URL_INPUT,
 		projectID:     projectID,
 		info:          req.Info,
-		wsUrl:         req.WsUrl,
+		wsURL:         req.WsUrl,
 		token:         req.Token,
 		featureFlags:  req.FeatureFlags,
 		loggingFields: req.LoggingFields,
@@ -289,18 +301,6 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 	}
 
 	return p.IngressInfo, nil
-}
-
-type requestParams struct {
-	streamKey     string
-	resourceId    string
-	inputType     livekit.IngressInput
-	info          *livekit.IngressInfo
-	wsUrl         string
-	token         string
-	projectID     string
-	featureFlags  map[string]string
-	loggingFields map[string]string
 }
 
 func (s *Service) handleRequest(ctx context.Context, req requestParams) (p *params.Params, err error) {
@@ -342,7 +342,7 @@ func (s *Service) handleRequest(ctx context.Context, req requestParams) (p *para
 			}
 
 			rp.info = resp.Info
-			rp.wsUrl = resp.WsUrl
+			rp.wsURL = resp.WsUrl
 			rp.token = resp.Token
 			rp.projectID = resp.ProjectId
 			rp.featureFlags = resp.FeatureFlags
@@ -388,7 +388,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, req requestParams) (*p
 	req.info.State = &livekit.IngressState{
 		Status:     livekit.IngressState_ENDPOINT_BUFFERING,
 		StartedAt:  time.Now().UnixNano(),
-		ResourceId: req.resourceId,
+		ResourceId: req.resourceID,
 	}
 
 	if req.info.Enabled != nil && !*req.info.Enabled {
@@ -399,7 +399,7 @@ func (s *Service) handleNewPublisher(ctx context.Context, req requestParams) (*p
 	conf := s.conf
 	s.confLock.Unlock()
 
-	wsUrl := req.wsUrl
+	wsUrl := req.wsURL
 	if wsUrl == "" {
 		wsUrl = conf.WsUrl
 	}
