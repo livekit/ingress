@@ -97,7 +97,7 @@ func (s *ioServer) RecordCallContext(context.Context, *rpc.RecordCallContextRequ
 	return &emptypb.Empty{}, nil
 }
 
-func getDefaultConfig() *TestConfig {
+func GetDefaultConfig() *TestConfig {
 	tc := &TestConfig{
 		Config: &config.Config{
 			ServiceConfig:  &config.ServiceConfig{},
@@ -115,7 +115,7 @@ func getDefaultConfig() *TestConfig {
 }
 
 func getConfig(t *testing.T) *TestConfig {
-	tc := getDefaultConfig()
+	tc := GetDefaultConfig()
 
 	confString := os.Getenv("INGRESS_CONFIG_BODY")
 	if confString == "" {
