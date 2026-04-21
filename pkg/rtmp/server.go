@@ -320,11 +320,10 @@ func (h *RTMPHandler) OnVideo(timestamp uint32, payload io.Reader) error {
 		h.videoInit = copyVideoTag(&video)
 	}
 
-	if h.keyFrameFound {
-		return nil
-	}
-
-	if video.FrameType == flvtag.FrameTypeKeyFrame {
+	if !h.keyFrameFound {
+		if video.FrameType != flvtag.FrameTypeKeyFrame {
+			return nil
+		}
 		h.log.Infow("key frame found")
 		h.keyFrameFound = true
 	}
