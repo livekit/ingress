@@ -120,6 +120,9 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 		}
 	}()
 
+	currentCaps := pad.GetCurrentCaps()
+	logger.Debugw("output ready", "kind", kind, "capsAlreadySet", currentCaps != nil)
+
 	_, err = pad.Connect("notify::caps", func(gPad *gst.GhostPad, _ *glib.ParamSpec) {
 		p.onParamsReady(kind, gPad)
 	})
