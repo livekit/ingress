@@ -29,7 +29,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/stretchr/testify v1.11.1
 	github.com/yutopp/go-flv v0.3.1
-	go.opentelemetry.io/otel v1.39.0
+	go.opentelemetry.io/otel v1.41.0
 	go.uber.org/atomic v1.11.0
 	golang.org/x/image v0.38.0
 	google.golang.org/grpc v1.77.0
@@ -41,8 +41,8 @@ require (
 	buf.build/go/protovalidate v1.0.1 // indirect
 	github.com/moby/sys/user v0.4.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
-	go.opentelemetry.io/otel/metric v1.39.0 // indirect
-	go.opentelemetry.io/otel/trace v1.39.0 // indirect
+	go.opentelemetry.io/otel/metric v1.41.0 // indirect
+	go.opentelemetry.io/otel/trace v1.41.0 // indirect
 	golang.org/x/mod v0.33.0 // indirect
 )
 
