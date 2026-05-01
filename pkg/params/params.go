@@ -206,7 +206,7 @@ func getLive(info *livekit.IngressInfo) bool {
 }
 
 func getLoggerFields(info *livekit.IngressInfo, loggingFields map[string]string) []interface{} {
-	fields := []interface{}{"ingressID", info.IngressId, "resourceID", info.State.ResourceId, "roomName", info.RoomName, "participantIdentity", info.ParticipantIdentity}
+	fields := []interface{}{"ingressID", info.IngressId, "resourceID", info.State.ResourceId, "room", info.RoomName, "participant", info.ParticipantIdentity}
 	for k, v := range loggingFields {
 		fields = append(fields, k, v)
 	}
