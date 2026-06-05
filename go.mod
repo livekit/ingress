@@ -5,7 +5,7 @@ go 1.26
 replace github.com/go-gst/go-gst => github.com/livekit/gst-go v0.0.0-20250701011214-e7f61abd14cb
 
 require (
-	github.com/Eyevinn/mp4ff v0.48.0
+	github.com/Eyevinn/mp4ff v0.52.0
 	github.com/aclements/go-moremath v0.0.0-20241023150245-c8bbc672ef66
 	github.com/frostbyte73/core v0.1.1
 	github.com/go-gst/go-glib v1.4.1-0.20250303082535-35ebad1471fd
@@ -14,24 +14,24 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20251031234730-75a652881771
 	github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731
-	github.com/livekit/media-sdk v0.0.0-20251126100256-e9674e0bcb9e
-	github.com/livekit/mediatransportutil v0.0.0-20251204091721-6b6e9a44e81f
-	github.com/livekit/protocol v1.46.6-0.20260604233857-6b0178b3af2a
+	github.com/livekit/media-sdk v0.0.0-20260605013844-6446472d64bc
+	github.com/livekit/mediatransportutil v0.0.0-20260605004258-044aafb7253d
+	github.com/livekit/protocol v1.46.6-0.20260605012906-a7a83da5bb55
 	github.com/livekit/psrpc v0.7.2-0.20260604225640-4bab4033deca
-	github.com/livekit/server-sdk-go/v2 v2.13.0
+	github.com/livekit/server-sdk-go/v2 v2.16.7-0.20260605014526-f4a94c0305da
 	github.com/pion/dtls/v3 v3.1.3
 	github.com/pion/interceptor v0.1.45
 	github.com/pion/rtcp v1.2.16
 	github.com/pion/rtp v1.10.2
 	github.com/pion/sdp/v3 v3.0.18
 	github.com/pion/webrtc/v4 v4.2.14
-	github.com/prometheus/client_golang v1.22.0
-	github.com/sirupsen/logrus v1.9.3
+	github.com/prometheus/client_golang v1.23.2
+	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
 	github.com/yutopp/go-flv v0.3.1
 	go.opentelemetry.io/otel v1.44.0
 	go.uber.org/atomic v1.11.0
-	golang.org/x/image v0.38.0
+	golang.org/x/image v0.41.0
 	google.golang.org/grpc v1.81.1
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
@@ -47,7 +47,6 @@ require (
 	go.opentelemetry.io/otel/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/mod v0.36.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 )
 
@@ -71,13 +70,13 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
-	github.com/hashicorp/go-multierror v1.1.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/jxskiss/base62 v1.1.0 // indirect
 	github.com/klauspost/compress v1.18.6 // indirect
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/lithammer/shortuuid/v4 v4.2.0 // indirect
-	github.com/mackerelio/go-osstat v0.2.5 // indirect
-	github.com/magefile/mage v1.15.0 // indirect
+	github.com/mackerelio/go-osstat v0.2.7 // indirect
+	github.com/magefile/mage v1.17.2 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nats-io/nats.go v1.52.0 // indirect
@@ -91,17 +90,16 @@ require (
 	github.com/pion/sctp v1.10.0 // indirect
 	github.com/pion/srtp/v3 v3.0.11 // indirect
 	github.com/pion/stun/v3 v3.1.4 // indirect
-	github.com/pion/transport/v3 v3.1.1 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
-	github.com/prometheus/common v0.64.0 // indirect
-	github.com/prometheus/procfs v0.16.1 // indirect
+	github.com/prometheus/common v0.68.1 // indirect
+	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/redis/go-redis/v9 v9.20.0 // indirect
 	github.com/twitchtv/twirp v8.1.3+incompatible // indirect
-	github.com/urfave/cli/v3 v3.3.8
+	github.com/urfave/cli/v3 v3.9.0
 	github.com/wlynxg/anet v0.0.5 // indirect
-	github.com/yutopp/go-amf0 v0.1.0 // indirect
+	github.com/yutopp/go-amf0 v0.1.1 // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.28.0 // indirect
