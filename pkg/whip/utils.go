@@ -50,7 +50,7 @@ func createJitterBuffer(
 	switch strings.ToLower(track.Codec().MimeType) {
 	case strings.ToLower(webrtc.MimeTypeH264), strings.ToLower(webrtc.MimeTypeVP8):
 		maxLatency = maxVideoLatency
-		options = append(options, jitter.WithPacketLossHandler(func() { writePLI(track.SSRC()) }))
+		options = append(options, jitter.WithPacketLossHandler(func(_, _ uint64) { writePLI(track.SSRC()) }))
 
 	case strings.ToLower(webrtc.MimeTypeOpus):
 		maxLatency = maxAudioLatency
