@@ -14,17 +14,17 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20251031234730-75a652881771
 	github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731
-	github.com/livekit/media-sdk v0.0.0-20260605013844-6446472d64bc
-	github.com/livekit/mediatransportutil v0.0.0-20260605004258-044aafb7253d
-	github.com/livekit/protocol v1.46.6-0.20260605012906-a7a83da5bb55
+	github.com/livekit/media-sdk v0.0.0-20260605182139-b8633b99de19
+	github.com/livekit/mediatransportutil v0.0.0-20260605182015-e79eb8d79819
+	github.com/livekit/protocol v1.46.6-0.20260605181725-7f0893ab5bf2
 	github.com/livekit/psrpc v0.7.2-0.20260604225640-4bab4033deca
-	github.com/livekit/server-sdk-go/v2 v2.16.7-0.20260605014526-f4a94c0305da
+	github.com/livekit/server-sdk-go/v2 v2.16.7-0.20260605183249-c47ddccc5112
 	github.com/pion/dtls/v3 v3.1.3
 	github.com/pion/interceptor v0.1.45
 	github.com/pion/rtcp v1.2.16
 	github.com/pion/rtp v1.10.2
 	github.com/pion/sdp/v3 v3.0.18
-	github.com/pion/webrtc/v4 v4.2.14
+	github.com/pion/webrtc/v4 v4.2.11
 	github.com/prometheus/client_golang v1.23.2
 	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
@@ -87,7 +87,7 @@ require (
 	github.com/pion/logging v0.2.4 // indirect
 	github.com/pion/mdns/v2 v2.1.0 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
-	github.com/pion/sctp v1.10.0 // indirect
+	github.com/pion/sctp v1.9.5 // indirect
 	github.com/pion/srtp/v3 v3.0.11 // indirect
 	github.com/pion/stun/v3 v3.1.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
