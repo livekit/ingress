@@ -203,7 +203,7 @@ func getCapsForCodec(mimeType string) (*gst.Caps, error) {
 
 	switch mt {
 	case strings.ToLower(webrtc.MimeTypeH264):
-		return gst.NewCapsFromString("video/x-h264,stream-format=byte-stream,alignment=nal"), nil
+		return gst.NewCapsFromString("video/x-h264,stream-format=byte-stream,alignment=au"), nil
 	case strings.ToLower(webrtc.MimeTypeVP8):
 		return gst.NewCapsFromString("video/x-vp8"), nil
 	case strings.ToLower(webrtc.MimeTypeOpus):
