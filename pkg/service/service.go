@@ -221,7 +221,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 		defer span.End()
 		if err != nil {
 			// Client failed to finalize session start
-			logger.Warnw("ingress failed", err)
+			logger.Warnw("ingress failed", err, "ingressID", p.IngressId, "resourceID", resourceId)
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			p.SendStateUpdate(ctx)
 
@@ -265,7 +265,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			if err == nil {
 				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, nil)
 			} else {
-				logger.Warnw("ingress failed", err)
+				logger.Warnw("ingress failed", err, "ingressID", p.IngressId, "resourceID", resourceId)
 				p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			}
 
@@ -358,7 +358,7 @@ func (s *Service) handleRequest(ctx context.Context, req requestParams) (p *para
 		if rp.inputType == livekit.IngressInput_URL_INPUT && err == nil {
 			_, err = s.psrpcClient.CreateIngress(ctx, rp.info)
 			if err != nil {
-				logger.Warnw("failed creating ingress", err)
+				logger.Warnw("failed creating ingress", err, "ingressID", rp.info.GetIngressId(), "resourceID", rp.info.GetState().GetResourceId())
 				// TODO remove this workaround once updated IOInfoService that handles CreateIngress is deployed widely
 				var psrpcErr psrpc.Error
 				if errors.As(err, &psrpcErr) && psrpcErr.Code() == psrpc.Unavailable {
