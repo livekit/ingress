@@ -718,6 +718,7 @@ func (h *whipHandler) UpdateIngress(ctx context.Context, _ *livekit.UpdateIngres
 	_, span := tracer.Start(ctx, "whipHandler.UpdateIngress")
 	defer span.End()
 
+	h.logger.Infow("whipHandler UpdateIngress")
 	h.Close()
 
 	return h.params.CopyInfo().State, nil
@@ -727,6 +728,7 @@ func (h *whipHandler) DeleteIngress(ctx context.Context, _ *livekit.DeleteIngres
 	_, span := tracer.Start(ctx, "whipHandler.DeleteIngress")
 	defer span.End()
 
+	h.logger.Infow("whipHandler DeleteIngress")
 	h.Close()
 
 	return h.params.CopyInfo().State, nil
@@ -741,6 +743,7 @@ func (h *whipHandler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHI
 		h.logger.Infow("received delete request with wrong stream key", "streamKey", req.StreamKey)
 	}
 
+	h.logger.Infow("whipHandler DeleteWHIPResource")
 	h.Close()
 
 	return &google_protobuf2.Empty{}, nil
