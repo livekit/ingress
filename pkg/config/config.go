@@ -40,6 +40,18 @@ var (
 	DefaultICEPortRange = []uint16{2000, 4000}
 )
 
+// EncoderBackend selects the video encoder implementation. GPU backends are a
+// property of the node the handler runs on, so this is configured service-side
+// rather than per-ingress.
+type EncoderBackend string
+
+const (
+	EncoderBackendAuto     EncoderBackend = "auto"     // use a hardware encoder if available, else software
+	EncoderBackendSoftware EncoderBackend = "software" // x264enc / vp8enc
+	EncoderBackendNVENC    EncoderBackend = "nvenc"    // NVIDIA NVENC (nvh264enc)
+	EncoderBackendVAAPI    EncoderBackend = "vaapi"    // VA-API (not yet implemented)
+)
+
 type Config struct {
 	*ServiceConfig  `yaml:",inline"`
 	*InternalConfig `yaml:",inline"`
@@ -70,6 +82,10 @@ type ServiceConfig struct {
 	// Experimental config
 	// Reduces ingest e2e latency by dropping excess preroll buffers
 	EnableStreamLatencyReduction bool `yaml:"enable_stream_latency_reduction"`
+
+	// Video encoder backend (node-level): auto, software, nvenc, or vaapi.
+	// "auto" uses a hardware encoder when available and falls back to software.
+	VideoEncoderBackend EncoderBackend `yaml:"video_encoder_backend"`
 }
 
 type InternalConfig struct {
@@ -118,6 +134,10 @@ func (c *ServiceConfig) InitDefaults() error {
 	}
 	if c.WHIPPort == 0 {
 		c.WHIPPort = DefaultWHIPPort
+	}
+
+	if c.VideoEncoderBackend == "" {
+		c.VideoEncoderBackend = EncoderBackendAuto
 	}
 
 	err := c.InitWhipConf()
