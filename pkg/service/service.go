@@ -104,6 +104,13 @@ func NewService(
 ) (*Service, error) {
 	monitor := stats.NewMonitor()
 
+	if rtmpSrv != nil {
+		rtmpSrv.SetMonitor(monitor)
+	}
+	if whipSrv != nil {
+		whipSrv.SetMonitor(monitor)
+	}
+
 	s := &Service{
 		conf:          conf,
 		monitor:       monitor,

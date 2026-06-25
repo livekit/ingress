@@ -27,6 +27,7 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/utils/hwstats"
+	"github.com/livekit/psrpc"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
@@ -42,9 +43,10 @@ type Monitor struct {
 	cpuCostConfig  config.CPUCostConfig
 	maxCost        float64
 
-	promCPULoad       prometheus.Gauge
-	requestGauge      *prometheus.GaugeVec
-	promNodeAvailable prometheus.GaugeFunc
+	promCPULoad            prometheus.Gauge
+	requestGauge           *prometheus.GaugeVec
+	promNodeAvailable      prometheus.GaugeFunc
+	promPublicationCounter *prometheus.CounterVec
 
 	cpuStats *hwstats.CPUStats
 
@@ -100,8 +102,14 @@ func (m *Monitor) Start(conf *config.Config) error {
 		Name:        "requests",
 		ConstLabels: prometheus.Labels{"node_id": conf.NodeID},
 	}, []string{"type", "transcoding"})
+	m.promPublicationCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Namespace:   "livekit",
+		Subsystem:   "ingress",
+		Name:        "publish_status",
+		ConstLabels: prometheus.Labels{"node_id": conf.NodeID},
+	}, []string{"type", "status"})
 
-	prometheus.MustRegister(m.promCPULoad, m.promNodeAvailable, m.requestGauge)
+	prometheus.MustRegister(m.promCPULoad, m.promNodeAvailable, m.requestGauge, m.promPublicationCounter)
 
 	m.started.Break()
 
@@ -137,6 +145,47 @@ func (m *Monitor) Stop() {
 	prometheus.Unregister(m.promCPULoad)
 	prometheus.Unregister(m.requestGauge)
 	prometheus.Unregister(m.promNodeAvailable)
+	prometheus.Unregister(m.promPublicationCounter)
+}
+
+// RecordPublicationResult records the outcome of a stream publication attempt,
+// bucketing it as success/4xx/5xx/internal. It is a no-op if the monitor has
+// not been started (e.g. in standalone test binaries).
+func (m *Monitor) RecordPublicationResult(ingressType string, err error) {
+	if m == nil || m.promPublicationCounter == nil {
+		return
+	}
+
+	m.promPublicationCounter.With(prometheus.Labels{
+		"type":   ingressType,
+		"status": publicationStatus(err),
+	}).Inc()
+}
+
+func publicationStatus(err error) string {
+	if err == nil {
+		return "success"
+	}
+
+	var psrpcErr psrpc.Error
+	if !errors.As(err, &psrpcErr) {
+		// Unstructured error, treat as an internal failure
+		return "internal"
+	}
+
+	switch psrpcErr.Code() {
+	case psrpc.Internal, psrpc.Unknown, psrpc.DataLoss:
+		return "internal"
+	}
+
+	switch code := psrpcErr.ToHttp(); {
+	case code >= 400 && code < 500:
+		return "4xx"
+	case code >= 500:
+		return "5xx"
+	default:
+		return "internal"
+	}
 }
 
 func (m *Monitor) checkCPUConfig() error {

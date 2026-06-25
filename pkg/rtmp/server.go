@@ -42,10 +42,15 @@ import (
 type RTMPServer struct {
 	server   *rtmp.Server
 	handlers sync.Map
+	monitor  *stats.Monitor
 }
 
 func NewRTMPServer() *RTMPServer {
 	return &RTMPServer{}
+}
+
+func (s *RTMPServer) SetMonitor(monitor *stats.Monitor) {
+	s.monitor = monitor
 }
 
 func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error)) error {
@@ -72,6 +77,7 @@ func (s *RTMPServer) Start(conf *config.Config, onPublish func(streamKey, resour
 			lf := l.WithFields(conf.GetLoggerFields())
 
 			h := NewRTMPHandler()
+			h.SetMonitor(s.monitor)
 			h.OnPublishCallback(func(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error) {
 				var params *params.Params
 				var stats *stats.LocalMediaStatsGatherer
@@ -158,8 +164,9 @@ type RTMPHandler struct {
 	keyFrameFound bool
 	mediaBuffer   *utils.PrerollBuffer
 
-	log    logger.Logger
-	closed core.Fuse
+	log     logger.Logger
+	closed  core.Fuse
+	monitor *stats.Monitor
 
 	onPublish func(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error)
 	onClose   func(resourceId string)
@@ -181,6 +188,10 @@ func NewRTMPHandler() *RTMPHandler {
 	return h
 }
 
+func (h *RTMPHandler) SetMonitor(monitor *stats.Monitor) {
+	h.monitor = monitor
+}
+
 func (h *RTMPHandler) OnPublishCallback(cb func(streamKey, resourceId string) (*params.Params, *stats.LocalMediaStatsGatherer, error)) {
 	h.onPublish = cb
 }
@@ -189,7 +200,11 @@ func (h *RTMPHandler) OnCloseCallback(cb func(resourceId string)) {
 	h.onClose = cb
 }
 
-func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, _ uint32, cmd *rtmpmsg.NetStreamPublish) error {
+func (h *RTMPHandler) OnPublish(_ *rtmp.StreamContext, _ uint32, cmd *rtmpmsg.NetStreamPublish) (err error) {
+	defer func() {
+		h.monitor.RecordPublicationResult("rtmp", err)
+	}()
+
 	// Reject a connection when PublishingName is empty
 	if cmd.PublishingName == "" {
 		return errors.ErrMissingStreamKey
