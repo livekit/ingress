@@ -16,7 +16,10 @@ package errors
 
 import (
 	"errors"
+	"fmt"
 	"io"
+	"net/http"
+	"strings"
 
 	"github.com/go-gst/go-gst/gst"
 	"google.golang.org/grpc/status"
@@ -73,6 +76,48 @@ func (err RetryableError) GRPCStatus() *status.Status {
 
 func (err RetryableError) Unwrap() error {
 	return err.psrpcErr
+}
+
+type HTTPError struct {
+	StatusCode int
+	err        error
+}
+
+func NewHTTPError(statusCode int, err error) *HTTPError {
+	return &HTTPError{
+		StatusCode: statusCode,
+		err:        err,
+	}
+}
+
+const maxErrorBodyLen = 200
+
+// NewHTTPErrorFromResponse builds an HTTPError from a failed HTTP response. The
+// error message is derived from the first maxErrorBodyLen characters of the
+// response body, falling back to a generic message when the body is empty.
+func NewHTTPErrorFromResponse(resp *http.Response) *HTTPError {
+	msg := "server returned an error"
+	// A UTF-8 rune is at most 4 bytes, so reading (maxErrorBodyLen+1)*4 bytes is
+	// enough to render up to maxErrorBodyLen characters and detect truncation.
+	if b, err := io.ReadAll(io.LimitReader(resp.Body, (maxErrorBodyLen+1)*4)); err == nil {
+		if body := strings.TrimSpace(string(b)); body != "" {
+			if r := []rune(body); len(r) > maxErrorBodyLen {
+				msg = string(r[:maxErrorBodyLen]) + "... (truncated)"
+			} else {
+				msg = body
+			}
+		}
+	}
+
+	return NewHTTPError(resp.StatusCode, New(msg))
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("HTTP error %d: %s", e.StatusCode, e.err.Error())
+}
+
+func (e *HTTPError) Unwrap() error {
+	return e.err
 }
 
 func New(err string) error {

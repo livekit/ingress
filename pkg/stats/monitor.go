@@ -167,6 +167,20 @@ func publicationStatus(err error) string {
 		return "success"
 	}
 
+	// Only an actual 5xx HTTP status from the upstream response is counted as a
+	// 5xx error. psrpc errors are classified as either 4xx or internal.
+	var httpErr *errors.HTTPError
+	if errors.As(err, &httpErr) {
+		switch code := httpErr.StatusCode; {
+		case code >= 400 && code < 500:
+			return "4xx"
+		case code >= 500:
+			return "5xx"
+		default:
+			return "internal"
+		}
+	}
+
 	var psrpcErr psrpc.Error
 	if !errors.As(err, &psrpcErr) {
 		// Unstructured error, treat as an internal failure
@@ -178,14 +192,11 @@ func publicationStatus(err error) string {
 		return "internal"
 	}
 
-	switch code := psrpcErr.ToHttp(); {
-	case code >= 400 && code < 500:
+	if code := psrpcErr.ToHttp(); code >= 400 && code < 500 {
 		return "4xx"
-	case code >= 500:
-		return "5xx"
-	default:
-		return "internal"
 	}
+
+	return "internal"
 }
 
 func (m *Monitor) checkCPUConfig() error {

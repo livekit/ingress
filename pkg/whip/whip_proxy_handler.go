@@ -32,6 +32,7 @@ import (
 	"github.com/livekit/psrpc"
 	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
@@ -143,7 +144,7 @@ func (h *proxyWhipHandler) Init(_ context.Context, sdpOffer string) (string, err
 
 	code := getErrorCodeForStatus(resp.StatusCode)
 	if code != psrpc.OK {
-		return "", psrpc.NewErrorf(code, "WHIP resource creation failed on SFU. code=%d", resp.StatusCode)
+		return "", psrpc.NewError(code, errors.NewHTTPErrorFromResponse(resp))
 	}
 
 	locationHeader := resp.Header.Get("Location")
@@ -232,7 +233,7 @@ func (h *proxyWhipHandler) close(isRTCClosed bool) {
 
 	code := getErrorCodeForStatus(resp.StatusCode)
 	if code != psrpc.OK {
-		err = psrpc.NewErrorf(code, "WHIP resource deletion failed on SFU. code=%d", resp.StatusCode)
+		err = psrpc.NewError(code, errors.NewHTTPErrorFromResponse(resp))
 		h.logger.Warnw("WHIP delete request returned error status code", err, "statusCode", resp.StatusCode)
 		return
 	}
@@ -314,7 +315,7 @@ func (h *proxyWhipHandler) ICERestartWHIPResource(_ context.Context, req *rpc.IC
 
 	code := getErrorCodeForStatus(resp.StatusCode)
 	if code != psrpc.OK {
-		return nil, psrpc.NewErrorf(code, "WHIP resource patch failed on SFU. code=%d", resp.StatusCode)
+		return nil, psrpc.NewError(code, errors.NewHTTPErrorFromResponse(resp))
 	}
 
 	sdpResponse, err := io.ReadAll(resp.Body)
