@@ -64,6 +64,12 @@ type WHIPServer struct {
 	handlers     map[string]WHIPHandler
 
 	getWhipProxyEnabled func(ctx context.Context, featureFlags map[string]string) bool
+
+	monitor *stats.Monitor
+}
+
+func (s *WHIPServer) SetMonitor(monitor *stats.Monitor) {
+	s.monitor = monitor
 }
 
 type WHIPHandler interface {
@@ -317,15 +323,19 @@ func (s *WHIPServer) handleError(err error, w http.ResponseWriter) {
 	}
 }
 
-func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request, streamKey string) error {
+func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request, streamKey string) (err error) {
 	// TODO return ETAG header
+
+	defer func() {
+		s.monitor.RecordPublicationResult("whip", err)
+	}()
 
 	vars := mux.Vars(r)
 	app := vars["app"]
 
 	sdpOffer := bytes.Buffer{}
 
-	_, err := io.Copy(&sdpOffer, r.Body)
+	_, err = io.Copy(&sdpOffer, r.Body)
 	if err != nil {
 		return err
 	}
