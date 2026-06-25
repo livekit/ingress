@@ -163,8 +163,15 @@ func (m *Monitor) RecordPublicationResult(ingressType string, err error) {
 }
 
 func publicationStatus(err error) string {
+	const (
+		publicationStatusSuccess  = "success"
+		publicationStatus4xx      = "4xx"
+		publicationStatus5xx      = "5xx"
+		publicationStatusInternal = "internal"
+	)
+
 	if err == nil {
-		return "success"
+		return publicationStatusSuccess
 	}
 
 	// Only an actual 5xx HTTP status from the upstream response is counted as a
@@ -173,30 +180,30 @@ func publicationStatus(err error) string {
 	if errors.As(err, &httpErr) {
 		switch code := httpErr.StatusCode; {
 		case code >= 400 && code < 500:
-			return "4xx"
+			return publicationStatus4xx
 		case code >= 500:
-			return "5xx"
+			return publicationStatus5xx
 		default:
-			return "internal"
+			return publicationStatusInternal
 		}
 	}
 
 	var psrpcErr psrpc.Error
 	if !errors.As(err, &psrpcErr) {
 		// Unstructured error, treat as an internal failure
-		return "internal"
+		return publicationStatusInternal
 	}
 
 	switch psrpcErr.Code() {
 	case psrpc.Internal, psrpc.Unknown, psrpc.DataLoss:
-		return "internal"
+		return publicationStatusInternal
 	}
 
 	if code := psrpcErr.ToHttp(); code >= 400 && code < 500 {
-		return "4xx"
+		return publicationStatus4xx
 	}
 
-	return "internal"
+	return publicationStatusInternal
 }
 
 func (m *Monitor) checkCPUConfig() error {
