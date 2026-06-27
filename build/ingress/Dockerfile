@@ -46,6 +46,14 @@ RUN if [ "$TARGETPLATFORM" = "linux/arm64" ]; then GOARCH=arm64; else GOARCH=amd
 ARG GSTVERSION
 FROM livekit/gstreamer:$GSTVERSION-prod
 
+# Enable NVIDIA hardware video encode/decode (NVENC/NVDEC) when the container is
+# run with the NVIDIA container runtime (e.g. `--gpus all`). The "video"
+# capability is required for NVENC and is NOT part of the runtime default
+# (compute,utility), so set it explicitly. These are no-ops without the NVIDIA
+# runtime, so the image still runs CPU-only elsewhere.
+ENV NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
+ENV NVIDIA_VISIBLE_DEVICES=all
+
 # install wget for health check
 RUN apt-get update && apt-get install -y wget
 
