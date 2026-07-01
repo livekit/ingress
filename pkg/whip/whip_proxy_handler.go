@@ -336,11 +336,11 @@ func (h *proxyWhipHandler) WHIPRTCConnectionNotify(_ context.Context, req *rpc.W
 	h.resetWatchDog()
 
 	if req.Video != nil {
-		h.params.SetInputVideoState(tctx, req.Video, true)
+		h.params.SetInputVideoState(tctx, req.Video, true, true)
 	}
 
 	if req.Audio != nil {
-		h.params.SetInputAudioState(tctx, req.Audio, true)
+		h.params.SetInputAudioState(tctx, req.Audio, true, true)
 	}
 
 	if req.Closed {

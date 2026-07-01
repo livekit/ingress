@@ -121,7 +121,7 @@ func (sp *SDKMediaSink) addTrack(quality livekit.VideoQuality) {
 func (sp *SDKMediaSink) ensureAudioTracksInitialized(t *SDKMediaSinkTrack) (bool, error) {
 	stereo := strings.Contains(sp.codecParameters.SDPFmtpLine, "sprop-stereo=1")
 	audioState := getAudioState(sp.codecParameters.MimeType, stereo, sp.codecParameters.ClockRate)
-	sp.params.SetInputAudioState(context.Background(), audioState, true)
+	sp.params.SetInputAudioState(context.Background(), audioState, true, false)
 
 	sp.logger.Infow("adding audio track", "stereo", stereo, "codec", sp.codecParameters.MimeType)
 	var err error
@@ -184,7 +184,7 @@ func (sp *SDKMediaSink) ensureVideoTracksInitialized(pkt *rtp.Packet, t *SDKMedi
 
 	if len(layers) != 0 {
 		videoState := getVideoState(sp.codecParameters.MimeType, uint(layers[0].Width), uint(layers[0].Height))
-		sp.params.SetInputVideoState(context.Background(), videoState, true)
+		sp.params.SetInputVideoState(context.Background(), videoState, true, false)
 	}
 
 	tracks, rtcpHandlers, err := sp.sdkOutput.AddVideoTrack(layers, sp.codecParameters.MimeType)
