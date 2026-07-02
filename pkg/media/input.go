@@ -303,6 +303,8 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 			g := i.trackStatsGatherer[kind]
 
 			if padKind == kind {
+				var lastAttached time.Time
+
 				pad.AddProbe(gst.PadProbeTypeBuffer, func(_ *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
 					buffer := info.GetBuffer()
 					if buffer == nil {
@@ -316,7 +318,10 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 
 					// mark the packet with the current time to be able to calculate packet processing latency at output stage
 					now := time.Now()
-					buffer.AddReferenceTimestampMeta(i.latencyCaps, gst.ClockTime(uint64(now.UnixNano())), gst.ClockTime(0))
+					if now.Sub(lastAttached) >= latencySampleInterval && buffer.IsWritable() {
+						buffer.AddReferenceTimestampMeta(i.latencyCaps, gst.ClockTime(uint64(now.UnixNano())), gst.ClockTime(0))
+						lastAttached = now
+					}
 
 					return gst.PadProbeOK
 				})
