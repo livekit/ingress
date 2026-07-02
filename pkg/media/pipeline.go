@@ -300,10 +300,10 @@ func (p *Pipeline) handleStreamCollectionMessage(msg *gst.Message) {
 		switch kind {
 		case types.Audio:
 			audioState := getAudioState(gstStruct)
-			p.SetInputAudioState(context.Background(), audioState, true)
+			p.SetInputAudioState(context.Background(), audioState, true, false)
 		case types.Video:
 			videoState := getVideoState(gstStruct)
-			p.SetInputVideoState(context.Background(), videoState, true)
+			p.SetInputVideoState(context.Background(), videoState, true, false)
 		}
 	}
 }

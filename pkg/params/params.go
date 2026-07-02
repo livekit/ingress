@@ -353,12 +353,11 @@ func (p *Params) SetRoomId(roomId string) {
 	p.State.RoomId = roomId
 }
 
-func (p *Params) SetInputAudioState(ctx context.Context, audioState *livekit.InputAudioState, sendUpdateIfModified bool) {
+func (p *Params) SetInputAudioState(ctx context.Context, audioState *livekit.InputAudioState, sendUpdateIfModified bool, overrideBitrate bool) {
 	p.stateLock.Lock()
 	modified := false
 
-	// Do not overwrite the bitrate
-	if audioState != nil && p.State.Audio != nil {
+	if !overrideBitrate && audioState != nil && p.State.Audio != nil {
 		audioState.AverageBitrate = p.State.Audio.AverageBitrate
 	}
 
@@ -373,12 +372,11 @@ func (p *Params) SetInputAudioState(ctx context.Context, audioState *livekit.Inp
 	}
 }
 
-func (p *Params) SetInputVideoState(ctx context.Context, videoState *livekit.InputVideoState, sendUpdateIfModified bool) {
+func (p *Params) SetInputVideoState(ctx context.Context, videoState *livekit.InputVideoState, sendUpdateIfModified bool, overrideBitrate bool) {
 	p.stateLock.Lock()
 	modified := false
 
-	// Do not overwrite the bitrate
-	if videoState != nil && p.State.Video != nil {
+	if !overrideBitrate && videoState != nil && p.State.Video != nil {
 		videoState.AverageBitrate = p.State.Video.AverageBitrate
 	}
 
