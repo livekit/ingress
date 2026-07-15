@@ -17,6 +17,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"os/exec"
 
 	"google.golang.org/protobuf/encoding/protojson"
@@ -69,35 +70,20 @@ func NewCmd(_ context.Context, p *params.Params) (*exec.Cmd, error) {
 		loggingFields = string(b)
 	}
 
-	args := []string{
-		"run-handler",
-		"--config-body", string(confString),
-		"--info", string(infoString),
-		"--project-id", p.ProjectID,
-		"--relay-token", p.RelayToken,
-	}
-
-	if p.WsUrl != "" {
-		args = append(args, "--ws-url", p.WsUrl)
-	}
-	if p.Token != "" {
-		args = append(args, "--token", p.Token)
-	}
-	if extraParamsString != "" {
-		args = append(args, "--extra-params", extraParamsString)
-	}
-	if featureFlags != "" {
-		args = append(args, "--feature-flags", featureFlags)
-	}
-	if loggingFields != "" {
-		args = append(args, "--logging-fields", loggingFields)
-	}
-
-	cmd := exec.Command("ingress",
-		args...,
+	cmd := exec.Command("ingress", "run-handler")
+	cmd.Dir = "/"
+	cmd.Env = append(os.Environ(),
+		"INGRESS_HANDLER_CONFIG_BODY="+string(confString),
+		"INGRESS_HANDLER_INFO="+string(infoString),
+		"INGRESS_HANDLER_PROJECT_ID="+p.ProjectID,
+		"INGRESS_HANDLER_RELAY_TOKEN="+p.RelayToken,
+		"INGRESS_HANDLER_WS_URL="+p.WsUrl,
+		"INGRESS_HANDLER_TOKEN="+p.Token,
+		"INGRESS_HANDLER_EXTRA_PARAMS="+extraParamsString,
+		"INGRESS_HANDLER_FEATURE_FLAGS="+featureFlags,
+		"INGRESS_HANDLER_LOGGING_FIELDS="+loggingFields,
 	)
 
-	cmd.Dir = "/"
 	l := utils.NewHandlerLogger(p.State.ResourceId, p.IngressId)
 	cmd.Stdout = l
 	cmd.Stderr = l

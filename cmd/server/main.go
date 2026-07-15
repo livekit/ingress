@@ -58,31 +58,40 @@ func main() {
 				Description: "runs a request in a new process",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
-						Name: "info",
+						Name:    "info",
+						Sources: cli.EnvVars("INGRESS_HANDLER_INFO"),
 					},
 					&cli.StringFlag{
-						Name: "config-body",
+						Name:    "config-body",
+						Sources: cli.EnvVars("INGRESS_HANDLER_CONFIG_BODY"),
 					},
 					&cli.StringFlag{
-						Name: "token",
+						Name:    "token",
+						Sources: cli.EnvVars("INGRESS_HANDLER_TOKEN"),
 					},
 					&cli.StringFlag{
-						Name: "project-id",
+						Name:    "project-id",
+						Sources: cli.EnvVars("INGRESS_HANDLER_PROJECT_ID"),
 					},
 					&cli.StringFlag{
-						Name: "relay-token",
+						Name:    "relay-token",
+						Sources: cli.EnvVars("INGRESS_HANDLER_RELAY_TOKEN"),
 					},
 					&cli.StringFlag{
-						Name: "ws-url",
+						Name:    "ws-url",
+						Sources: cli.EnvVars("INGRESS_HANDLER_WS_URL"),
 					},
 					&cli.StringFlag{
-						Name: "feature-flags",
+						Name:    "feature-flags",
+						Sources: cli.EnvVars("INGRESS_HANDLER_FEATURE_FLAGS"),
 					},
 					&cli.StringFlag{
-						Name: "logging-fields",
+						Name:    "logging-fields",
+						Sources: cli.EnvVars("INGRESS_HANDLER_LOGGING_FIELDS"),
 					},
 					&cli.StringFlag{
-						Name: "extra-params",
+						Name:    "extra-params",
+						Sources: cli.EnvVars("INGRESS_HANDLER_EXTRA_PARAMS"),
 					},
 				},
 				Action: runHandler,
