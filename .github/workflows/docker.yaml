@@ -22,6 +22,9 @@ on:
     tags:
       - 'v*.*.*'
 
+permissions:
+  contents: read
+
 env:
   GOVERSION: "1.25.0"
   GSTVERSION: "1.26.7"
