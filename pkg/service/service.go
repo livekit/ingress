@@ -288,6 +288,16 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 	ctx, span := tracer.Start(ctx, "Service.HandleURLPublishRequest")
 	defer span.End()
 
+	// Dedup a retried create: the ingress id is derived from the client request
+	// id, so if it already exists a prior attempt already launched this pull —
+	// return it instead of pulling twice.
+	if req.Info.GetIngressId() != "" {
+		if existing, err := s.psrpcClient.GetIngressInfo(ctx, &rpc.GetIngressInfoRequest{IngressId: req.Info.IngressId}); err == nil && existing.GetInfo() != nil {
+			logger.Infow("ingress already exists for request, skipping duplicate pull", "ingressID", req.Info.IngressId)
+			return existing.Info, nil
+		}
+	}
+
 	p, err := s.handleRequest(ctx, requestParams{
 		resourceID:    resourceId,
 		inputType:     livekit.IngressInput_URL_INPUT,
