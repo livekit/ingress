@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/frostbyte73/core"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/livekit/protocol/livekit"
@@ -44,12 +45,14 @@ const (
 type process struct {
 	sessionCloser
 
-	params     *params.Params
-	retryCount int
-	cmd        *exec.Cmd
-	grpcClient atomic.Pointer[ipc.IngressHandlerClient]
-	rpcServer  rpc.IngressHandlerServer
-	closed     core.Fuse
+	params           *params.Params
+	retryCount       int
+	cmd              *exec.Cmd
+	grpcClient       atomic.Pointer[ipc.IngressHandlerClient]
+	ipcHandlerClient *ipc.IngressHandlerClientWrapper
+	ipcServiceServer *grpc.Server
+	rpcServer        rpc.IngressHandlerServer
+	closed           core.Fuse
 }
 
 type ProcessManager struct {
@@ -110,29 +113,62 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 		},
 	}
 
-	rpcServer, err := rpc.NewIngressHandlerServer(h, s.bus)
+	if p.TmpDir != "" {
+		err := os.MkdirAll(p.TmpDir, 0755)
+		if err != nil {
+			logger.Errorw("failed creating handler temp directory", err, "path", p.TmpDir)
+			return err
+		}
+	}
+
+	// on any startup failure below, remove the temp directory and the sockets
+	// it contains; on success runHandler owns the cleanup
+	started := false
+	defer func() {
+		if !started && p.TmpDir != "" {
+			os.RemoveAll(p.TmpDir)
+		}
+	}()
+
+	// create the IPC endpoints before advertising the RPC topics so that
+	// requests dispatched during handler startup can always resolve a client
+	ipcServiceServer, err := ipc.StartServiceServer(p.TmpDir, s)
 	if err != nil {
 		return err
 	}
+	h.ipcServiceServer = ipcServiceServer
 
-	utils.RegisterIngressRpcHandlers(rpcServer, p.IngressInfo)
-	s.sm.IngressStarted(p.IngressInfo, h)
+	ipcHandlerClient, err := ipc.GetHandlerClient(p.TmpDir)
+	if err != nil {
+		ipcServiceServer.Stop()
+		return err
+	}
+	h.ipcHandlerClient = ipcHandlerClient
+	h.grpcClient.Store(&ipcHandlerClient.IngressHandlerClient)
 
+	rpcServer, err := rpc.NewIngressHandlerServer(h, s.bus)
+	if err != nil {
+		ipcHandlerClient.Close()
+		ipcServiceServer.Stop()
+		return err
+	}
 	h.rpcServer = rpcServer
+
+	if err := utils.RegisterIngressRpcHandlers(rpcServer, p.IngressInfo); err != nil {
+		utils.DeregisterIngressRpcHandlers(rpcServer, p.IngressInfo)
+		ipcHandlerClient.Close()
+		ipcServiceServer.Stop()
+		return err
+	}
+
+	s.sm.IngressStarted(p.IngressInfo, h)
 
 	s.mu.Lock()
 	s.activeHandlers[p.State.ResourceId] = h
 	s.mu.Unlock()
 
-	if p.TmpDir != "" {
-		err := os.MkdirAll(p.TmpDir, 0755)
-		if err != nil {
-			logger.Errorw("failed creating halder temp directory", err, "path", p.TmpDir)
-			return err
-		}
-	}
-
 	go s.runHandler(ctx, h, p)
+	started = true
 
 	return nil
 }
@@ -141,25 +177,17 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 	_, span := tracer.Start(ctx, "Service.runHandler")
 	defer span.End()
 
-	grpcServer, err := ipc.StartServiceServer(p.TmpDir, s)
-	if err != nil {
-		span.RecordError(err)
-		logger.Errorw("could start grpc service", err)
-
-		return
-	}
-
 	defer func() {
 		h.closed.Break()
 		s.sm.IngressEnded(h.params.State.ResourceId)
 
-		grpcServer.Stop()
+		utils.DeregisterIngressRpcHandlers(h.rpcServer, p.IngressInfo)
+		h.ipcHandlerClient.Close()
+		h.ipcServiceServer.Stop()
 
 		if p.TmpDir != "" {
 			os.RemoveAll(p.TmpDir)
 		}
-
-		utils.DeregisterIngressRpcHandlers(h.rpcServer, p.IngressInfo)
 
 		s.mu.Lock()
 		delete(s.activeHandlers, h.params.State.ResourceId)
@@ -178,18 +206,6 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 func (s *ProcessManager) runHandlerTry(ctx context.Context, h *process, p *params.Params) (bool, error) {
 	_, span := tracer.Start(ctx, "Service.runHandlerTry")
 	defer span.End()
-
-	var err error
-	grpcClient, err := ipc.GetHandlerClient(h.params.TmpDir)
-	if err != nil {
-		span.RecordError(err)
-		logger.Errorw("could not dial grpc handler", err)
-		return false, err
-
-	}
-	defer grpcClient.Close()
-
-	h.grpcClient.Store(&grpcClient.IngressHandlerClient)
 
 	cmd, err := s.newCmd(ctx, p)
 	if err != nil {
@@ -249,7 +265,7 @@ func (p *process) UpdateIngress(ctx context.Context, _ *livekit.UpdateIngressReq
 		return nil, errors.ErrIngressNotFound
 	}
 
-	resp, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{})
+	resp, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{}, grpc.WaitForReady(true))
 
 	if err != nil {
 		return nil, err
@@ -264,7 +280,7 @@ func (p *process) DeleteIngress(ctx context.Context, _ *livekit.DeleteIngressReq
 		return nil, errors.ErrIngressNotFound
 	}
 
-	resp, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{})
+	resp, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{}, grpc.WaitForReady(true))
 
 	if err != nil {
 		return nil, err
@@ -279,7 +295,7 @@ func (p *process) DeleteWHIPResource(ctx context.Context, _ *rpc.DeleteWHIPResou
 		return nil, errors.ErrIngressNotFound
 	}
 
-	_, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{})
+	_, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{}, grpc.WaitForReady(true))
 
 	if err != nil {
 		return nil, err

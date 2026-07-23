@@ -96,7 +96,10 @@ func (ihc *IngressHandlerClientWrapper) Close() error {
 }
 
 func StartHandlerServer(tmpDir string, h IngressHandlerServer) error {
-	listener, err := net.Listen(network, getHandlerSocketAddress(tmpDir))
+	socketAddr := getHandlerSocketAddress(tmpDir)
+	os.Remove(socketAddr)
+
+	listener, err := net.Listen(network, socketAddr)
 	if err != nil {
 		return err
 	}
