@@ -190,8 +190,10 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 
 	sortedLayers := filterAndSortLayersByQuality(s.params.VideoEncodingOptions.Layers, w, h)
 
+	backend := resolveVideoEncoderBackend(s.params.VideoEncoderBackend, s.params.VideoEncodingOptions.VideoCodec, logger.GetLogger())
+
 	for _, layer := range sortedLayers {
-		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, layer, s.outputSync.AddTrack(), s.isPlayingTooSlow, s.statsGatherer, s.eos)
+		output, err := NewVideoOutput(s.params.VideoEncodingOptions.VideoCodec, backend, layer, s.outputSync.AddTrack(), s.isPlayingTooSlow, s.statsGatherer, s.eos)
 		if err != nil {
 			return nil, err
 		}

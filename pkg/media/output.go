@@ -17,6 +17,7 @@ package media
 import (
 	"fmt"
 	"io"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"github.com/go-gst/go-gst/gst/app"
 	"github.com/pion/webrtc/v4/pkg/media"
 
+	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/stats"
@@ -86,7 +88,7 @@ type AudioOutput struct {
 	codec livekit.AudioCodec
 }
 
-func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, statsGatherer *stats.LocalMediaStatsGatherer, eos *eosDispatcher) (*VideoOutput, error) {
+func NewVideoOutput(codec livekit.VideoCodec, backend config.EncoderBackend, layer *livekit.VideoLayer, outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, statsGatherer *stats.LocalMediaStatsGatherer, eos *eosDispatcher) (*VideoOutput, error) {
 	log := logger.GetLogger().WithValues("kind", "video", "layer", layer.Quality.String())
 	e, err := newVideoOutput(codec, outputSync, isPlayingTooSlow, eos, log)
 	if err != nil {
@@ -157,42 +159,13 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 
 	switch codec {
 	case livekit.VideoCodec_H264_BASELINE:
-		e.enc, err = gst.NewElement("x264enc")
+		var profileCaps *gst.Element
+		e.enc, profileCaps, err = createH264Encoder(backend, layer, threadCount, e.logger)
 		if err != nil {
-			return nil, err
-		}
-
-		if err = e.enc.SetProperty("bitrate", uint(layer.Bitrate/1000)); err != nil {
-			return nil, err
-		}
-		// 1s VBV buffer size
-		if err = e.enc.SetProperty("vbv-buf-capacity", uint(1000)); err != nil {
-			return nil, err
-		}
-		if err = e.enc.SetProperty("byte-stream", true); err != nil {
-			return nil, err
-		}
-		if err = e.enc.SetProperty("threads", threadCount); err != nil {
-			return nil, err
-		}
-
-		e.enc.SetArg("tune", "zerolatency")
-		e.enc.SetArg("speed-preset", "veryfast")
-
-		profileCaps, err := gst.NewElement("capsfilter")
-		if err != nil {
-			return nil, err
-		}
-		if err = profileCaps.SetProperty("caps", gst.NewCapsFromString(
-			"video/x-h264,stream-format=byte-stream,profile=baseline",
-		)); err != nil {
 			return nil, err
 		}
 
 		e.elements = append(e.elements, e.enc, profileCaps)
-		if err != nil {
-			return nil, err
-		}
 
 	case livekit.VideoCodec_VP8:
 		e.enc, err = gst.NewElement("vp8enc")
@@ -640,6 +613,125 @@ func getVideoEncoderThreadCount(layer *livekit.VideoLayer) uint {
 	threadCount := (int64(layer.Width)*int64(layer.Height) + int64(pixelsPerEncoderThread-1)) / int64(pixelsPerEncoderThread)
 
 	return uint(threadCount)
+}
+
+var (
+	nvh264EncOnce      sync.Once
+	nvh264EncAvailable bool
+)
+
+// nvh264EncoderAvailable reports whether the GStreamer nvh264enc (NVENC) element
+// can be instantiated in this process. Probed once and cached.
+func nvh264EncoderAvailable() bool {
+	nvh264EncOnce.Do(func() {
+		e, err := gst.NewElement("nvh264enc")
+		nvh264EncAvailable = err == nil && e != nil
+	})
+	return nvh264EncAvailable
+}
+
+// resolveVideoEncoderBackend maps the configured (possibly "auto") backend to a
+// concrete one for the given codec, probing for hardware availability and
+// falling back to software encoding when a hardware encoder is unavailable or
+// unsupported for the codec. Only H264 currently has a hardware path.
+func resolveVideoEncoderBackend(configured config.EncoderBackend, codec livekit.VideoCodec, log logger.Logger) config.EncoderBackend {
+	resolved := config.EncoderBackendSoftware
+
+	switch {
+	case codec != livekit.VideoCodec_H264_BASELINE:
+		// VP8 (and others) have no NVENC/VAAPI path here yet.
+	case configured == config.EncoderBackendSoftware:
+		// explicit software
+	case configured == config.EncoderBackendNVENC:
+		if nvh264EncoderAvailable() {
+			resolved = config.EncoderBackendNVENC
+		} else {
+			log.Warnw("nvenc video encoder requested but nvh264enc is unavailable, falling back to software", nil)
+		}
+	case configured == config.EncoderBackendVAAPI:
+		log.Warnw("vaapi video encoder backend is not implemented yet, falling back to software", nil)
+	case configured == config.EncoderBackendAuto, configured == "":
+		if nvh264EncoderAvailable() {
+			resolved = config.EncoderBackendNVENC
+		}
+	default:
+		log.Warnw("unknown video encoder backend, using software", nil, "backend", string(configured))
+	}
+
+	log.Infow("resolved video encoder backend",
+		"configured", string(configured), "resolved", string(resolved), "codec", codec.String())
+
+	return resolved
+}
+
+// createH264Encoder builds the H264 encoder element and its output profile
+// capsfilter for the selected backend.
+//
+// NOTE: NVENC property and enum names vary across nvcodec plugin versions. The
+// tuning knobs below are applied best-effort and logged at debug if rejected;
+// verify them against `gst-inspect-1.0 nvh264enc` on the target build. The
+// baseline profile capsfilter is the backstop that keeps B-frames out of the
+// stream (required for WebRTC) even if a "bframes=0" property does not apply.
+func createH264Encoder(backend config.EncoderBackend, layer *livekit.VideoLayer, threadCount uint, log logger.Logger) (*gst.Element, *gst.Element, error) {
+	profileCaps, err := gst.NewElement("capsfilter")
+	if err != nil {
+		return nil, nil, err
+	}
+	if err = profileCaps.SetProperty("caps", gst.NewCapsFromString(
+		"video/x-h264,stream-format=byte-stream,profile=baseline",
+	)); err != nil {
+		return nil, nil, err
+	}
+
+	switch backend {
+	case config.EncoderBackendNVENC:
+		enc, err := gst.NewElement("nvh264enc")
+		if err != nil {
+			return nil, nil, err
+		}
+		// bitrate is in kbit/s, matching the x264enc path.
+		if err = enc.SetProperty("bitrate", uint(layer.Bitrate/1000)); err != nil {
+			return nil, nil, err
+		}
+		// Low-latency CBR, no B-frames, no reordering delay, for WebRTC. Property
+		// and enum names verified against nvh264enc in GStreamer 1.26 (NVENC
+		// "GstNvEncoder"). bframes already defaults to 0; set it explicitly.
+		setEncoderPropBestEffort(enc, "bframes", uint(0), log)
+		setEncoderPropBestEffort(enc, "zerolatency", true, log)
+		setEncoderPropBestEffort(enc, "aud", false, log)
+		enc.SetArg("rc-mode", "cbr")
+		enc.SetArg("preset", "low-latency-hq")
+		enc.SetArg("tune", "ultra-low-latency")
+		return enc, profileCaps, nil
+
+	default: // software x264
+		enc, err := gst.NewElement("x264enc")
+		if err != nil {
+			return nil, nil, err
+		}
+		if err = enc.SetProperty("bitrate", uint(layer.Bitrate/1000)); err != nil {
+			return nil, nil, err
+		}
+		// 1s VBV buffer size
+		if err = enc.SetProperty("vbv-buf-capacity", uint(1000)); err != nil {
+			return nil, nil, err
+		}
+		if err = enc.SetProperty("byte-stream", true); err != nil {
+			return nil, nil, err
+		}
+		if err = enc.SetProperty("threads", threadCount); err != nil {
+			return nil, nil, err
+		}
+		enc.SetArg("tune", "zerolatency")
+		enc.SetArg("speed-preset", "veryfast")
+		return enc, profileCaps, nil
+	}
+}
+
+func setEncoderPropBestEffort(enc *gst.Element, name string, value interface{}, log logger.Logger) {
+	if err := enc.SetProperty(name, value); err != nil {
+		log.Debugw("optional encoder property not applied", "property", name, "error", err)
+	}
 }
 
 func (e *Output) observeLatency(buffer *gst.Buffer) {
