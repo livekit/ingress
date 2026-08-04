@@ -24,7 +24,6 @@ permissions:
   contents: read
 
 env:
-  GOVERSION: "1.25.0"
   GSTVERSION: "1.26.7"
 
 jobs:
@@ -36,4 +35,4 @@ jobs:
           lfs: true
 
       - name: Build docker image
-        run: docker build -t ingress -f ./build/ingress/Dockerfile --build-arg GOVERSION=$GOVERSION --build-arg GSTVERSION=$GSTVERSION .
+        run: docker build -t ingress -f ./build/ingress/Dockerfile --build-arg GSTVERSION=$GSTVERSION --build-arg SECURITY_REFRESH=${{ github.run_id }}-${{ github.run_attempt }} .

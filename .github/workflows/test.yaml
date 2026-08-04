@@ -32,7 +32,8 @@ jobs:
         run: |
           docker build \
             -t ingress-test \
-            -f ./build/test/Dockerfile .
+            -f ./build/test/Dockerfile \
+            --build-arg SECURITY_REFRESH=${{ github.run_id }}-${{ github.run_attempt }} .
 
       - name: Run tests
         run: |
