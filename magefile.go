@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/livekit/mageutil"
 )
@@ -34,7 +35,6 @@ var Default = Build
 const (
 	imageName  = "livekit/ingress"
 	gstVersion = "1.26.7"
-	goVersion  = "1.25.0"
 )
 
 var plugins = []string{"gstreamer", "gst-plugins-base", "gst-plugins-good", "gst-plugins-bad", "gst-plugins-ugly", "gst-libav"}
@@ -120,18 +120,28 @@ func Lint() error {
 }
 
 func BuildDocker() error {
+	// Use the current day (not a per-second timestamp) so the security refresh
+	// build arg is stable within a day and Docker layer caching avoids fetching
+	// updates on every local build.
+	securityRefresh := time.Now().UTC().Format("20060102")
+
 	return mageutil.Run(context.Background(),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-dev", gstVersion),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-prod", gstVersion),
-		fmt.Sprintf("docker build --no-cache -t %s:latest -f build/ingress/Dockerfile --build-arg GSTVERSION=%s --build-arg GOVERSION=%s .", imageName, gstVersion, goVersion),
+		fmt.Sprintf("docker build --no-cache -t %s:latest -f build/ingress/Dockerfile --build-arg GSTVERSION=%s --build-arg SECURITY_REFRESH=%s .", imageName, gstVersion, securityRefresh),
 	)
 }
 
 func BuildDockerLinux() error {
+	// Use the current day (not a per-second timestamp) so the security refresh
+	// build arg is stable within a day and Docker layer caching avoids fetching
+	// updates on every local build.
+	securityRefresh := time.Now().UTC().Format("20060102")
+
 	return mageutil.Run(context.Background(),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-dev", gstVersion),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-prod", gstVersion),
-		fmt.Sprintf("docker build --no-cache --platform linux/amd64 -t %s:latest -f build/ingress/Dockerfile --build-arg GSTVERSION=%s --build-arg GOVERSION=%s .", imageName, gstVersion, goVersion),
+		fmt.Sprintf("docker build --no-cache --platform linux/amd64 -t %s:latest -f build/ingress/Dockerfile --build-arg GSTVERSION=%s --build-arg SECURITY_REFRESH=%s .", imageName, gstVersion, securityRefresh),
 	)
 }
 
