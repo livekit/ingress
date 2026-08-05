@@ -5,11 +5,11 @@ go 1.26
 replace github.com/go-gst/go-gst => github.com/livekit/gst-go v0.0.0-20250701011214-e7f61abd14cb
 
 require (
-	github.com/Eyevinn/mp4ff v0.52.0
+	github.com/Eyevinn/mp4ff v0.54.0
 	github.com/aclements/go-moremath v0.0.0-20241023150245-c8bbc672ef66
 	github.com/frostbyte73/core v0.1.1
-	github.com/go-gst/go-glib v1.4.1-0.20250303082535-35ebad1471fd
-	github.com/go-gst/go-gst v1.4.0
+	github.com/go-gst/go-glib v1.4.1
+	github.com/go-gst/go-gst v1.4.1
 	github.com/google/go-cmp v0.7.0
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20251031234730-75a652881771
@@ -19,19 +19,19 @@ require (
 	github.com/livekit/protocol v1.50.0
 	github.com/livekit/psrpc v0.7.2
 	github.com/livekit/server-sdk-go/v2 v2.18.1
-	github.com/pion/dtls/v3 v3.1.4
-	github.com/pion/interceptor v0.1.45
-	github.com/pion/rtcp v1.2.16
-	github.com/pion/rtp v1.10.2
+	github.com/pion/dtls/v3 v3.1.5
+	github.com/pion/interceptor v0.1.46
+	github.com/pion/rtcp v1.2.17
+	github.com/pion/rtp v1.10.5
 	github.com/pion/sdp/v3 v3.0.19
-	github.com/pion/webrtc/v4 v4.2.15
-	github.com/prometheus/client_golang v1.23.2
+	github.com/pion/webrtc/v4 v4.2.17
+	github.com/prometheus/client_golang v1.24.0
 	github.com/sirupsen/logrus v1.9.4
 	github.com/stretchr/testify v1.11.1
 	github.com/yutopp/go-flv v0.3.1
 	go.opentelemetry.io/otel v1.44.0
 	go.uber.org/atomic v1.11.0
-	golang.org/x/image v0.43.0
+	golang.org/x/image v0.44.0
 	google.golang.org/grpc v1.82.1
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
@@ -97,7 +97,7 @@ require (
 	github.com/prometheus/procfs v0.20.1 // indirect
 	github.com/redis/go-redis/v9 v9.20.0 // indirect
 	github.com/twitchtv/twirp v8.1.3+incompatible // indirect
-	github.com/urfave/cli/v3 v3.10.0
+	github.com/urfave/cli/v3 v3.10.1
 	github.com/wlynxg/anet v0.0.5 // indirect
 	github.com/yutopp/go-amf0 v0.1.1 // indirect
 	github.com/zeebo/xxh3 v1.1.0 // indirect
