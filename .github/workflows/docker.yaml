@@ -26,7 +26,6 @@ permissions:
   contents: read
 
 env:
-  GOVERSION: "1.25.0"
   GSTVERSION: "1.26.7"
 
 jobs:
@@ -34,16 +33,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/go/bin
-            ~/bin/protoc
-            ~/.cache
-          key: ${{ runner.os }}-ingress-${{ hashFiles('**/go.sum') }}
-          restore-keys: ${{ runner.os }}-ingress
 
       - name: Docker metadata
         id: docker-md
@@ -54,14 +43,6 @@ jobs:
           tags: |
             type=semver,pattern=v{{version}}
             type=semver,pattern=v{{major}}.{{minor}}
-
-      - name: Set up Go
-        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
-        with:
-          go-version: "1.25"
-
-      - name: Download Go modules
-        run: go mod download
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
@@ -85,5 +66,5 @@ jobs:
           tags: ${{ steps.docker-md.outputs.tags }}
           labels: ${{ steps.docker-md.outputs.labels }}
           build-args: |
-            GOVERSION=${{ env.GOVERSION }}
             GSTVERSION=${{ env.GSTVERSION }}
+            SECURITY_REFRESH=${{ github.run_id }}-${{ github.run_attempt }}
