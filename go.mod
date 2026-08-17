@@ -5,7 +5,7 @@ go 1.26
 replace github.com/go-gst/go-gst => github.com/livekit/gst-go v0.0.0-20250701011214-e7f61abd14cb
 
 require (
-	github.com/Eyevinn/mp4ff v0.52.0
+	github.com/Eyevinn/mp4ff v0.55.0
 	github.com/aclements/go-moremath v0.0.0-20241023150245-c8bbc672ef66
 	github.com/frostbyte73/core v0.1.1
 	github.com/go-gst/go-glib v1.4.1-0.20250303082535-35ebad1471fd
