@@ -17,6 +17,7 @@ package media
 import (
 	"context"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -56,6 +57,11 @@ type Pipeline struct {
 	pipelineErr chan error
 
 	eos *eosDispatcher
+
+	trackLock sync.Mutex
+
+	// The caps each stream kind's output was built from.
+	established map[types.StreamKind]string
 }
 
 func New(ctx context.Context, params *params.Params, g *stats.LocalMediaStatsGatherer) (*Pipeline, error) {
@@ -88,6 +94,7 @@ func New(ctx context.Context, params *params.Params, g *stats.LocalMediaStatsGat
 		input:       input,
 		pipelineErr: make(chan error, 1),
 		eos:         newEOSDispatcher(),
+		established: make(map[types.StreamKind]string),
 	}
 
 	input.SetOnEOS(p.eos.Fire)
@@ -137,6 +144,24 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 		return
 	}
 
+	newCaps := caps.(*gst.Caps)
+
+	// The audio and video pads notify on separate GStreamer streaming threads,
+	// so this map is shared mutable state and every access takes the lock.
+	p.trackLock.Lock()
+	builtCaps, built := p.established[kind]
+	p.trackLock.Unlock()
+
+	if built {
+		// Rebuilding is not an option -- it adds a second output of the same name
+		// and cannot restructure a published track -- so the session continues on
+		// the output it has. Caps the pipeline genuinely cannot take fail
+		// negotiation downstream and surface on the bus.
+		logger.Warnw("caps renegotiated after the output was built, continuing on the existing output", nil,
+			"kind", kind, "establishedCaps", builtCaps, "newCaps", newCaps.String())
+		return
+	}
+
 	defer func() {
 		if err != nil {
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
@@ -149,7 +174,7 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 		p.SendStateUpdate(context.Background())
 	}()
 
-	bin, err := p.sink.AddTrack(kind, caps.(*gst.Caps))
+	bin, err := p.sink.AddTrack(kind, newCaps)
 	if err != nil {
 		return
 	}
@@ -158,6 +183,10 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 		logger.Errorw("could not add bin", err)
 		return
 	}
+
+	p.trackLock.Lock()
+	p.established[kind] = newCaps.String()
+	p.trackLock.Unlock()
 
 	gPad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, _ *gst.PadProbeInfo) gst.PadProbeReturn {
 		// link
