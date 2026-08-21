@@ -158,7 +158,7 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 		// the output it has. Caps the pipeline genuinely cannot take fail
 		// negotiation downstream and surface on the bus.
 		logger.Warnw("caps renegotiated after the output was built, continuing on the existing output", nil,
-			"kind", kind, "established caps", builtCaps, "new caps", newCaps.String())
+			"kind", kind, "establishedCaps", builtCaps, "newCaps", newCaps.String())
 		return
 	}
 

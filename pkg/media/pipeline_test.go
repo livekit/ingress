@@ -23,40 +23,19 @@ import (
 	"github.com/livekit/ingress/pkg/types"
 )
 
-const testNegotiatedCaps = "video/x-raw,format=NV12,width=1280,height=720,framerate=30/1"
+const testSystemMemoryCaps = "video/x-raw,format=NV12,width=1280,height=720,framerate=30/1"
 
-// newNegotiatedGhostPad returns a ghost pad shaped like the one Input surfaces:
-// a bin sink pad in the data path, so the pad carries real negotiated caps and
-// its "caps" property is set the way onParamsReady expects.
-func newNegotiatedGhostPad(t *testing.T, capsStr string) *gst.GhostPad {
+// newCapsHoldingGhostPad returns a src ghost pad carrying capsStr, the shape
+// Input surfaces. A pad's caps property is its sticky CAPS event, and an
+// inactive pad is flushing, so the pad is activated before the event is stored.
+func newCapsHoldingGhostPad(t *testing.T, capsStr string) *gst.GhostPad {
 	t.Helper()
 
-	pipeline, err := gst.NewPipeline("test negotiation pipeline")
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = pipeline.SetState(gst.StateNull)
-	})
-
-	src, err := gst.NewElement("videotestsrc")
-	require.NoError(t, err)
-	capsFilter, err := gst.NewElement("capsfilter")
-	require.NoError(t, err)
-	require.NoError(t, capsFilter.SetProperty("caps", gst.NewCapsFromString(capsStr)))
-	fakeSink, err := gst.NewElement("fakesink")
-	require.NoError(t, err)
-
-	bin := gst.NewBin("test output bin")
-	require.NoError(t, bin.Add(fakeSink))
-	ghost := gst.NewGhostPad("video", fakeSink.GetStaticPad("sink"))
-	require.True(t, bin.AddPad(ghost.Pad))
-
-	require.NoError(t, pipeline.AddMany(src, capsFilter, bin.Element))
-	require.NoError(t, gst.ElementLinkMany(src, capsFilter, bin.Element))
-
-	require.NoError(t, pipeline.SetState(gst.StatePaused))
-	ret, _ := pipeline.GetState(gst.StatePaused, gst.ClockTimeNone)
-	require.NotEqual(t, gst.StateChangeFailure, ret)
-	require.NotNil(t, ghost.GetCurrentCaps(), "ghost pad did not negotiate")
+	ghost := gst.NewGhostPadNoTarget("video", gst.PadDirectionSource)
+	require.True(t, ghost.SetActive(true))
+	require.Equal(t, gst.FlowOK,
+		ghost.StoreStickyEvent(gst.NewCapsEvent(gst.NewCapsFromString(capsStr))))
+	require.NotNil(t, ghost.GetCurrentCaps())
 
 	return ghost
 }
@@ -71,13 +50,13 @@ func newNegotiatedGhostPad(t *testing.T, capsStr string) *gst.GhostPad {
 func TestSecondCapsNotificationDoesNotRebuild(t *testing.T) {
 	gst.Init(nil)
 
-	const builtCaps = "video/x-raw(memory:GLMemory),format=NV12,width=1280,height=720"
+	const builtCaps = "video/x-raw(memory:GLMemory),format=NV12,width=1280,height=720,texture-target=rectangle"
 
 	p := &Pipeline{
 		established: map[types.StreamKind]string{types.Video: builtCaps},
 	}
 
-	p.onParamsReady(types.Video, newNegotiatedGhostPad(t, testNegotiatedCaps))
+	p.onParamsReady(types.Video, newCapsHoldingGhostPad(t, testSystemMemoryCaps))
 
 	require.Equal(t, builtCaps, p.established[types.Video],
 		"the established caps must survive a renegotiation")
@@ -93,7 +72,7 @@ func TestCapsNotificationWithoutCapsIsIgnored(t *testing.T) {
 		established: make(map[types.StreamKind]string),
 	}
 
-	p.onParamsReady(types.Video, gst.NewGhostPadNoTarget("video", gst.PadDirectionSink))
+	p.onParamsReady(types.Video, gst.NewGhostPadNoTarget("video", gst.PadDirectionSource))
 
 	require.Empty(t, p.established)
 }
