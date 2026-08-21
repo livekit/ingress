@@ -38,6 +38,9 @@ func newTestVideoSinkPad(t *testing.T, width, height int) *gst.Pad {
 	t.Helper()
 
 	bin := gst.NewBin("test video output bin")
+	t.Cleanup(func() {
+		_ = bin.SetState(gst.StateNull)
+	})
 
 	convert, err := gst.NewElement("videoconvert")
 	require.NoError(t, err)

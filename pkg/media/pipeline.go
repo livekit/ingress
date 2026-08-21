@@ -166,14 +166,15 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 		// the output it has. Caps that fail validation are surfaced; anything
 		// else, including a resolution change, is logged and tolerated.
 		if capsErr := est.validateCaps(kind, newCaps); capsErr != nil {
-			logger.Errorw("renegotiated caps rejected by established output", capsErr, "kind", kind, "caps", newCaps.String())
+			logger.Errorw("renegotiated caps rejected by established output", capsErr,
+				"kind", kind, "established caps", est.builtCaps, "new caps", newCaps.String())
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, capsErr)
 			p.SendStateUpdate(context.Background())
 			return
 		}
 
 		logger.Warnw("caps renegotiated after the output was built, continuing on the existing output", nil,
-			"kind", kind, "from", est.builtCaps, "to", newCaps.String())
+			"kind", kind, "established caps", est.builtCaps, "new caps", newCaps.String())
 		return
 	}
 
