@@ -17,6 +17,7 @@ package media
 import (
 	"context"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -56,6 +57,19 @@ type Pipeline struct {
 	pipelineErr chan error
 
 	eos *eosDispatcher
+
+	trackLock sync.Mutex
+
+	established map[types.StreamKind]*establishedOutput
+}
+
+// establishedOutput is the output already built for a stream kind.
+type establishedOutput struct {
+	sinkPad *gst.Pad
+
+	// The caps the output was built from, kept as a string so that a later
+	// renegotiation can be logged against it without holding a caps reference.
+	builtCaps string
 }
 
 func New(ctx context.Context, params *params.Params, g *stats.LocalMediaStatsGatherer) (*Pipeline, error) {
@@ -88,6 +102,7 @@ func New(ctx context.Context, params *params.Params, g *stats.LocalMediaStatsGat
 		input:       input,
 		pipelineErr: make(chan error, 1),
 		eos:         newEOSDispatcher(),
+		established: make(map[types.StreamKind]*establishedOutput),
 	}
 
 	input.SetOnEOS(p.eos.Fire)
@@ -137,6 +152,31 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 		return
 	}
 
+	newCaps := caps.(*gst.Caps)
+
+	// The audio and video pads notify on separate GStreamer streaming threads,
+	// so this map is shared mutable state and every access takes the lock.
+	p.trackLock.Lock()
+	est := p.established[kind]
+	p.trackLock.Unlock()
+
+	if est != nil {
+		// Rebuilding is not an option -- it adds a second output of the same name
+		// and cannot restructure a published track -- so the session continues on
+		// the output it has. Caps that fail validation are surfaced; anything
+		// else, including a resolution change, is logged and tolerated.
+		if capsErr := est.validateCaps(kind, newCaps); capsErr != nil {
+			logger.Errorw("renegotiated caps rejected by established output", capsErr, "kind", kind, "caps", newCaps.String())
+			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, capsErr)
+			p.SendStateUpdate(context.Background())
+			return
+		}
+
+		logger.Warnw("caps renegotiated after the output was built, continuing on the existing output", nil,
+			"kind", kind, "from", est.builtCaps, "to", newCaps.String())
+		return
+	}
+
 	defer func() {
 		if err != nil {
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
@@ -149,7 +189,7 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 		p.SendStateUpdate(context.Background())
 	}()
 
-	bin, err := p.sink.AddTrack(kind, caps.(*gst.Caps))
+	bin, err := p.sink.AddTrack(kind, newCaps)
 	if err != nil {
 		return
 	}
@@ -158,6 +198,13 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 		logger.Errorw("could not add bin", err)
 		return
 	}
+
+	p.trackLock.Lock()
+	p.established[kind] = &establishedOutput{
+		sinkPad:   bin.GetStaticPad("sink"),
+		builtCaps: newCaps.String(),
+	}
+	p.trackLock.Unlock()
 
 	gPad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, _ *gst.PadProbeInfo) gst.PadProbeReturn {
 		// link
@@ -455,4 +502,15 @@ func getVideoState(gstStruct *gst.Structure) *livekit.InputVideoState {
 	}
 
 	return videoState
+}
+
+// validateCaps returns an error if the established output cannot take newCaps,
+// or nil if data would flow.
+func (e *establishedOutput) validateCaps(kind types.StreamKind, newCaps *gst.Caps) error {
+	if e.sinkPad != nil && !e.sinkPad.QueryAcceptCaps(newCaps) {
+		return psrpc.NewErrorf(psrpc.InvalidArgument,
+			"%s output does not accept renegotiated caps: %s", kind, newCaps.String())
+	}
+
+	return nil
 }
