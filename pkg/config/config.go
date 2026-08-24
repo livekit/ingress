@@ -59,7 +59,8 @@ type ServiceConfig struct {
 	HTTPRelayPort    int           `yaml:"http_relay_port"`
 	Logging          logger.Config `yaml:"logging"`
 	Development      bool          `yaml:"development"`
-	WHIPProxyEnabled bool          `yaml:"whip_proxy_enabled"` // If true, WHIP requests with transcoding bypassed will be handled by the SFU directly
+	WHIPProxyEnabled bool          `yaml:"whip_proxy_enabled"`         // If true, WHIP requests with transcoding bypassed will be handled by the SFU directly
+	PSRPCSkipClaim   bool          `yaml:"psrpc_skip_claim,omitempty"` // Lets psrpc servers skip the claim handshake on queue rpcs
 
 	// Used for WHIP transport
 	RTCConfig rtcconfig.RTCConfig `yaml:"rtc_config"`
@@ -109,6 +110,12 @@ func NewConfig(confString string) (*Config, error) {
 
 	return conf, nil
 }
+
+// SkipClaimEnabled gates psrpc.WithServerSkipClaim on the ingress rpc servers.
+func (c *ServiceConfig) SkipClaimEnabled() bool {
+	return c.PSRPCSkipClaim
+}
+
 func (c *ServiceConfig) InitDefaults() error {
 	if c.RTMPPort == 0 {
 		c.RTMPPort = DefaultRTMPPort

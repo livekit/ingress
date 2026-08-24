@@ -115,7 +115,7 @@ func newWHIPHandler(p *params.Params, webRTCConfig *rtcconfig.WebRTCConfig, bus 
 
 	var err error
 	if bus != nil {
-		h.rpcServer, err = rpc.NewIngressHandlerServer(h, bus)
+		h.rpcServer, err = rpc.NewIngressHandlerServer(h, bus, psrpc.WithServerSkipClaim(p.SkipClaimEnabled))
 		if err != nil {
 			return nil, err
 		}
