@@ -66,7 +66,7 @@ func NewProxyWHIPHandler(p *params.Params, bus psrpc.MessageBus, ua string) (WHI
 		ua:     ua,
 	}
 
-	rpcServer, err := rpc.NewIngressHandlerServer(h, bus)
+	rpcServer, err := rpc.NewIngressHandlerServer(h, bus, psrpc.WithServerSkipClaim(p.SkipClaimEnabled))
 	if err != nil {
 		return nil, err
 	}

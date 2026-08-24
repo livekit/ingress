@@ -146,7 +146,7 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 	h.ipcHandlerClient = ipcHandlerClient
 	h.grpcClient.Store(&ipcHandlerClient.IngressHandlerClient)
 
-	rpcServer, err := rpc.NewIngressHandlerServer(h, s.bus)
+	rpcServer, err := rpc.NewIngressHandlerServer(h, s.bus, psrpc.WithServerSkipClaim(p.SkipClaimEnabled))
 	if err != nil {
 		ipcHandlerClient.Close()
 		ipcServiceServer.Stop()
