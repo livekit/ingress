@@ -199,6 +199,7 @@ func (s *WHIPServer) Start(
 
 		logger.Infow("handling ICE Restart request", "resourceID", resourceID)
 		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Expose-Headers", "ETag")
 
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
@@ -353,7 +354,7 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 		return err
 	}
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Expose-Headers", "Location, Link")
+	w.Header().Set("Access-Control-Expose-Headers", "Location, Link, ETag")
 	w.Header().Set("Content-Type", "application/sdp")
 	w.Header().Set("Location", fmt.Sprintf("/%s/%s/%s", app, streamKey, resourceId))
 	etag := res.ETag
@@ -476,6 +477,6 @@ func setCORSHeaders(w http.ResponseWriter, _ *http.Request, resourceEndpoint boo
 	} else {
 		w.Header().Set("Accept-Post", "application/sdp")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Expose-Headers", "Location, Link")
+		w.Header().Set("Access-Control-Expose-Headers", "Location, Link, ETag")
 	}
 }
