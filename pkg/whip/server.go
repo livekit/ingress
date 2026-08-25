@@ -72,8 +72,14 @@ func (s *WHIPServer) SetMonitor(monitor *stats.Monitor) {
 	s.monitor = monitor
 }
 
+type WHIPInitResponse struct {
+	SDPAnswer   string
+	LinkHeaders []string
+	ETag        string
+}
+
 type WHIPHandler interface {
-	Init(ctx context.Context, sdpOffer string) (string, error)
+	Init(ctx context.Context, sdpOffer string) (*WHIPInitResponse, error)
 	SetMediaStatsGatherer(st *stats.LocalMediaStatsGatherer)
 	Start(ctx context.Context) (map[types.StreamKind]string, error)
 	WaitForSessionEnd(ctx context.Context) error
@@ -342,22 +348,29 @@ func (s *WHIPServer) handleNewWhipClient(w http.ResponseWriter, r *http.Request,
 
 	logger.Debugw("new whip request", "streamKey", streamKey, "sdpOffer", sdpOffer.String(), "userAgent", r.Header.Get("User-Agent"))
 
-	resourceId, sdp, err := s.createStream(streamKey, sdpOffer.String(), r.Header.Get("User-Agent"))
+	resourceId, res, err := s.createStream(streamKey, sdpOffer.String(), r.Header.Get("User-Agent"))
 	if err != nil {
 		return err
 	}
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	w.Header().Set("Access-Control-Expose-Headers", "Location")
+	w.Header().Set("Access-Control-Expose-Headers", "Location, Link")
 	w.Header().Set("Content-Type", "application/sdp")
 	w.Header().Set("Location", fmt.Sprintf("/%s/%s/%s", app, streamKey, resourceId))
-	w.Header().Set("ETag", fmt.Sprintf("%08x", crc32.ChecksumIEEE(sdpOffer.Bytes())))
+	etag := res.ETag
+	if etag == "" {
+		etag = fmt.Sprintf("%08x", crc32.ChecksumIEEE(sdpOffer.Bytes()))
+	}
+	w.Header().Set("ETag", etag)
+	for _, l := range res.LinkHeaders {
+		w.Header().Add("Link", l)
+	}
 	w.WriteHeader(http.StatusCreated)
-	_, _ = w.Write([]byte(sdp))
+	_, _ = w.Write([]byte(res.SDPAnswer))
 
 	return nil
 }
 
-func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) (string, string, error) {
+func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) (string, *WHIPInitResponse, error) {
 	ctx, done := context.WithTimeout(s.ctx, sdpResponseTimeout)
 	defer done()
 
@@ -365,7 +378,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) 
 
 	p, ready, ended, err := s.onPublish(streamKey, resourceId)
 	if err != nil {
-		return "", "", err
+		return "", nil, err
 	}
 
 	var h WHIPHandler
@@ -379,13 +392,13 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) 
 		}
 		h, err = newWHIPHandler(p, s.webRTCConfig, bus)
 		if err != nil {
-			return "", "", err
+			return "", nil, err
 		}
 	} else {
 		logger.Infow("Using proxied WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
 		h, err = NewProxyWHIPHandler(p, s.bus, ua)
 		if err != nil {
-			return "", "", err
+			return "", nil, err
 		}
 	}
 
@@ -394,7 +407,7 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) 
 		ready(nil, err)
 
 		h.Close()
-		return "", "", err
+		return "", nil, err
 	}
 
 	go func() {
@@ -463,6 +476,6 @@ func setCORSHeaders(w http.ResponseWriter, _ *http.Request, resourceEndpoint boo
 	} else {
 		w.Header().Set("Accept-Post", "application/sdp")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-		w.Header().Set("Access-Control-Expose-Headers", "Location")
+		w.Header().Set("Access-Control-Expose-Headers", "Location, Link")
 	}
 }

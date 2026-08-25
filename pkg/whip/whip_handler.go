@@ -128,7 +128,7 @@ func newWHIPHandler(p *params.Params, webRTCConfig *rtcconfig.WebRTCConfig, bus 
 	return h, nil
 }
 
-func (h *whipHandler) Init(ctx context.Context, sdpOffer string) (string, error) {
+func (h *whipHandler) Init(ctx context.Context, sdpOffer string) (*WHIPInitResponse, error) {
 	var err error
 
 	h.updateSettings()
@@ -140,18 +140,18 @@ func (h *whipHandler) Init(ctx context.Context, sdpOffer string) (string, error)
 
 	h.expectedTrackCount, err = h.validateOfferAndGetExpectedTrackCount(offer)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	if *h.params.EnableTranscoding && len(h.simulcastLayers) != 0 {
-		return "", errors.ErrSimulcastTranscode
+		return nil, errors.ErrSimulcastTranscode
 	}
 
 	h.trackAddedChan = make(chan *webrtc.TrackRemote, h.expectedTrackCount)
 
 	m, err := newMediaEngine()
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Create a InterceptorRegistry. This is the user configurable RTP/RTCP Pipeline.
@@ -163,7 +163,7 @@ func (h *whipHandler) Init(ctx context.Context, sdpOffer string) (string, error)
 	if *h.params.EnableTranscoding {
 		// Use the default set of Interceptors
 		if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
-			return "", err
+			return nil, err
 		}
 	}
 
@@ -171,7 +171,7 @@ func (h *whipHandler) Init(ctx context.Context, sdpOffer string) (string, error)
 	api := webrtc.NewAPI(webrtc.WithMediaEngine(m), webrtc.WithSettingEngine(h.rtcConfig.SettingEngine), webrtc.WithInterceptorRegistry(i))
 	h.pc, err = h.createPeerConnection(api)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer func() {
 		if err != nil {
@@ -181,10 +181,10 @@ func (h *whipHandler) Init(ctx context.Context, sdpOffer string) (string, error)
 
 	sdpAnswer, err := h.getSDPAnswer(ctx, offer)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return sdpAnswer, nil
+	return &WHIPInitResponse{SDPAnswer: sdpAnswer}, nil
 }
 
 func (h *whipHandler) Start(ctx context.Context) (map[types.StreamKind]string, error) {

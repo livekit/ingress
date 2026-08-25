@@ -98,7 +98,7 @@ func getErrorCodeForStatus(statusCode int) psrpc.ErrorCode {
 	}
 }
 
-func (h *proxyWhipHandler) Init(_ context.Context, sdpOffer string) (string, error) {
+func (h *proxyWhipHandler) Init(_ context.Context, sdpOffer string) (*WHIPInitResponse, error) {
 	protocol := "http"
 	urlBase := ""
 	switch {
@@ -114,17 +114,17 @@ func (h *proxyWhipHandler) Init(_ context.Context, sdpOffer string) (string, err
 		urlBase = strings.TrimPrefix(h.params.WsUrl, "http://")
 
 	default:
-		return "", psrpc.NewErrorf(psrpc.InvalidArgument, "Invalid wsURL")
+		return nil, psrpc.NewErrorf(psrpc.InvalidArgument, "Invalid wsURL")
 	}
 
 	urlObj, err := url.Parse(fmt.Sprintf("%s://%s/whip/v1", protocol, urlBase))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	req, err := http.NewRequest("POST", urlObj.String(), bytes.NewReader([]byte(sdpOffer)))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	req.Header.Add("Authorization", fmt.Sprintf("Bearer %s", h.params.Token))
@@ -136,7 +136,7 @@ func (h *proxyWhipHandler) Init(_ context.Context, sdpOffer string) (string, err
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -144,17 +144,17 @@ func (h *proxyWhipHandler) Init(_ context.Context, sdpOffer string) (string, err
 
 	code := getErrorCodeForStatus(resp.StatusCode)
 	if code != psrpc.OK {
-		return "", psrpc.NewError(code, errors.NewHTTPErrorFromResponse(resp))
+		return nil, psrpc.NewError(code, errors.NewHTTPErrorFromResponse(resp))
 	}
 
 	locationHeader := resp.Header.Get("Location")
 	if locationHeader == "" {
-		return "", psrpc.NewErrorf(psrpc.MalformedResponse, "Missing Location header in SFU WHIP response")
+		return nil, psrpc.NewErrorf(psrpc.MalformedResponse, "Missing Location header in SFU WHIP response")
 	}
 
 	locationHeaderUrl, err := url.Parse(locationHeader)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	location := urlObj.ResolveReference(locationHeaderUrl)
@@ -163,16 +163,20 @@ func (h *proxyWhipHandler) Init(_ context.Context, sdpOffer string) (string, err
 	h.participantID = location.Path[strings.LastIndex(location.Path, "/")+1:]
 	if h.participantID != "" {
 		if err = h.rpcServer.RegisterWHIPRTCConnectionNotifyTopic(h.participantID); err != nil {
-			return "", err
+			return nil, err
 		}
 	}
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	return string(b), nil
+	return &WHIPInitResponse{
+		SDPAnswer:   string(b),
+		LinkHeaders: resp.Header.Values("Link"),
+		ETag:        resp.Header.Get("ETag"),
+	}, nil
 }
 
 func (h *proxyWhipHandler) SetMediaStatsGatherer(_ *stats.LocalMediaStatsGatherer) {
