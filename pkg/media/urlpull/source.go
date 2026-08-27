@@ -103,14 +103,7 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 			}
 		}
 
-		printStats = func() {
-			str, _ := elem.GetProperty("stats")
-			if str != nil {
-				if v, ok := str.(*gst.Structure); ok {
-					logger.Infow("UDP input stats", "stats", v.String())
-				}
-			}
-		}
+		// udpsrc doesn't expose a stats property, so leave printStats unset
 	} else {
 		return nil, errors.ErrUnsupportedURLFormat
 	}
