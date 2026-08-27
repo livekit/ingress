@@ -22,9 +22,10 @@ import (
 	"github.com/frostbyte73/core"
 	"github.com/go-gst/go-gst/gst"
 
+	"github.com/livekit/protocol/logger"
+
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/params"
-	"github.com/livekit/protocol/logger"
 )
 
 var (
@@ -82,6 +83,31 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 			if str != nil {
 				if v, ok := str.(*gst.Structure); ok {
 					logger.Infow("SRT input stats", "stats", v.String())
+				}
+			}
+		}
+	} else if p.Config.EnableUDPURLPull && strings.HasPrefix(p.Url, "udp://") {
+		elem, err = gst.NewElement("udpsrc")
+		if err != nil {
+			return nil, err
+		}
+		err = elem.SetProperty("uri", p.Url)
+		if err != nil {
+			return nil, err
+		}
+
+		if p.Config.MulticastInterface != "" {
+			err = elem.SetProperty("multicast-iface", p.Config.MulticastInterface)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		printStats = func() {
+			str, _ := elem.GetProperty("stats")
+			if str != nil {
+				if v, ok := str.(*gst.Structure); ok {
+					logger.Infow("UDP input stats", "stats", v.String())
 				}
 			}
 		}

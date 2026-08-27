@@ -61,6 +61,9 @@ type ServiceConfig struct {
 	Logging          logger.Config `yaml:"logging"`
 	Development      bool          `yaml:"development"`
 	PSRPCSkipClaim   bool          `yaml:"psrpc_skip_claim,omitempty"` // Lets psrpc servers skip the claim handshake on queue rpcs
+	EnableUDPURLPull bool          `yaml:"enable_udp_url_pull,omitempty"`
+	// Network interface to join multicast groups on for UDP url pull. Empty means let the OS decide.
+	MulticastInterface string `yaml:"multicast_interface,omitempty"`
 
 	// Used for WHIP transport
 	RTCConfig rtcconfig.RTCConfig `yaml:"rtc_config"`
