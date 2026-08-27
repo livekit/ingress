@@ -89,33 +89,3 @@ func extractICEDetails(in []byte) (ufrag string, pwd string, err error) {
 
 	return
 }
-
-func replaceICEDetails(in, ufrag, pwd string) (string, error) {
-	var parsed sdp.SessionDescription
-	replaceAttributes := func(attributes []sdp.Attribute) {
-		for i := range attributes {
-			switch attributes[i].Key {
-			case "ice-ufrag":
-				attributes[i].Value = ufrag
-			case "ice-pwd":
-				attributes[i].Value = pwd
-			}
-		}
-	}
-
-	if err := parsed.UnmarshalString(in); err != nil {
-		return "", err
-	}
-
-	replaceAttributes(parsed.Attributes)
-	for _, m := range parsed.MediaDescriptions {
-		replaceAttributes(m.Attributes)
-	}
-
-	newRemoteDescription, err := parsed.Marshal()
-	if err != nil {
-		return "", err
-	}
-
-	return string(newRemoteDescription), nil
-}

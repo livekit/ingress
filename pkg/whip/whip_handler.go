@@ -15,10 +15,7 @@
 package whip
 
 import (
-	"bufio"
 	"context"
-	"fmt"
-	"hash/crc32"
 	"io"
 	"strings"
 	"sync"
@@ -29,25 +26,20 @@ import (
 	"github.com/pion/rtcp"
 	"github.com/pion/sdp/v3"
 	"github.com/pion/webrtc/v4"
-	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
 	"go.opentelemetry.io/otel"
 
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
-	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/logger/pionlogger"
-	"github.com/livekit/protocol/rpc"
 	putils "github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 	"github.com/livekit/server-sdk-go/v2/pkg/synchronizer"
 
 	"github.com/livekit/ingress/pkg/errors"
-	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/ingress/pkg/utils"
 )
 
 const (
@@ -73,15 +65,9 @@ type WhipTrackHandler interface {
 	SetMediaTrackStatsGatherer(g *stats.LocalMediaStatsGatherer)
 }
 
-type WhipTrackDescription struct {
-	Kind    types.StreamKind
-	Quality livekit.VideoQuality
-}
-
 type whipHandler struct {
-	logger    logger.Logger
-	params    *params.Params
-	rpcServer rpc.IngressHandlerServer
+	logger logger.Logger
+	params *params.Params
 
 	rtcConfig          *rtcconfig.WebRTCConfig
 	pc                 *webrtc.PeerConnection
@@ -92,40 +78,23 @@ type whipHandler struct {
 
 	trackLock       sync.Mutex
 	simulcastLayers []string
-	tracks          []*webrtc.TrackRemote
-	trackHandlers   map[WhipTrackDescription]WhipTrackHandler
+	trackHandlers   map[types.StreamKind]WhipTrackHandler
 	trackAddedChan  chan *webrtc.TrackRemote
-
-	trackSDKMediaSinkLock sync.Mutex
-	trackSDKMediaSink     map[types.StreamKind]*SDKMediaSink
 }
 
-func newWHIPHandler(p *params.Params, webRTCConfig *rtcconfig.WebRTCConfig, bus psrpc.MessageBus) (*whipHandler, error) {
+func newWHIPHandler(p *params.Params, webRTCConfig *rtcconfig.WebRTCConfig) *whipHandler {
 	// Copy the rtc conf to allow modifying to to match the request
 	rtcConfCopy := *webRTCConfig
 
 	h := &whipHandler{
-		rtcConfig:         &rtcConfCopy,
-		params:            p,
-		logger:            p.GetLogger(),
-		sync:              synchronizer.NewSynchronizer(nil),
-		trackHandlers:     make(map[WhipTrackDescription]WhipTrackHandler),
-		trackSDKMediaSink: make(map[types.StreamKind]*SDKMediaSink),
+		rtcConfig:     &rtcConfCopy,
+		params:        p,
+		logger:        p.GetLogger(),
+		sync:          synchronizer.NewSynchronizer(nil),
+		trackHandlers: make(map[types.StreamKind]WhipTrackHandler),
 	}
 
-	var err error
-	if bus != nil {
-		h.rpcServer, err = rpc.NewIngressHandlerServer(h, bus, psrpc.WithServerSkipClaim(p.SkipClaimEnabled))
-		if err != nil {
-			return nil, err
-		}
-		err = utils.RegisterIngressRpcHandlers(h.rpcServer, p.IngressInfo)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	return h, nil
+	return h
 }
 
 func (h *whipHandler) Init(ctx context.Context, sdpOffer string) (string, error) {
@@ -143,7 +112,7 @@ func (h *whipHandler) Init(ctx context.Context, sdpOffer string) (string, error)
 		return "", err
 	}
 
-	if *h.params.EnableTranscoding && len(h.simulcastLayers) != 0 {
+	if len(h.simulcastLayers) != 0 {
 		return "", errors.ErrSimulcastTranscode
 	}
 
@@ -160,11 +129,9 @@ func (h *whipHandler) Init(ctx context.Context, sdpOffer string) (string, error)
 	// for each PeerConnection.
 	i := &interceptor.Registry{}
 
-	if *h.params.EnableTranscoding {
-		// Use the default set of Interceptors
-		if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
-			return "", err
-		}
+	// Use the default set of Interceptors
+	if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
+		return "", err
 	}
 
 	// Create the API object with the MediaEngine
@@ -223,9 +190,6 @@ func (h *whipHandler) SetMediaStatsGatherer(st *stats.LocalMediaStatsGatherer) {
 }
 
 func (h *whipHandler) Close() {
-	if h.rpcServer != nil {
-		utils.DeregisterIngressRpcHandlers(h.rpcServer, h.params.IngressInfo)
-	}
 	if h.pc != nil {
 		h.pc.Close()
 	}
@@ -260,7 +224,7 @@ func (h *whipHandler) AssociateRelay(kind types.StreamKind, token string, w io.W
 		return errors.ErrInvalidRelayToken
 	}
 
-	t, ok := h.trackHandlers[WhipTrackDescription{Kind: kind, Quality: livekit.VideoQuality_HIGH}]
+	t, ok := h.trackHandlers[kind]
 	if !ok {
 		h.logger.Errorw("track handler not found", nil)
 		return errors.ErrIngressNotFound
@@ -284,7 +248,7 @@ func (h *whipHandler) DissociateRelay(kind types.StreamKind) {
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
 
-	t, ok := h.trackHandlers[WhipTrackDescription{Kind: kind, Quality: livekit.VideoQuality_HIGH}]
+	t, ok := h.trackHandlers[kind]
 	if !ok {
 		return
 	}
@@ -412,24 +376,6 @@ func (h *whipHandler) getSDPAnswer(ctx context.Context, offer *webrtc.SessionDes
 	return sdpAnswer, nil
 }
 
-func (h *whipHandler) getTrackQuality(track *webrtc.TrackRemote) livekit.VideoQuality {
-	trackQuality := livekit.VideoQuality_HIGH
-	if track.RID() != "" {
-		for i, expectedRid := range h.simulcastLayers {
-			if expectedRid == track.RID() {
-				switch i {
-				case 1:
-					trackQuality = livekit.VideoQuality_MEDIUM
-				case 2:
-					trackQuality = livekit.VideoQuality_LOW
-				}
-			}
-		}
-	}
-
-	return trackQuality
-}
-
 func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPReceiver) {
 	kind := streamKindFromCodecType(track.Kind())
 	logger := h.logger.WithValues("trackID", track.ID(), "kind", kind)
@@ -438,61 +384,24 @@ func (h *whipHandler) addTrack(track *webrtc.TrackRemote, receiver *webrtc.RTPRe
 
 	h.trackLock.Lock()
 	defer h.trackLock.Unlock()
-	h.tracks = append(h.tracks, track)
-
-	trackQuality := h.getTrackQuality(track)
 
 	var th WhipTrackHandler
 	var err error
-	if !*h.params.EnableTranscoding {
-		th, err = NewSDKWhipTrackHandler(logger, track, trackQuality, receiver, h.writePLI, h.writeRTCPUpstream)
-		if err != nil {
-			logger.Warnw("failed creating SDK whip track handler", err)
-			return
-		}
-	} else {
-		sync := h.sync.AddTrack(track, whipIdentity)
 
-		th, err = NewRelayWhipTrackHandler(logger, track, trackQuality, sync, receiver, h.writePLI, h.sync.OnRTCP)
-		if err != nil {
-			logger.Warnw("failed creating relay whip track handler", err)
-			return
-		}
+	sync := h.sync.AddTrack(track, whipIdentity)
+
+	th, err = NewRelayWhipTrackHandler(logger, track, sync, receiver, h.writePLI, h.sync.OnRTCP)
+	if err != nil {
+		logger.Warnw("failed creating relay whip track handler", err)
+		return
 	}
-	h.trackHandlers[WhipTrackDescription{Kind: kind, Quality: trackQuality}] = th
+	h.trackHandlers[kind] = th
 
 	select {
 	case h.trackAddedChan <- track:
 	default:
 		logger.Warnw("failed notifying of new track", errors.New("channel full"))
 	}
-}
-
-func (h *whipHandler) getSDKTrackMediaSink(sdkOutput *lksdk_output.LKSDKOutput, track *webrtc.TrackRemote, trackQuality livekit.VideoQuality) (*SDKMediaSinkTrack, error) {
-	kind := streamKindFromCodecType(track.Kind())
-
-	h.trackSDKMediaSinkLock.Lock()
-	defer h.trackSDKMediaSinkLock.Unlock()
-
-	if _, ok := h.trackSDKMediaSink[kind]; !ok {
-		layers := []livekit.VideoQuality{livekit.VideoQuality_HIGH}
-		if kind == types.Video && len(h.simulcastLayers) == 3 {
-			layers = []livekit.VideoQuality{livekit.VideoQuality_HIGH, livekit.VideoQuality_MEDIUM, livekit.VideoQuality_LOW}
-		} else if kind == types.Video && len(h.simulcastLayers) == 2 {
-			layers = []livekit.VideoQuality{livekit.VideoQuality_HIGH, livekit.VideoQuality_MEDIUM}
-		}
-
-		h.trackSDKMediaSink[kind] = NewSDKMediaSink(h.logger, h.params, sdkOutput, track.Codec(), streamKindFromCodecType(track.Kind()), layers)
-	}
-
-	sdkTrack := h.trackSDKMediaSink[kind].GetTrack(trackQuality)
-	if sdkTrack == nil {
-		err := errors.ErrIngressNotFound
-		h.logger.Warnw("no SDK track for the current quality", err)
-		return nil, err
-	}
-
-	return sdkTrack, nil
 }
 
 func (h *whipHandler) writePLI(ssrc webrtc.SSRC) {
@@ -506,51 +415,15 @@ func (h *whipHandler) writePLI(ssrc webrtc.SSRC) {
 	}
 }
 
-func (h *whipHandler) writeRTCPUpstream(pkt rtcp.Packet) {
-	err := h.pc.WriteRTCP([]rtcp.Packet{pkt})
-	if err != nil {
-		h.logger.Warnw("failed writing RTCP packet upstream", err)
-	}
-}
-
 func (h *whipHandler) runSession(ctx context.Context) error {
 	var err error
-	var sdkOutput *lksdk_output.LKSDKOutput
-
-	if !*h.params.EnableTranscoding {
-		sdkOutput, err = lksdk_output.NewLKSDKOutput(ctx, nil, h.params)
-		if err != nil {
-			return err
-		}
-
-		h.trackLock.Lock()
-		for _, track := range h.tracks {
-			trackQuality := h.getTrackQuality(track)
-
-			mediaSink, err := h.getSDKTrackMediaSink(sdkOutput, track, trackQuality)
-			if err != nil {
-				h.logger.Warnw("failed creating whip media handler", err)
-				h.trackLock.Unlock()
-				return err
-			}
-
-			t := h.trackHandlers[WhipTrackDescription{streamKindFromCodecType(track.Kind()), trackQuality}]
-			th, ok := t.(*SDKWhipTrackHandler)
-			if !ok {
-				h.logger.Errorw("wrong type for track handler", errors.ErrIngressNotFound)
-				return errors.ErrIngressNotFound
-			}
-			th.SetMediaSink(mediaSink)
-		}
-		h.trackLock.Unlock()
-	}
 
 	result := make(chan error, 1)
 
 	h.trackLock.Lock()
-	for td, th := range h.trackHandlers {
+	for kind, th := range h.trackHandlers {
 		err := th.Start(func(err error) {
-			h.logger.Infow("track handler done", "error", err, "kind", td.Kind, "quality", td.Quality)
+			h.logger.Infow("track handler done", "error", err, "kind", kind)
 			// cancel all remaining track handlers
 			h.closeTrackHandlers()
 
@@ -579,18 +452,6 @@ loop:
 				err = errs.ToError()
 				break loop
 			}
-		}
-	}
-
-	h.trackSDKMediaSinkLock.Lock()
-	h.trackSDKMediaSink = make(map[types.StreamKind]*SDKMediaSink)
-	h.trackSDKMediaSinkLock.Unlock()
-
-	if sdkOutput != nil {
-		sdkErr := sdkOutput.Close()
-		if sdkErr != nil {
-			// Output error takes precedence
-			err = sdkErr
 		}
 	}
 
@@ -711,104 +572,4 @@ func newMediaEngine() (*webrtc.MediaEngine, error) {
 	}
 
 	return m, nil
-}
-
-// IngressHandler RPC interface
-func (h *whipHandler) UpdateIngress(ctx context.Context, _ *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
-	_, span := tracer.Start(ctx, "whipHandler.UpdateIngress")
-	defer span.End()
-
-	h.logger.Infow("whipHandler UpdateIngress")
-	h.Close()
-
-	return h.params.CopyInfo().State, nil
-}
-
-func (h *whipHandler) DeleteIngress(ctx context.Context, _ *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
-	_, span := tracer.Start(ctx, "whipHandler.DeleteIngress")
-	defer span.End()
-
-	h.logger.Infow("whipHandler DeleteIngress")
-	h.Close()
-
-	return h.params.CopyInfo().State, nil
-}
-
-func (h *whipHandler) DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error) {
-	_, span := tracer.Start(ctx, "whipHandler.DeleteWHIPResource")
-	defer span.End()
-
-	// only test for stream key correctness if it is part of the request for backward compatibility
-	if req.StreamKey != "" && h.params.StreamKey != req.StreamKey {
-		h.logger.Infow("received delete request with wrong stream key", "streamKey", req.StreamKey)
-	}
-
-	h.logger.Infow("whipHandler DeleteWHIPResource")
-	h.Close()
-
-	return &google_protobuf2.Empty{}, nil
-}
-
-func (h *whipHandler) ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
-	_, span := tracer.Start(ctx, "whipHandler.ICERestartWHIPResource")
-	defer span.End()
-
-	if req.IfMatch != "*" {
-		h.logger.Infow("WHIP client attempted Trickle-ICE")
-		return nil, psrpc.NewErrorf(psrpc.UnprocessableEntity, "Trickle-ICE not supported")
-	}
-
-	if h.pc == nil {
-		return nil, errors.ErrIngressNotFound
-	}
-
-	remoteDescription := h.pc.CurrentRemoteDescription()
-	if remoteDescription == nil {
-		return nil, errors.ErrIngressNotFound
-	}
-
-	// Replace the current remote description with the values from remote
-	newRemoteDescription, err := replaceICEDetails(remoteDescription.SDP, req.UserFragment, req.Password)
-	if err != nil {
-		return nil, errors.ErrIngressNotFound
-	}
-	remoteDescription.SDP = newRemoteDescription
-
-	if err := h.pc.SetRemoteDescription(*remoteDescription); err != nil {
-		return nil, errors.ErrIngressNotFound
-	}
-
-	answer, err := h.pc.CreateAnswer(nil)
-	if err != nil {
-		return nil, errors.ErrIngressNotFound
-	}
-
-	gatherComplete := webrtc.GatheringCompletePromise(h.pc)
-	if err = h.pc.SetLocalDescription(answer); err != nil {
-		return nil, errors.ErrIngressNotFound
-	}
-	<-gatherComplete
-
-	// Discard all `a=` lines that aren't ICE related
-	// "WHIP does not support renegotiation of non-ICE related SDP information"
-	//
-	// https://www.ietf.org/archive/id/draft-ietf-wish-whip-14.html#name-ice-restarts
-	var trickleIceSdpfrag strings.Builder
-	scanner := bufio.NewScanner(strings.NewReader(h.pc.LocalDescription().SDP))
-	for scanner.Scan() {
-		l := scanner.Text()
-		if strings.HasPrefix(l, "a=") && !strings.HasPrefix(l, "a=ice-pwd") && !strings.HasPrefix(l, "a=ice-ufrag") && !strings.HasPrefix(l, "a=candidate") {
-			continue
-		}
-
-		trickleIceSdpfrag.WriteString(l + "\n")
-	}
-
-	etag := fmt.Sprintf("%08x", crc32.ChecksumIEEE([]byte(trickleIceSdpfrag.String())))
-
-	return &rpc.ICERestartWHIPResourceResponse{TrickleIceSdpfrag: trickleIceSdpfrag.String(), Etag: etag}, nil
-}
-
-func (h *whipHandler) WHIPRTCConnectionNotify(_ context.Context, _ *rpc.WHIPRTCConnectionNotifyRequest) (*google_protobuf2.Empty, error) {
-	return &google_protobuf2.Empty{}, nil
 }
