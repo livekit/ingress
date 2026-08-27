@@ -86,7 +86,7 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 				}
 			}
 		}
-	} else if p.Config.EnableUDPURLPull && strings.HasPrefix(p.Url, "udp://") {
+	} else if p.EnableUDPURLPull && strings.HasPrefix(p.Url, "udp://") {
 		elem, err = gst.NewElement("udpsrc")
 		if err != nil {
 			return nil, err
@@ -96,8 +96,8 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 			return nil, err
 		}
 
-		if p.Config.MulticastInterface != "" {
-			err = elem.SetProperty("multicast-iface", p.Config.MulticastInterface)
+		if p.MulticastInterface != "" {
+			err = elem.SetProperty("multicast-iface", p.MulticastInterface)
 			if err != nil {
 				return nil, err
 			}
