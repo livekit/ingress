@@ -64,6 +64,8 @@ rtmp_port: port to listen to incoming RTMP connection on (default 1935)
 whip_port: port to listen to incoming WHIP calls on (default 8080)
 http_relay_port: port used to relay data from the main service process to the per ingress handler process (default 9090)
 rtc_config: configuration for ICE and other RTC related settings, same settings livekit-server RTC configuration. Used for WHIP.
+enable_udp_url_pull: allow URL pull ingresses to pull from udp:// urls (default false)
+multicast_interface: network interface to join multicast groups on for UDP url pull. Empty lets the OS decide
 
 # cpu costs for various Ingress types with their default values
 cpu_cost:
