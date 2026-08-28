@@ -89,9 +89,12 @@ func New(ctx context.Context, params *params.Params, g *stats.LocalMediaStatsGat
 	}
 
 	p := &Pipeline{
-		Params:      params,
-		pipeline:    pipeline,
-		input:       input,
+		Params:   params,
+		pipeline: pipeline,
+		input:    input,
+		// SendEOS can reach the loop before Run does, so it is built here
+		// rather than on the way into the loop, and is never nil.
+		loop:        glib.NewMainLoop(glib.MainContextDefault(), false),
 		pipelineErr: make(chan error, 1),
 		eos:         newEOSDispatcher(),
 		established: make(map[types.StreamKind]string),
@@ -104,9 +107,7 @@ func New(ctx context.Context, params *params.Params, g *stats.LocalMediaStatsGat
 			(*cancel)()
 		}
 
-		if p.loop != nil {
-			p.loop.Quit()
-		}
+		p.quitLoop()
 	}, g, p.eos)
 	if err != nil {
 		return nil, err
@@ -213,7 +214,6 @@ func (p *Pipeline) Run(ctx context.Context) error {
 	var err error
 
 	// add watch
-	p.loop = glib.NewMainLoop(glib.MainContextDefault(), false)
 	p.pipeline.GetPipelineBus().AddWatch(p.messageWatch)
 
 	// set state to playing (this does not start the pipeline)
@@ -237,6 +237,9 @@ func (p *Pipeline) Run(ctx context.Context) error {
 	logger.Infow("starting GST pipeline")
 
 	// run main loop
+	if p.closed.IsBroken() {
+		logger.Warnw("shutdown requested before the main loop started, queued until the loop starts", nil)
+	}
 	p.loop.Run()
 
 	logger.Infow("GST pipeline stopped")
@@ -382,9 +385,21 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 				logger.Errorw("pipeline frozen", psrpc.NewErrorf(psrpc.Internal, "pipeline frozen"))
 			}
 
-			p.loop.Quit()
+			p.quitLoop()
 		}()
 	})
+}
+
+// quitLoop stops the main loop, and is safe to call before Run has started it:
+// the quit is queued on the main context and dispatched when the loop runs.
+// Calling Quit directly is not safe there, because g_main_loop_run sets
+// is_running=TRUE on entry and overwrites it. Assumes this is the only main
+// loop on the default context.
+func (p *Pipeline) quitLoop() {
+	if _, err := glib.IdleAdd(p.loop.Quit); err != nil {
+		logger.Errorw("failed to schedule loop quit, quitting directly", err)
+		p.loop.Quit()
+	}
 }
 
 func (p *Pipeline) GetGstPipelineDebugDot() string {
