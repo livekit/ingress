@@ -5,11 +5,10 @@ go 1.26
 replace github.com/go-gst/go-gst => github.com/livekit/gst-go v0.0.0-20250701011214-e7f61abd14cb
 
 require (
-	github.com/Eyevinn/mp4ff v0.55.0
 	github.com/aclements/go-moremath v0.0.0-20241023150245-c8bbc672ef66
 	github.com/frostbyte73/core v0.1.1
 	github.com/go-gst/go-glib v1.4.1-0.20250303082535-35ebad1471fd
-	github.com/go-gst/go-gst v1.4.0
+	github.com/go-gst/go-gst v1.4.1
 	github.com/google/go-cmp v0.7.0
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20251031234730-75a652881771
@@ -31,7 +30,6 @@ require (
 	github.com/yutopp/go-flv v0.3.1
 	go.opentelemetry.io/otel v1.45.0
 	go.uber.org/atomic v1.11.0
-	golang.org/x/image v0.43.0
 	google.golang.org/grpc v1.82.1
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
