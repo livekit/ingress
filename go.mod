@@ -5,7 +5,6 @@ go 1.26
 replace github.com/go-gst/go-gst => github.com/livekit/gst-go v0.0.0-20250701011214-e7f61abd14cb
 
 require (
-	github.com/Eyevinn/mp4ff v0.55.0
 	github.com/aclements/go-moremath v0.0.0-20241023150245-c8bbc672ef66
 	github.com/frostbyte73/core v0.1.1
 	github.com/go-gst/go-glib v1.4.1-0.20250303082535-35ebad1471fd
@@ -14,8 +13,8 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20251031234730-75a652881771
 	github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731
-	github.com/livekit/media-sdk v0.0.0-20260812193843-5a5218b19550
-	github.com/livekit/mediatransportutil v0.0.0-20260727210231-81a5287a7109
+	github.com/livekit/media-sdk v0.0.0-20260828235137-cb2363a4cb4f
+	github.com/livekit/mediatransportutil v0.0.0-20260821083140-f234b534b095
 	github.com/livekit/protocol v1.50.4
 	github.com/livekit/psrpc v0.7.5
 	github.com/livekit/server-sdk-go/v2 v2.18.1
@@ -31,7 +30,6 @@ require (
 	github.com/yutopp/go-flv v0.3.1
 	go.opentelemetry.io/otel v1.45.0
 	go.uber.org/atomic v1.11.0
-	golang.org/x/image v0.43.0
 	google.golang.org/grpc v1.82.1
 	google.golang.org/protobuf v1.36.11
 	gopkg.in/yaml.v3 v3.0.1
