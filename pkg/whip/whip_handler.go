@@ -113,7 +113,7 @@ func (h *whipHandler) Init(ctx context.Context, sdpOffer string) (*WHIPInitRespo
 	}
 
 	if len(h.simulcastLayers) != 0 {
-		return "", errors.ErrSimulcastTranscode
+		return nil, errors.ErrSimulcastTranscode
 	}
 
 	h.trackAddedChan = make(chan *webrtc.TrackRemote, h.expectedTrackCount)
@@ -131,7 +131,7 @@ func (h *whipHandler) Init(ctx context.Context, sdpOffer string) (*WHIPInitRespo
 
 	// Use the default set of Interceptors
 	if err := webrtc.RegisterDefaultInterceptors(m, i); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Create the API object with the MediaEngine
