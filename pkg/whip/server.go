@@ -27,7 +27,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
-	google_protobuf2 "google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
@@ -35,7 +34,6 @@ import (
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 
-	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/utils"
@@ -63,8 +61,6 @@ type WHIPServer struct {
 	handlersLock sync.Mutex
 	handlers     map[string]WHIPHandler
 
-	getWhipProxyEnabled func(ctx context.Context, featureFlags map[string]string) bool
-
 	monitor *stats.Monitor
 }
 
@@ -84,10 +80,6 @@ type WHIPHandler interface {
 	Start(ctx context.Context) (map[types.StreamKind]string, error)
 	WaitForSessionEnd(ctx context.Context) error
 	Close()
-	UpdateIngress(ctx context.Context, req *livekit.UpdateIngressRequest) (*livekit.IngressState, error)
-	DeleteIngress(ctx context.Context, req *livekit.DeleteIngressRequest) (*livekit.IngressState, error)
-	DeleteWHIPResource(ctx context.Context, req *rpc.DeleteWHIPResourceRequest) (*google_protobuf2.Empty, error)
-	ICERestartWHIPResource(ctx context.Context, req *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error)
 	AssociateRelay(kind types.StreamKind, token string, w io.WriteCloser) error
 	DissociateRelay(kind types.StreamKind)
 }
@@ -108,7 +100,6 @@ func NewWHIPServer(bus psrpc.MessageBus) (*WHIPServer, error) {
 func (s *WHIPServer) Start(
 	conf *config.Config,
 	onPublish func(streamKey, resourceId string) (*params.Params, func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer, func(error), error),
-	getWhipProxyEnabled func(ctx context.Context, featureFlags map[string]string) bool,
 	healthHandlers HealthHandlers,
 ) error {
 	s.ctx, s.cancel = context.WithCancel(context.Background())
@@ -120,7 +111,6 @@ func (s *WHIPServer) Start(
 	}
 
 	s.onPublish = onPublish
-	s.getWhipProxyEnabled = getWhipProxyEnabled
 	s.conf = conf
 
 	var err error
@@ -383,18 +373,9 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) 
 	}
 
 	var h WHIPHandler
-	if *p.EnableTranscoding || s.getWhipProxyEnabled == nil || !s.getWhipProxyEnabled(ctx, p.FeatureFlags) {
+	if *p.EnableTranscoding {
 		logger.Infow("Using native WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
-
-		var bus psrpc.MessageBus
-		if !*p.EnableTranscoding {
-			// RPC is handled in the handler process when transcoding
-			bus = s.bus
-		}
-		h, err = newWHIPHandler(p, s.webRTCConfig, bus)
-		if err != nil {
-			return "", nil, err
-		}
+		h = newWHIPHandler(p, s.webRTCConfig)
 	} else {
 		logger.Infow("Using proxied WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
 		h, err = NewProxyWHIPHandler(p, s.bus, ua)

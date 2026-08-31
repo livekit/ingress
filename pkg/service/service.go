@@ -585,10 +585,6 @@ func (s *Service) HealthHandler(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("Healthy"))
 }
 
-func (s *Service) GetWhipProxyEnabled(_ context.Context, _ map[string]string) bool {
-	return s.conf.WHIPProxyEnabled
-}
-
 type sessionCloser func(ctx context.Context)
 
 func (p sessionCloser) CloseSession(ctx context.Context) {
