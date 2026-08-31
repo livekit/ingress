@@ -19,6 +19,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -27,7 +28,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/protocol/logger"
 )
 
 const testSystemMemoryCaps = "video/x-raw,format=NV12,width=1280,height=720,framerate=30/1"
@@ -84,26 +84,17 @@ func TestCapsNotificationWithoutCapsIsIgnored(t *testing.T) {
 	require.Empty(t, p.established)
 }
 
-// CS-1376. Handler.HandleIngress starts Run on a goroutine and calls SendEOS
-// from its kill watcher, so a DeleteIngress arriving during startup runs both
-// against the same Pipeline. Two failures came out of that:
-//
-//   - Run used to create p.loop, so SendEOS could dereference a nil loop and
-//     take the handler process down with it.
-//   - Even once the loop existed, a direct Quit issued before Run reached
-//     loop.Run() was discarded, and the handler hung on a loop nobody would
-//     stop again. That one is silent, which makes it the worse of the two.
-//
-// New now builds the loop, and quitLoop queues the quit as an idle source so it
-// survives until the loop starts.
+// Pipeline shutdown races its own startup: Handler.HandleIngress starts Run on
+// a goroutine and calls SendEOS from its kill watcher, so a kill arriving during
+// startup drives both against one Pipeline. The tests below cover a shutdown
+// that reaches the pipeline before Run does. It must not find a nil loop, must
+// stop Run before it starts anything, and its quit must survive until the loop
+// runs.
 
 const eosChildEnv = "INGRESS_EOS_RACE_CHILD"
 
-// The warning Run emits when the shutdown beat it to the loop.
-const raceWarning = "shutdown requested before the main loop started"
-
-// newTestPipeline is the state New leaves a Pipeline in, minus the parts that
-// need a room connection. The loop matters here: it is what New now owns.
+// newTestPipeline builds the parts of a Pipeline these tests exercise, minus
+// the ones that need a room connection.
 func newTestPipeline(t *testing.T) *Pipeline {
 	t.Helper()
 
@@ -161,34 +152,52 @@ func waitRunning(t *testing.T, l *glib.MainLoop) {
 	}
 }
 
-// stubSource is the smallest Source that lets Run reach its main loop. The real
-// ones all want a network peer.
-type stubSource struct{}
+// stubSource is the smallest Source that lets Run reach its main loop; the real
+// ones all want a network peer. Start records that it ran and, when block is
+// set, waits there, which is how a test holds Run inside startup.
+type stubSource struct {
+	started atomic.Bool
+	entered chan struct{}
+	block   chan struct{}
+}
 
-func (stubSource) GetSources() []*gst.Element          { return nil }
-func (stubSource) ValidateCaps(*gst.Caps) error        { return nil }
-func (stubSource) Start(context.Context, func()) error { return nil }
-func (stubSource) Close() error                        { return nil }
+func (s *stubSource) GetSources() []*gst.Element   { return nil }
+func (s *stubSource) ValidateCaps(*gst.Caps) error { return nil }
+func (s *stubSource) Close() error                 { return nil }
+
+func (s *stubSource) Start(context.Context, func()) error {
+	s.started.Store(true)
+	if s.entered != nil {
+		close(s.entered)
+	}
+	if s.block != nil {
+		<-s.block
+	}
+
+	return nil
+}
 
 // runnableTestPipeline adds the two collaborators Run walks through, stubbed to
 // the minimum that lets it both reach and leave the loop.
-func runnableTestPipeline(t *testing.T) *Pipeline {
+func runnableTestPipeline(t *testing.T) (*Pipeline, *stubSource) {
 	t.Helper()
 
 	p := newTestPipeline(t)
-	p.input = &Input{source: stubSource{}}
+
+	src := &stubSource{}
+	p.input = &Input{source: src}
 
 	sink := &WebRTCSink{}
 	sink.sdkReady.Break() // Close blocks on this
 	p.sink = sink
 
-	return p
+	return p, src
 }
 
-// The regression for both halves of the bug, on the real SendEOS path. Runs in
-// a child process because the nil dereference happened on a goroutine SendEOS
-// spawns, and no parent can recover a panic raised on another goroutine: before
-// the fix the process died outright rather than failing an assertion.
+// A shutdown landing before Run must still leave the loop stoppable. Runs in a
+// child process: SendEOS quits from a goroutine it spawns, and a panic there
+// cannot be recovered by the test, so it has to be observed as a dead process
+// rather than a failed assertion.
 func TestSendEOSBeforeRunIsHonored(t *testing.T) {
 	if os.Getenv(eosChildEnv) == "1" {
 		p := newTestPipeline(t)
@@ -196,13 +205,14 @@ func TestSendEOSBeforeRunIsHonored(t *testing.T) {
 		// The race: EOS lands before Run has started the loop.
 		p.SendEOS(context.Background())
 
-		// SendEOS issues its quit from a goroutine, once the pipeline has gone
-		// to NULL. Wait for that to have happened before starting the loop, so
-		// the quit is reliably the early one this test is about; without the
-		// wait the loop is often already running by then and the race is not
-		// exercised at all. Going to NULL on an empty pipeline takes
-		// microseconds, so this is a wide margin, not a tuned one.
-		time.Sleep(500 * time.Millisecond)
+		// SendEOS queues its quit from a goroutine, once the pipeline has gone
+		// to NULL. Wait until the source is actually on the context, so this
+		// exercises a quit that precedes Run rather than one that happens to
+		// land while the loop is already running. A sleep would not tell the
+		// two apart. The child runs this test alone, so nothing else has left
+		// sources on the default context.
+		require.Eventually(t, glib.MainContextDefault().Pending,
+			5*time.Second, 5*time.Millisecond, "the quit was never queued")
 		require.False(t, p.loop.IsRunning(), "loop must not have started yet")
 
 		require.True(t, runLoop(p, 10*time.Second),
@@ -246,79 +256,80 @@ func TestQuitLoopIsSafeConcurrently(t *testing.T) {
 	require.True(t, runLoop(p, 5*time.Second), "loop must still stop")
 }
 
-// SendEOS is fused, but the fuse only stops the body running twice; it does not
-// order SendEOS against Run. Guards that the fused path still stops the loop.
-func TestSendEOSTwiceStillStopsTheLoop(t *testing.T) {
-	p := newTestPipeline(t)
+// A shutdown that lands before Run must stop it before it starts anything.
+// Starting the input would be unrecoverable: the real sources block on a
+// network peer, and Run would sit there with the shutdown already spent.
+func TestRunBailsWhenShutdownArrivedFirst(t *testing.T) {
+	p, src := runnableTestPipeline(t)
 
 	p.SendEOS(context.Background())
+
+	done := make(chan error, 1)
+	go func() { done <- p.Run(context.Background()) }()
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run did not return: it started work a spent shutdown cannot undo")
+	}
+
+	require.False(t, src.started.Load(), "the input must not be started")
+	require.False(t, p.loop.IsRunning(), "the loop must not be started")
+}
+
+// The other window: the shutdown lands while Run is inside startup, past the
+// bail and short of the loop. Run has to reach the loop and be stopped by the
+// queued quit. Driving the real Run is what makes this a regression test for
+// the loop moving back out of New.
+func TestRunSurvivesTheStartupRace(t *testing.T) {
+	p, src := runnableTestPipeline(t)
+	src.entered = make(chan struct{})
+	src.block = make(chan struct{})
+
+	done := make(chan error, 1)
+	go func() { done <- p.Run(context.Background()) }()
+
+	// Hold Run inside input.Start, which is where the real sources block, and
+	// shut down from there.
+	<-src.entered
 	p.SendEOS(context.Background())
 
-	require.True(t, runLoop(p, 10*time.Second), "loop must still stop")
+	// SendEOS queues its quit from a goroutine. Wait until the source is on
+	// the context before releasing Run, so the quit is reliably the one that
+	// precedes the loop rather than one that lands while it is already
+	// running -- the case that always worked.
+	require.Eventually(t, glib.MainContextDefault().Pending,
+		5*time.Second, 5*time.Millisecond, "the quit was never queued")
+	require.False(t, p.loop.IsRunning(), "loop must not have started yet")
+
+	close(src.block)
+
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run did not return: the queued quit never reached its loop")
+	}
 }
 
-// Run itself, on the racing path: the shutdown lands first, and Run has to
-// reach the loop, be stopped by the queued quit, and report the race. Driving
-// the real Run is what makes this a regression test for the loop moving back
-// out of New, which the tests above cannot see. Child process, because the
-// assertion is on log output and the default logger discards.
-func TestRunReportsAndSurvivesTheStartupRace(t *testing.T) {
-	if os.Getenv(eosChildEnv) == "1" {
-		logger.InitFromConfig(&logger.Config{Level: "debug"}, "ingress")
+// A shutdown arriving once Run is already in the loop is the ordinary case and
+// must still stop it.
+func TestRunStopsWhenShutdownArrivesLater(t *testing.T) {
+	p, _ := runnableTestPipeline(t)
 
-		p := runnableTestPipeline(t)
+	done := make(chan error, 1)
+	go func() { done <- p.Run(context.Background()) }()
 
-		p.SendEOS(context.Background())
-		time.Sleep(500 * time.Millisecond)
-		require.False(t, p.loop.IsRunning(), "loop must not have started yet")
+	waitRunning(t, p.loop)
+	p.SendEOS(context.Background())
 
-		done := make(chan error, 1)
-		go func() { done <- p.Run(context.Background()) }()
-
-		select {
-		case err := <-done:
-			require.NoError(t, err)
-		case <-time.After(10 * time.Second):
-			t.Fatal("Run did not return: the queued quit never reached its loop")
-		}
-		return
+	select {
+	case err := <-done:
+		require.NoError(t, err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("Run did not return")
 	}
-
-	out, err := runChild(t, "TestRunReportsAndSurvivesTheStartupRace")
-
-	require.NoError(t, err, "child process failed:\n%s", out)
-	require.Contains(t, string(out), raceWarning,
-		"the startup race should be reported:\n%s", out)
-}
-
-// The warning has to be specific to the race or it is noise: a shutdown that
-// arrives once Run is already in the loop is ordinary, and must stay quiet.
-func TestRunIsQuietWhenShutdownArrivesLater(t *testing.T) {
-	if os.Getenv(eosChildEnv) == "1" {
-		logger.InitFromConfig(&logger.Config{Level: "debug"}, "ingress")
-
-		p := runnableTestPipeline(t)
-
-		done := make(chan error, 1)
-		go func() { done <- p.Run(context.Background()) }()
-
-		waitRunning(t, p.loop)
-		p.SendEOS(context.Background())
-
-		select {
-		case err := <-done:
-			require.NoError(t, err)
-		case <-time.After(10 * time.Second):
-			t.Fatal("Run did not return")
-		}
-		return
-	}
-
-	out, err := runChild(t, "TestRunIsQuietWhenShutdownArrivesLater")
-
-	require.NoError(t, err, "child process failed:\n%s", out)
-	require.NotContains(t, string(out), raceWarning,
-		"a shutdown after the loop started is not the race:\n%s", out)
 }
 
 // Why quitLoop queues rather than calling Quit directly. g_main_loop_run sets
@@ -334,8 +345,8 @@ func TestDirectQuitBeforeRunIsLost(t *testing.T) {
 	returned := startLoop(p)
 
 	require.False(t, stoppedWithin(returned, 2*time.Second),
-		"a direct quit before Run is expected to be lost; if this now passes, "+
-			"quitLoop's idle source may no longer be needed")
+		"a direct quit before Run is expected to be lost; if this passes, "+
+			"quitLoop's idle source may be unnecessary")
 
 	// Confirms the loop really is running, rather than merely unscheduled.
 	require.True(t, p.loop.IsRunning())

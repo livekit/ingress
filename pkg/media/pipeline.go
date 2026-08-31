@@ -211,6 +211,14 @@ func (p *Pipeline) Run(ctx context.Context) error {
 
 	p.cancel.Store(&cancel)
 
+	// Shutdown already requested: bail out before starting anything. Only the
+	// sink needs closing; New brought it up, while the input has not started
+	// and closing an unstarted one blocks.
+	if p.closed.IsBroken() {
+		logger.Infow("shutdown requested before the pipeline started")
+		return p.sink.Close()
+	}
+
 	var err error
 
 	// add watch
@@ -237,9 +245,6 @@ func (p *Pipeline) Run(ctx context.Context) error {
 	logger.Infow("starting GST pipeline")
 
 	// run main loop
-	if p.closed.IsBroken() {
-		logger.Warnw("shutdown requested before the main loop started, queued until the loop starts", nil)
-	}
 	p.loop.Run()
 
 	logger.Infow("GST pipeline stopped")
@@ -355,39 +360,44 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 	_, span := tracer.Start(ctx, "Pipeline.SendEOS")
 	defer span.End()
 
-	p.closed.Once(func() {
-		logger.Debugw("closing pipeline")
+	// Break before loading the cancel below. Run stores its cancel and then
+	// checks the fuse, so this order leaves no interleaving where Run both
+	// misses the check and has not yet stored a cancel for this to find.
+	if !p.closed.Break() {
+		return
+	}
 
-		if cancel := p.cancel.Load(); cancel != nil {
-			(*cancel)()
+	logger.Debugw("closing pipeline")
+
+	if cancel := p.cancel.Load(); cancel != nil {
+		(*cancel)()
+	}
+
+	c := make(chan struct{})
+
+	go func() {
+		err := p.pipeline.BlockSetState(gst.StateNull)
+		if err != nil {
+			logger.Errorw("failed stopping pipeline", err)
 		}
 
-		c := make(chan struct{})
+		close(c)
+	}()
 
-		go func() {
-			err := p.pipeline.BlockSetState(gst.StateNull)
-			if err != nil {
-				logger.Errorw("failed stopping pipeline", err)
-			}
+	go func() {
+		t := time.NewTimer(5 * time.Second)
 
-			close(c)
-		}()
+		select {
+		case <-c:
+			t.Stop()
+		case <-t.C:
+			// Do not set ingress in error state as we are stopping and this causes some media at the end
+			// to not be sent to the room at worse
+			logger.Errorw("pipeline frozen", psrpc.NewErrorf(psrpc.Internal, "pipeline frozen"))
+		}
 
-		go func() {
-			t := time.NewTimer(5 * time.Second)
-
-			select {
-			case <-c:
-				t.Stop()
-			case <-t.C:
-				// Do not set ingress in error state as we are stopping and this causes some media at the end
-				// to not be sent to the room at worse
-				logger.Errorw("pipeline frozen", psrpc.NewErrorf(psrpc.Internal, "pipeline frozen"))
-			}
-
-			p.quitLoop()
-		}()
-	})
+		p.quitLoop()
+	}()
 }
 
 // quitLoop stops the main loop, and is safe to call before Run has started it:
