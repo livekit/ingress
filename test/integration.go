@@ -73,8 +73,8 @@ func (s *ioServer) GetIngressInfo(_ context.Context, req *rpc.GetIngressInfoRequ
 	return s.getIngressInfo(req)
 }
 
-func (s *ioServer) CreateIngress(_ context.Context, _ *livekit.IngressInfo) (*emptypb.Empty, error) {
-	return &emptypb.Empty{}, nil
+func (s *ioServer) CreateIngress(_ context.Context, info *livekit.IngressInfo) (*rpc.CreateIngressResponse, error) {
+	return &rpc.CreateIngressResponse{Info: info}, nil
 }
 
 func (s *ioServer) UpdateIngressState(_ context.Context, req *rpc.UpdateIngressStateRequest) (*emptypb.Empty, error) {
