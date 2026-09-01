@@ -61,7 +61,19 @@ type ServiceConfig struct {
 	Logging          logger.Config `yaml:"logging"`
 	Development      bool          `yaml:"development"`
 	PSRPCSkipClaim   bool          `yaml:"psrpc_skip_claim,omitempty"` // Lets psrpc servers skip the claim handshake on queue rpcs
-	EnableUDPURLPull bool          `yaml:"enable_udp_url_pull,omitempty"`
+	// Allow URL pull ingresses to pull from udp:// urls. Disabled by default, and should only be
+	// enabled on deployments where both the API callers and the network the handlers run on are trusted.
+	// Unlike the http and srt sources, udpsrc doesn't connect out to the url host: it binds a local
+	// socket on the address and port taken from the caller provided url, and joins the multicast group
+	// if one is given. This has a few consequences:
+	//   - The caller controls which local port the handler binds, and can collide with other services
+	//     running on the host.
+	//   - UDP is connectionless and unauthenticated, so any host able to reach that port can inject
+	//     media into the session, or spoof the sender address to disrupt a legitimate feed.
+	//   - The caller can make the handler join arbitrary multicast groups and republish whatever
+	//     traffic it receives into a LiveKit room, turning the ingress into a relay for streams on
+	//     the handler's local network that the caller couldn't otherwise reach.
+	EnableUDPURLPull bool `yaml:"enable_udp_url_pull,omitempty"`
 	// Network interface to join multicast groups on for UDP url pull. Empty means let the OS decide.
 	MulticastInterface string `yaml:"multicast_interface,omitempty"`
 

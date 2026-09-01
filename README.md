@@ -64,7 +64,7 @@ rtmp_port: port to listen to incoming RTMP connection on (default 1935)
 whip_port: port to listen to incoming WHIP calls on (default 8080)
 http_relay_port: port used to relay data from the main service process to the per ingress handler process (default 9090)
 rtc_config: configuration for ICE and other RTC related settings, same settings livekit-server RTC configuration. Used for WHIP.
-enable_udp_url_pull: allow URL pull ingresses to pull from udp:// urls (default false)
+enable_udp_url_pull: allow URL pull ingresses to pull from udp:// urls (default false, see the security note below)
 multicast_interface: network interface to join multicast groups on for UDP url pull. Empty lets the OS decide
 
 # cpu costs for various Ingress types with their default values
@@ -74,6 +74,21 @@ cpu_cost:
 ```
 
 The config file can be added to a mounted volume with its location passed in the INGRESS_CONFIG_FILE env var, or its body can be passed in the INGRESS_CONFIG_BODY env var.
+
+> **Security note on `enable_udp_url_pull`**
+>
+> Only enable UDP url pull if you trust both the callers allowed to create ingresses and the network the
+> ingress handlers run on. Unlike `http://` and `srt://` urls, a `udp://` url doesn't make the handler
+> connect out to the url host: the handler binds a local socket on the address and port taken from the
+> url, and joins the multicast group if one is given. As a result, a caller creating a URL pull ingress
+> can:
+>
+> - Choose which local port the handler binds, potentially colliding with other services on the host.
+> - Have the handler ingest unauthenticated traffic. UDP is connectionless, so any host able to reach
+>   that port can inject media into the session, or spoof the sender address to disrupt a legitimate feed.
+> - Have the handler join arbitrary multicast groups and republish whatever it receives into a LiveKit
+>   room, using the ingress as a relay for streams on the handler's local network that the caller has no
+>   direct access to.
 
 In order for the LiveKit server to be able to create Ingress sessions, an `ingress` section must also be added to the livekit-server configuration:
 
