@@ -89,9 +89,12 @@ func New(ctx context.Context, params *params.Params, g *stats.LocalMediaStatsGat
 	}
 
 	p := &Pipeline{
-		Params:      params,
-		pipeline:    pipeline,
-		input:       input,
+		Params:   params,
+		pipeline: pipeline,
+		input:    input,
+		// SendEOS can reach the loop before Run does, so it is built here
+		// rather than on the way into the loop, and is never nil.
+		loop:        glib.NewMainLoop(glib.MainContextDefault(), false),
 		pipelineErr: make(chan error, 1),
 		eos:         newEOSDispatcher(),
 		established: make(map[types.StreamKind]string),
@@ -104,9 +107,7 @@ func New(ctx context.Context, params *params.Params, g *stats.LocalMediaStatsGat
 			(*cancel)()
 		}
 
-		if p.loop != nil {
-			p.loop.Quit()
-		}
+		p.quitLoop()
 	}, g, p.eos)
 	if err != nil {
 		return nil, err
@@ -210,10 +211,17 @@ func (p *Pipeline) Run(ctx context.Context) error {
 
 	p.cancel.Store(&cancel)
 
+	// Shutdown already requested: bail out before starting anything. Only the
+	// sink needs closing; New brought it up, while the input has not started
+	// and closing an unstarted one blocks.
+	if p.closed.IsBroken() {
+		logger.Infow("shutdown requested before the pipeline started")
+		return p.sink.Close()
+	}
+
 	var err error
 
 	// add watch
-	p.loop = glib.NewMainLoop(glib.MainContextDefault(), false)
 	p.pipeline.GetPipelineBus().AddWatch(p.messageWatch)
 
 	// set state to playing (this does not start the pipeline)
@@ -352,39 +360,56 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 	_, span := tracer.Start(ctx, "Pipeline.SendEOS")
 	defer span.End()
 
-	p.closed.Once(func() {
-		logger.Debugw("closing pipeline")
+	// Break before loading the cancel below. Run stores its cancel and then
+	// checks the fuse, so this order leaves no interleaving where Run both
+	// misses the check and has not yet stored a cancel for this to find.
+	if !p.closed.Break() {
+		return
+	}
 
-		if cancel := p.cancel.Load(); cancel != nil {
-			(*cancel)()
+	logger.Debugw("closing pipeline")
+
+	if cancel := p.cancel.Load(); cancel != nil {
+		(*cancel)()
+	}
+
+	c := make(chan struct{})
+
+	go func() {
+		err := p.pipeline.BlockSetState(gst.StateNull)
+		if err != nil {
+			logger.Errorw("failed stopping pipeline", err)
 		}
 
-		c := make(chan struct{})
+		close(c)
+	}()
 
-		go func() {
-			err := p.pipeline.BlockSetState(gst.StateNull)
-			if err != nil {
-				logger.Errorw("failed stopping pipeline", err)
-			}
+	go func() {
+		t := time.NewTimer(5 * time.Second)
 
-			close(c)
-		}()
+		select {
+		case <-c:
+			t.Stop()
+		case <-t.C:
+			// Do not set ingress in error state as we are stopping and this causes some media at the end
+			// to not be sent to the room at worse
+			logger.Errorw("pipeline frozen", psrpc.NewErrorf(psrpc.Internal, "pipeline frozen"))
+		}
 
-		go func() {
-			t := time.NewTimer(5 * time.Second)
+		p.quitLoop()
+	}()
+}
 
-			select {
-			case <-c:
-				t.Stop()
-			case <-t.C:
-				// Do not set ingress in error state as we are stopping and this causes some media at the end
-				// to not be sent to the room at worse
-				logger.Errorw("pipeline frozen", psrpc.NewErrorf(psrpc.Internal, "pipeline frozen"))
-			}
-
-			p.loop.Quit()
-		}()
-	})
+// quitLoop stops the main loop, and is safe to call before Run has started it:
+// the quit is queued on the main context and dispatched when the loop runs.
+// Calling Quit directly is not safe there, because g_main_loop_run sets
+// is_running=TRUE on entry and overwrites it. Assumes this is the only main
+// loop on the default context.
+func (p *Pipeline) quitLoop() {
+	if _, err := glib.IdleAdd(p.loop.Quit); err != nil {
+		logger.Errorw("failed to schedule loop quit, quitting directly", err)
+		p.loop.Quit()
+	}
 }
 
 func (p *Pipeline) GetGstPipelineDebugDot() string {
