@@ -40,6 +40,11 @@ var tracer = otel.Tracer("github.com/livekit/ingress/pkg/media")
 
 const (
 	creationTimeout = 10 * time.Second
+
+	// How much of the advertised duration playback may miss and still count as
+	// complete, as a percentage of it. A manifest duration is the sum of its
+	// segment durations, and the final segment can be shorter than it declares.
+	durationTolerancePercent = 5.0
 )
 
 type Pipeline struct {
@@ -274,6 +279,19 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 	case gst.MessageEOS:
 		// EOS received - close and return
 		logger.Debugw("EOS received, stopping pipeline")
+
+		// A NULL pipeline reports no position, so check before the state change.
+		// Skip it when the stop was requested: that ends playback early too, so
+		// it says nothing about the source.
+		if !p.closed.IsBroken() {
+			if err := p.checkSourceComplete(); err != nil {
+				select {
+				case p.pipelineErr <- err:
+				default:
+				}
+			}
+		}
+
 		_ = p.pipeline.BlockSetState(gst.StateNull)
 		p.loop.Quit()
 		return false
@@ -315,6 +333,40 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 	}
 
 	return true
+}
+
+// checkSourceComplete returns an error when EOS arrived before the source
+// played out the duration it advertises. A segment fetch that fails for good
+// arrives as an ordinary EOS, so the advertised duration is what separates a
+// truncated pull from a finished one.
+//
+// This catches HLS. A playlist declares no end, so the position query is
+// answered upstream, by what actually arrived. mp4 and matroska do declare an
+// end, so their sinks answer it instead and this returns nil. A source with no
+// duration is complete too: live HLS, RTMP and WHIP.
+func (p *Pipeline) checkSourceComplete() error {
+	ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+	if !ok || d <= 0 {
+		return nil
+	}
+
+	ok, pos := p.pipeline.QueryPosition(gst.FormatTime)
+	if !ok || pos <= 0 {
+		logger.Debugw("no position at EOS, treating the source as complete",
+			"duration", time.Duration(d))
+		return nil
+	}
+
+	duration, position := time.Duration(d), time.Duration(pos)
+	if position+time.Duration(float64(duration)*durationTolerancePercent/100) >= duration {
+		return nil
+	}
+
+	logger.Infow("source ended before the end of the stream",
+		"position", position, "duration", duration)
+
+	return psrpc.NewErrorf(psrpc.Unavailable,
+		"source ended after %s of %s", position, duration)
 }
 
 func (p *Pipeline) handleStreamCollectionMessage(msg *gst.Message) {
