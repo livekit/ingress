@@ -361,11 +361,17 @@ func (p *Params) SetInputAudioState(ctx context.Context, audioState *livekit.Inp
 		audioState.AverageBitrate = p.State.Audio.AverageBitrate
 	}
 
+	mimeTypeChanged := p.State.Audio.GetMimeType() != audioState.GetMimeType()
+
 	if !proto.Equal(audioState, p.State.Audio) {
 		modified = true
 		p.State.Audio = audioState
 	}
 	p.stateLock.Unlock()
+
+	if mimeTypeChanged {
+		p.logger.Infow("source audio mime type changed", "mimeType", audioState.GetMimeType())
+	}
 
 	if modified && sendUpdateIfModified {
 		p.SendStateUpdate(ctx)
@@ -380,11 +386,17 @@ func (p *Params) SetInputVideoState(ctx context.Context, videoState *livekit.Inp
 		videoState.AverageBitrate = p.State.Video.AverageBitrate
 	}
 
+	mimeTypeChanged := p.State.Video.GetMimeType() != videoState.GetMimeType()
+
 	if !proto.Equal(videoState, p.State.Video) {
 		modified = true
 		p.State.Video = videoState
 	}
 	p.stateLock.Unlock()
+
+	if mimeTypeChanged {
+		p.logger.Infow("source video mime type changed", "mimeType", videoState.GetMimeType())
+	}
 
 	if modified && sendUpdateIfModified {
 		p.SendStateUpdate(ctx)
