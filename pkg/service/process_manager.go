@@ -185,6 +185,12 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 		h.ipcHandlerClient.Close()
 		h.ipcServiceServer.Stop()
 
+		// The handler is gone and its transport with it, so nothing can report
+		// this session again. cmd.Run returns however the handler died, and a
+		// killed one never ran its own final update, so say so here rather than
+		// trust that it managed to.
+		s.stateNotifier.EnsureTerminal(ctx, h.params.State.ResourceId)
+
 		if p.TmpDir != "" {
 			os.RemoveAll(p.TmpDir)
 		}

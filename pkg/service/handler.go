@@ -77,26 +77,11 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	}
 	h.pipeline = p
 
-	defer func() {
-		switch err {
-		case nil:
-			if p.Reusable {
-				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, nil)
-			} else {
-				p.SetStatus(livekit.IngressState_ENDPOINT_COMPLETE, nil)
-			}
-		default:
-			span.RecordError(err)
-			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
-		}
-
-		p.SendStateUpdate(ctx)
-	}()
-
 	err = ipc.StartHandlerServer(p.TmpDir, h)
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("failed starting hander server", err)
+		h.publishFinalState(ctx, p.Params, err)
 		return err
 	}
 
@@ -118,10 +103,31 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 			kill = nil
 
 		case err = <-result:
-			// ingress finished
+			// The pipeline has torn down, so publish the final state here
+			// rather than from a defer: nothing else is left to report, and
+			// this is the last update this handler makes.
+			if err != nil {
+				span.RecordError(err)
+			}
+			h.publishFinalState(ctx, p.Params, err)
 			return err
 		}
 	}
+}
+
+// publishFinalState records how the session ended and sends the last update
+// this handler makes.
+func (h *Handler) publishFinalState(ctx context.Context, p *params.Params, err error) {
+	switch {
+	case err != nil:
+		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
+	case p.Reusable:
+		p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, nil)
+	default:
+		p.SetStatus(livekit.IngressState_ENDPOINT_COMPLETE, nil)
+	}
+
+	p.SendStateUpdate(ctx)
 }
 
 func (h *Handler) killAndReturnState(ctx context.Context) (*livekit.IngressState, error) {
