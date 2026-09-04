@@ -202,11 +202,15 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 	})
 }
 
-// fail stops the pipeline and reports err.
+// fail stops the pipeline and records err as the session error.
 //
 // A session that cannot build one of its outputs will never publish that track,
 // and a terminal status is read downstream as the session having ended, so it
 // must not carry on running under one.
+//
+// This runs on a GStreamer streaming thread, so it does no I/O: the state
+// update goes out once Run returns, from the terminal report the handler
+// already makes.
 func (p *Pipeline) fail(err error) {
 	// Run drains this once the loop stops, so the session ends with this as its
 	// cause rather than as a clean shutdown.
@@ -215,12 +219,8 @@ func (p *Pipeline) fail(err error) {
 	default:
 	}
 
-	// Stop before reporting: the update below is a blocking round trip with no
-	// deadline, and the shutdown must not wait on it.
-	p.quitLoop()
-
 	p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
-	p.SendStateUpdate(context.Background())
+	p.quitLoop()
 }
 
 func (p *Pipeline) Run(ctx context.Context) error {
