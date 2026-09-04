@@ -248,6 +248,17 @@ func (s *ProcessManager) runHandlerTry(ctx context.Context, h *process, p *param
 	}
 }
 
+// handlerCount reports how many handlers have not finished cleaning up. A
+// session leaves the session manager at the start of that cleanup, so idleness
+// there says nothing about whether the rest of it -- reporting the session as
+// ended, among other things -- has run yet. A handler is removed here last.
+func (s *ProcessManager) handlerCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return len(s.activeHandlers)
+}
+
 func (s *ProcessManager) killAll() {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
