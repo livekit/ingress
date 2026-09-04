@@ -123,8 +123,7 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 	var err error
 	defer func() {
 		if err != nil {
-			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
-			p.SendStateUpdate(context.Background())
+			p.fail(err)
 		}
 	}()
 
@@ -165,10 +164,11 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 
 	defer func() {
 		if err != nil {
-			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
-		} else {
-			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
+			p.fail(err)
+			return
 		}
+
+		p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
 
 		// Is it ok to send this message here? The update handler is not waiting for a response but still doing I/O.
 		// We could send this in a separate goroutine, but this would make races more likely.
@@ -200,6 +200,27 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 
 		return gst.PadProbeRemove
 	})
+}
+
+// fail stops the pipeline and reports err.
+//
+// A session that cannot build one of its outputs will never publish that track,
+// and a terminal status is read downstream as the session having ended, so it
+// must not carry on running under one.
+func (p *Pipeline) fail(err error) {
+	// Run drains this once the loop stops, so the session ends with this as its
+	// cause rather than as a clean shutdown.
+	select {
+	case p.pipelineErr <- err:
+	default:
+	}
+
+	// Stop before reporting: the update below is a blocking round trip with no
+	// deadline, and the shutdown must not wait on it.
+	p.quitLoop()
+
+	p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
+	p.SendStateUpdate(context.Background())
 }
 
 func (p *Pipeline) Run(ctx context.Context) error {
