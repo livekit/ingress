@@ -15,6 +15,8 @@
 package params
 
 import (
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -82,4 +84,56 @@ func TestPopulateVideoEncodingOptionsDefaults(t *testing.T) {
 	require.Equal(t, livekit.VideoCodec_H264_BASELINE, out.VideoCodec)
 	require.Equal(t, float64(15), out.FrameRate)
 	require.Empty(t, cmp.Diff(expected, out.Layers, protocmp.Transform()))
+}
+
+// A terminal status is final. Late callbacks can still fire after an input has
+// gone away -- GStreamer pad notifications in particular run on their own
+// streaming threads and can land after the session has already ended -- and
+// must not move the session back to a running status. Reopening a session that
+// has already reported its end leaves it looking live forever.
+func TestSetStatusIgnoresTransitionsOutOfTerminalState(t *testing.T) {
+	terminal := []livekit.IngressState_Status{
+		livekit.IngressState_ENDPOINT_COMPLETE,
+		livekit.IngressState_ENDPOINT_INACTIVE,
+		livekit.IngressState_ENDPOINT_ERROR,
+	}
+	subsequent := []livekit.IngressState_Status{
+		livekit.IngressState_ENDPOINT_PUBLISHING,
+		livekit.IngressState_ENDPOINT_BUFFERING,
+		livekit.IngressState_ENDPOINT_COMPLETE,
+	}
+
+	for _, term := range terminal {
+		for _, next := range subsequent {
+			t.Run(fmt.Sprintf("%s_then_%s", term, next), func(t *testing.T) {
+				p := &Params{IngressInfo: &livekit.IngressInfo{State: &livekit.IngressState{}}}
+
+				p.SetStatus(term, errors.New("room disconnected"))
+				endedAt := p.State.EndedAt
+				require.NotZero(t, endedAt)
+
+				p.SetStatus(next, nil)
+
+				require.Equal(t, term, p.State.Status)
+				require.Equal(t, endedAt, p.State.EndedAt)
+				require.EqualError(t, p.err, "room disconnected")
+			})
+		}
+	}
+}
+
+func TestSetStatusAllowsTransitionsBeforeTermination(t *testing.T) {
+	p := &Params{IngressInfo: &livekit.IngressInfo{State: &livekit.IngressState{}}}
+
+	p.SetStatus(livekit.IngressState_ENDPOINT_BUFFERING, nil)
+	require.Equal(t, livekit.IngressState_ENDPOINT_BUFFERING, p.State.Status)
+	require.Zero(t, p.State.EndedAt)
+
+	p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
+	require.Equal(t, livekit.IngressState_ENDPOINT_PUBLISHING, p.State.Status)
+	require.Zero(t, p.State.EndedAt)
+
+	p.SetStatus(livekit.IngressState_ENDPOINT_COMPLETE, nil)
+	require.Equal(t, livekit.IngressState_ENDPOINT_COMPLETE, p.State.Status)
+	require.NotZero(t, p.State.EndedAt)
 }

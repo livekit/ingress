@@ -326,9 +326,40 @@ func (p *Params) SetExtraParams(ep any) {
 	p.ExtraParams = ep
 }
 
+func isTerminalStatus(status livekit.IngressState_Status) bool {
+	switch status {
+	case livekit.IngressState_ENDPOINT_COMPLETE,
+		livekit.IngressState_ENDPOINT_INACTIVE,
+		livekit.IngressState_ENDPOINT_ERROR:
+		return true
+	default:
+		return false
+	}
+}
+
+// Ended reports whether the session has reached a terminal status.
+//
+// EndedAt is the marker rather than Status because ENDPOINT_INACTIVE is both
+// terminal and the zero value, so status alone cannot tell a session that has
+// not started yet from one that has already finished.
+func (p *Params) Ended() bool {
+	p.stateLock.Lock()
+	defer p.stateLock.Unlock()
+
+	return p.State.EndedAt != 0
+}
+
 func (p *Params) SetStatus(status livekit.IngressState_Status, err error) {
 	p.stateLock.Lock()
 	defer p.stateLock.Unlock()
+
+	// A terminal status is final. Callbacks can outlive the input -- GStreamer
+	// pad notifications run on their own streaming threads and can land after
+	// the session ended -- and moving back to a running status here would
+	// reopen a session that has already reported its end.
+	if p.State.EndedAt != 0 {
+		return
+	}
 
 	p.State.Status = status
 	// Always return the first error
@@ -336,13 +367,8 @@ func (p *Params) SetStatus(status livekit.IngressState_Status, err error) {
 		p.err = err
 	}
 
-	switch status {
-	case livekit.IngressState_ENDPOINT_COMPLETE,
-		livekit.IngressState_ENDPOINT_INACTIVE,
-		livekit.IngressState_ENDPOINT_ERROR:
-		if p.State.EndedAt == 0 {
-			p.State.EndedAt = time.Now().UnixNano()
-		}
+	if isTerminalStatus(status) {
+		p.State.EndedAt = time.Now().UnixNano()
 	}
 }
 

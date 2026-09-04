@@ -16,6 +16,7 @@ package media
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"sync"
@@ -27,7 +28,9 @@ import (
 	"github.com/go-gst/go-gst/gst"
 	"github.com/stretchr/testify/require"
 
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/protocol/livekit"
 )
 
 const testSystemMemoryCaps = "video/x-raw,format=NV12,width=1280,height=720,framerate=30/1"
@@ -47,6 +50,11 @@ func newCapsHoldingGhostPad(t *testing.T, capsStr string) *gst.GhostPad {
 	return ghost
 }
 
+// onParamsReady consults session state, so the fixtures need a live one.
+func liveParams() *params.Params {
+	return &params.Params{IngressInfo: &livekit.IngressInfo{State: &livekit.IngressState{}}}
+}
+
 // The renegotiation this fix exists for. On GStreamer 1.28 the video pad is
 // advertised as memory:GLMemory and then renegotiated to system memory, so
 // onParamsReady runs twice for one pad. The second run must not build another
@@ -60,6 +68,7 @@ func TestSecondCapsNotificationDoesNotRebuild(t *testing.T) {
 	const builtCaps = "video/x-raw(memory:GLMemory),format=NV12,width=1280,height=720,texture-target=rectangle"
 
 	p := &Pipeline{
+		Params:      liveParams(),
 		established: map[types.StreamKind]string{types.Video: builtCaps},
 	}
 
@@ -70,12 +79,35 @@ func TestSecondCapsNotificationDoesNotRebuild(t *testing.T) {
 	require.Len(t, p.established, 1)
 }
 
+// Pads notify on their own GStreamer streaming threads and can fire after the
+// session ended. Building an output for a finished session is pointless, and
+// reporting PUBLISHING from here would reopen a session that already recorded
+// its end.
+//
+// sink is nil, so a regression that builds anyway panics rather than passing.
+func TestCapsNotificationAfterSessionEndedIsIgnored(t *testing.T) {
+	gst.Init(nil)
+
+	p := &Pipeline{
+		Params:      liveParams(),
+		established: make(map[types.StreamKind]string),
+	}
+	p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, errors.New("room disconnected"))
+
+	p.onParamsReady(types.Video, newCapsHoldingGhostPad(t, testSystemMemoryCaps))
+
+	require.Empty(t, p.established)
+	require.Equal(t, livekit.IngressState_ENDPOINT_ERROR, p.State.Status,
+		"a late notification must not move an ended session back to a running status")
+}
+
 // A notification carrying no caps is not a renegotiation and must not record
 // anything, or the real caps that follow would be treated as the second one.
 func TestCapsNotificationWithoutCapsIsIgnored(t *testing.T) {
 	gst.Init(nil)
 
 	p := &Pipeline{
+		Params:      liveParams(),
 		established: make(map[types.StreamKind]string),
 	}
 

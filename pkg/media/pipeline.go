@@ -139,6 +139,15 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 	var err error
 
+	// Pads notify on their own GStreamer streaming threads and can fire after
+	// the session ended, so there is nothing left to build or report here.
+	// SetStatus refuses to leave a terminal status, so a notification that
+	// slips past this check cannot reopen the session either.
+	if p.Ended() {
+		logger.Debugw("ignoring caps notification, session already ended", "kind", kind)
+		return
+	}
+
 	// TODO fix go-gst to not create non nil gst.Caps for a NULL native caps pointer?
 	caps, err := gPad.GetProperty("caps")
 	if err != nil || caps == nil || caps.(*gst.Caps) == nil || caps.(*gst.Caps).Unsafe() == nil {
