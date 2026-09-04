@@ -17,9 +17,14 @@ package media
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -546,4 +551,145 @@ func TestEOSAfterARequestedStopQueuesNothing(t *testing.T) {
 		t.Fatalf("a stop we asked for was reported as a truncated source: %v", err)
 	default:
 	}
+}
+
+// The tests above read a wav through filesrc and wavparse, which is not the
+// topology this check exists for: what a duration and a position query answer
+// depends on which element answers them. These serve a real HLS fixture over
+// HTTP through the same souphttpsrc, decodebin3 and hlsdemux2 chain a URL pull
+// builds, so the manifest duration and the position of the last fragment that
+// arrived are the real ones.
+
+const (
+	hlsFixtureSegments = 10
+	hlsGoodSegments    = 3
+)
+
+// newHLSFixture writes a VOD playlist and its segments, and returns the
+// directory along with the duration the playlist advertises.
+func newHLSFixture(t *testing.T, segments int) (string, time.Duration) {
+	t.Helper()
+
+	gst.Init(nil)
+
+	dir := t.TempDir()
+
+	// One buffer per second at the default rate, so num-buffers is roughly the
+	// segment count. max-files=0 keeps every segment; the default prunes them.
+	enc, err := gst.NewPipelineFromString(fmt.Sprintf(
+		"audiotestsrc num-buffers=%d samplesperbuffer=44100 ! audioconvert ! avenc_aac ! aacparse "+
+			"! hlssink2 location=%s/seg%%05d.ts playlist-location=%s/playlist.m3u8 "+
+			"target-duration=1 playlist-length=0 max-files=0",
+		segments, dir, dir))
+	require.NoError(t, err)
+	require.NoError(t, enc.BlockSetState(gst.StatePlaying))
+
+	msg := enc.GetPipelineBus().TimedPopFiltered(
+		gst.ClockTime(60*time.Second), gst.MessageEOS|gst.MessageError)
+	require.NotNil(t, msg, "writing the fixture timed out")
+	require.Equal(t, gst.MessageEOS, msg.Type(), msg.String())
+	require.NoError(t, enc.BlockSetState(gst.StateNull))
+
+	playlist, err := os.ReadFile(filepath.Join(dir, "playlist.m3u8"))
+	require.NoError(t, err)
+	require.Contains(t, string(playlist), "#EXT-X-ENDLIST", "the fixture must be a VOD playlist")
+
+	var advertised float64
+	for _, line := range strings.Split(string(playlist), "\n") {
+		v, ok := strings.CutPrefix(line, "#EXTINF:")
+		if !ok {
+			continue
+		}
+		d, err := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(v), ","), 64)
+		require.NoError(t, err)
+		advertised += d
+	}
+	require.NotZero(t, advertised, "the playlist declared no segments")
+
+	return dir, time.Duration(advertised * float64(time.Second))
+}
+
+// serveHLS serves the fixture and answers segment requests with 500 once
+// goodSegments have been handed out. The playlist keeps returning 200, so the
+// only failure the demuxer sees is on a fragment, which is what turns into an
+// EOS rather than an error.
+func serveHLS(t *testing.T, dir string, goodSegments int) string {
+	t.Helper()
+
+	var served atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := path.Base(r.URL.Path)
+		if !strings.HasSuffix(name, ".m3u8") && int(served.Add(1)) > goodSegments {
+			http.Error(w, "upstream unavailable", http.StatusInternalServerError)
+			return
+		}
+		http.ServeFile(w, r, filepath.Join(dir, name))
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv.URL + "/playlist.m3u8"
+}
+
+// runHLSPull builds the chain a URL pull builds and runs it until the bus
+// reports EOS or an error. The sinks do not sync: for HLS the answer is the
+// same either way, because hlsdemux2 leaves segment.stop unset and the sinks
+// cannot answer a position query from their own state.
+func runHLSPull(t *testing.T, url string) (*Pipeline, gst.MessageType) {
+	t.Helper()
+
+	pipeline, err := gst.NewPipelineFromString(fmt.Sprintf(
+		"souphttpsrc location=%s ! queue2 use-buffering=true max-size-buffers=0 "+
+			"! decodebin3 ! queue ! fakesink sync=false", url))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pipeline.BlockSetState(gst.StateNull) })
+
+	require.NoError(t, pipeline.Start())
+
+	msg := pipeline.GetPipelineBus().TimedPopFiltered(
+		gst.ClockTime(60*time.Second), gst.MessageEOS|gst.MessageError)
+	require.NotNil(t, msg, "the pull neither finished nor failed")
+
+	return &Pipeline{pipeline: pipeline}, msg.Type()
+}
+
+// The reported case, over the topology it was reported on. A 5xx part way
+// through has to reach us as an EOS, the duration has to stay the manifest's
+// rather than what was delivered, and the position has to be where the
+// fragments stopped.
+func TestTruncatedHLSPullIsAnError(t *testing.T) {
+	dir, advertised := newHLSFixture(t, hlsFixtureSegments)
+
+	p, msgType := runHLSPull(t, serveHLS(t, dir, hlsGoodSegments))
+
+	require.Equal(t, gst.MessageEOS, msgType,
+		"a fragment 5xx must arrive as an EOS; a bus error would mean this check is not what catches it")
+
+	ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+	require.True(t, ok)
+	require.InDelta(t, advertised.Seconds(), time.Duration(d).Seconds(), 0.5,
+		"duration must be what the manifest advertises, not what arrived")
+
+	ok, pos := p.pipeline.QueryPosition(gst.FormatTime)
+	require.True(t, ok)
+	require.InDelta(t, float64(hlsGoodSegments), time.Duration(pos).Seconds(), 1,
+		"position must reflect the fragments that arrived")
+
+	require.Error(t, p.checkSourceComplete())
+}
+
+// The same topology playing to the end of its playlist has to stay complete,
+// which is what keeps the tolerance from failing an ordinary HLS finish.
+func TestCompleteHLSPullIsComplete(t *testing.T) {
+	dir, advertised := newHLSFixture(t, hlsFixtureSegments)
+
+	p, msgType := runHLSPull(t, serveHLS(t, dir, hlsFixtureSegments+1))
+
+	require.Equal(t, gst.MessageEOS, msgType)
+
+	ok, pos := p.pipeline.QueryPosition(gst.FormatTime)
+	require.True(t, ok)
+	require.InDelta(t, advertised.Seconds(), time.Duration(pos).Seconds(), 0.5,
+		"the whole playlist should have played out")
+
+	require.NoError(t, p.checkSourceComplete())
 }
