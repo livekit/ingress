@@ -16,8 +16,15 @@ package media
 
 import (
 	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -364,4 +371,325 @@ func runChild(t *testing.T, testName string) ([]byte, error) {
 	cmd.Env = append(os.Environ(), eosChildEnv+"=1")
 
 	return cmd.CombinedOutput()
+}
+
+// A pull that stops short of the duration its source advertises is how an
+// upstream failure reaches us: adaptivedemux2 turns repeated segment fetch
+// failures into an EOS no different from the one a finished source raises.
+// These drive the check over a real pipeline, because what it reads is
+// GStreamer's answer to a duration and a position query rather than anything
+// computed here.
+
+const testSourceLength = 20 * time.Second
+
+// newSeekablePipeline writes a wav of the given length and returns a Pipeline
+// reading it, prerolled so both queries answer. PAUSED is enough: a position
+// query is served from the sink's preroll, so nothing plays out in real time.
+func newSeekablePipeline(t *testing.T, length time.Duration) *Pipeline {
+	t.Helper()
+
+	gst.Init(nil)
+
+	path := filepath.Join(t.TempDir(), "tone.wav")
+
+	// One buffer per second, so num-buffers is the length in seconds.
+	enc, err := gst.NewPipelineFromString(fmt.Sprintf(
+		"audiotestsrc num-buffers=%d samplesperbuffer=44100 ! audioconvert ! wavenc ! filesink location=%s",
+		int(length.Seconds()), path))
+	require.NoError(t, err)
+	require.NoError(t, enc.BlockSetState(gst.StatePlaying))
+
+	msg := enc.GetPipelineBus().TimedPopFiltered(
+		gst.ClockTime(30*time.Second), gst.MessageEOS|gst.MessageError)
+	require.NotNil(t, msg, "writing the fixture timed out")
+	require.Equal(t, gst.MessageEOS, msg.Type(), msg.String())
+	require.NoError(t, enc.BlockSetState(gst.StateNull))
+
+	read, err := gst.NewPipelineFromString(fmt.Sprintf(
+		"filesrc location=%s ! wavparse ! fakesink sync=false", path))
+	require.NoError(t, err)
+	require.NoError(t, read.BlockSetState(gst.StatePaused))
+	t.Cleanup(func() { _ = read.BlockSetState(gst.StateNull) })
+
+	return &Pipeline{pipeline: read}
+}
+
+// stopAt leaves the pipeline reporting pos as its position. A flushing seek
+// re-prerolls, so the new position is waited for rather than assumed.
+func stopAt(t *testing.T, p *Pipeline, pos time.Duration) {
+	t.Helper()
+
+	require.True(t, p.pipeline.SeekTime(pos, gst.SeekFlagFlush|gst.SeekFlagAccurate),
+		"seek to %s failed", pos)
+	p.pipeline.GetState(gst.StatePaused, gst.ClockTime(10*time.Second))
+
+	ok, got := p.pipeline.QueryPosition(gst.FormatTime)
+	require.True(t, ok, "the pipeline reported no position after seeking")
+	require.InDelta(t, pos.Seconds(), time.Duration(got).Seconds(), 0.5,
+		"seek did not land where the test needs it")
+}
+
+// The reported case: the source stopped far short of its duration.
+func TestSourceStoppingShortOfItsDurationIsAnError(t *testing.T) {
+	p := newSeekablePipeline(t, testSourceLength)
+
+	stopAt(t, p, 2*time.Second)
+
+	err := p.checkSourceComplete()
+
+	require.Error(t, err, "stopping 2s into %s must not be reported complete", testSourceLength)
+	require.Contains(t, err.Error(), "source ended after")
+}
+
+// Playing out the whole source is the ordinary end and must stay complete.
+func TestSourcePlayedToItsDurationIsComplete(t *testing.T) {
+	p := newSeekablePipeline(t, testSourceLength)
+
+	stopAt(t, p, testSourceLength)
+
+	require.NoError(t, p.checkSourceComplete())
+}
+
+// Missing a slice smaller than the tolerance is the ordinary end of a source
+// whose final segment ran shorter than the manifest declared.
+func TestStoppingWithinTheToleranceIsComplete(t *testing.T) {
+	const length = 60 * time.Second
+
+	p := newSeekablePipeline(t, length)
+
+	// 2s of 60s is under the tolerance.
+	stopAt(t, p, length-2*time.Second)
+
+	require.NoError(t, p.checkSourceComplete())
+}
+
+// The tolerance is a share of the source, not a fixed span, so the same
+// shortfall means different things on different lengths. A fixed tolerance
+// wide enough for the long source would call the short one complete too.
+func TestToleranceIsProportionalToTheSource(t *testing.T) {
+	const shortfall = 2 * time.Second
+
+	short := newSeekablePipeline(t, testSourceLength)
+	stopAt(t, short, testSourceLength-shortfall)
+	require.Error(t, short.checkSourceComplete(),
+		"%s of %s is past the tolerance", shortfall, testSourceLength)
+
+	long := newSeekablePipeline(t, 60*time.Second)
+	stopAt(t, long, 60*time.Second-shortfall)
+	require.NoError(t, long.checkSourceComplete(),
+		"%s of 1m0s is within the tolerance", shortfall)
+}
+
+// Live HLS along with the RTMP and WHIP inputs have no end to fall short of,
+// so the check has to leave them alone.
+//
+// The two query assertions carry this test. GStreamer answers a duration query
+// for such a source rather than declining it, and reports the unknown duration
+// as a negative value, which is why the guard reads the value and not the
+// boolean. Were that to change, the whole path would shift.
+func TestSourceWithoutDurationIsComplete(t *testing.T) {
+	gst.Init(nil)
+
+	live, err := gst.NewPipelineFromString("audiotestsrc is-live=true ! fakesink sync=false")
+	require.NoError(t, err)
+	require.NoError(t, live.BlockSetState(gst.StatePlaying))
+	t.Cleanup(func() { _ = live.BlockSetState(gst.StateNull) })
+
+	p := &Pipeline{pipeline: live}
+
+	ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+	require.True(t, ok, "the duration query is answered even with no duration to give")
+	require.Negative(t, d, "an unknown duration is reported as a negative value")
+
+	require.NoError(t, p.checkSourceComplete())
+}
+
+// The check hangs off the EOS branch of messageWatch, and two things there
+// carry it: it has to run while the pipeline can still answer a position
+// query, and it has to stay out of the way of a stop we asked for.
+
+// newTruncatedPipeline returns a Pipeline sitting well short of its duration,
+// wired with the parts messageWatch touches.
+func newTruncatedPipeline(t *testing.T) *Pipeline {
+	t.Helper()
+
+	p := newSeekablePipeline(t, testSourceLength)
+	p.loop = glib.NewMainLoop(glib.MainContextDefault(), false)
+	p.pipelineErr = make(chan error, 1)
+	stopAt(t, p, 2*time.Second)
+
+	return p
+}
+
+// Driving the real branch also pins the ordering: the check has to precede the
+// state change, since a NULL pipeline reports no position.
+func TestEOSFromTheSourceQueuesTheTruncation(t *testing.T) {
+	p := newTruncatedPipeline(t)
+
+	p.messageWatch(gst.NewEOSMessage(p.pipeline))
+
+	select {
+	case err := <-p.pipelineErr:
+		require.ErrorContains(t, err, "source ended after")
+	default:
+		t.Fatal("nothing queued: the check either did not run, " +
+			"or ran once the pipeline could no longer report a position")
+	}
+}
+
+// A stop we asked for ends playback early too. Reporting that as a truncated
+// source would fail every ingress a caller deletes part way through.
+func TestEOSAfterARequestedStopQueuesNothing(t *testing.T) {
+	p := newTruncatedPipeline(t)
+
+	p.closed.Break()
+
+	p.messageWatch(gst.NewEOSMessage(p.pipeline))
+
+	select {
+	case err := <-p.pipelineErr:
+		t.Fatalf("a stop we asked for was reported as a truncated source: %v", err)
+	default:
+	}
+}
+
+// The tests above read a wav through filesrc and wavparse, which is not the
+// topology this check exists for: what a duration and a position query answer
+// depends on which element answers them. These serve a real HLS fixture over
+// HTTP through the same souphttpsrc, decodebin3 and hlsdemux2 chain a URL pull
+// builds, so the manifest duration and the position of the last fragment that
+// arrived are the real ones.
+
+const (
+	hlsFixtureSegments = 10
+	hlsGoodSegments    = 3
+)
+
+// newHLSFixture writes a VOD playlist and its segments, and returns the
+// directory along with the duration the playlist advertises.
+func newHLSFixture(t *testing.T, segments int) (string, time.Duration) {
+	t.Helper()
+
+	gst.Init(nil)
+
+	dir := t.TempDir()
+
+	// One buffer per second at the default rate, so num-buffers is roughly the
+	// segment count. max-files=0 keeps every segment; the default prunes them.
+	enc, err := gst.NewPipelineFromString(fmt.Sprintf(
+		"audiotestsrc num-buffers=%d samplesperbuffer=44100 ! audioconvert ! avenc_aac ! aacparse "+
+			"! hlssink2 location=%s/seg%%05d.ts playlist-location=%s/playlist.m3u8 "+
+			"target-duration=1 playlist-length=0 max-files=0",
+		segments, dir, dir))
+	require.NoError(t, err)
+	require.NoError(t, enc.BlockSetState(gst.StatePlaying))
+
+	msg := enc.GetPipelineBus().TimedPopFiltered(
+		gst.ClockTime(60*time.Second), gst.MessageEOS|gst.MessageError)
+	require.NotNil(t, msg, "writing the fixture timed out")
+	require.Equal(t, gst.MessageEOS, msg.Type(), msg.String())
+	require.NoError(t, enc.BlockSetState(gst.StateNull))
+
+	playlist, err := os.ReadFile(filepath.Join(dir, "playlist.m3u8"))
+	require.NoError(t, err)
+	require.Contains(t, string(playlist), "#EXT-X-ENDLIST", "the fixture must be a VOD playlist")
+
+	var advertised float64
+	for _, line := range strings.Split(string(playlist), "\n") {
+		v, ok := strings.CutPrefix(line, "#EXTINF:")
+		if !ok {
+			continue
+		}
+		d, err := strconv.ParseFloat(strings.TrimSuffix(strings.TrimSpace(v), ","), 64)
+		require.NoError(t, err)
+		advertised += d
+	}
+	require.NotZero(t, advertised, "the playlist declared no segments")
+
+	return dir, time.Duration(advertised * float64(time.Second))
+}
+
+// serveHLS serves the fixture and answers segment requests with 500 once
+// goodSegments have been handed out. The playlist keeps returning 200, so the
+// only failure the demuxer sees is on a fragment, which is what turns into an
+// EOS rather than an error.
+func serveHLS(t *testing.T, dir string, goodSegments int) string {
+	t.Helper()
+
+	var served atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		name := path.Base(r.URL.Path)
+		if !strings.HasSuffix(name, ".m3u8") && int(served.Add(1)) > goodSegments {
+			http.Error(w, "upstream unavailable", http.StatusInternalServerError)
+			return
+		}
+		http.ServeFile(w, r, filepath.Join(dir, name))
+	}))
+	t.Cleanup(srv.Close)
+
+	return srv.URL + "/playlist.m3u8"
+}
+
+// runHLSPull builds the chain a URL pull builds and runs it until the bus
+// reports EOS or an error. The sinks do not sync: for HLS the answer is the
+// same either way, because hlsdemux2 leaves segment.stop unset and the sinks
+// cannot answer a position query from their own state.
+func runHLSPull(t *testing.T, url string) (*Pipeline, gst.MessageType) {
+	t.Helper()
+
+	pipeline, err := gst.NewPipelineFromString(fmt.Sprintf(
+		"souphttpsrc location=%s ! queue2 use-buffering=true max-size-buffers=0 "+
+			"! decodebin3 ! queue ! fakesink sync=false", url))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pipeline.BlockSetState(gst.StateNull) })
+
+	require.NoError(t, pipeline.Start())
+
+	msg := pipeline.GetPipelineBus().TimedPopFiltered(
+		gst.ClockTime(60*time.Second), gst.MessageEOS|gst.MessageError)
+	require.NotNil(t, msg, "the pull neither finished nor failed")
+
+	return &Pipeline{pipeline: pipeline}, msg.Type()
+}
+
+// The reported case, over the topology it was reported on. A 5xx part way
+// through has to reach us as an EOS, the duration has to stay the manifest's
+// rather than what was delivered, and the position has to be where the
+// fragments stopped.
+func TestTruncatedHLSPullIsAnError(t *testing.T) {
+	dir, advertised := newHLSFixture(t, hlsFixtureSegments)
+
+	p, msgType := runHLSPull(t, serveHLS(t, dir, hlsGoodSegments))
+
+	require.Equal(t, gst.MessageEOS, msgType,
+		"a fragment 5xx must arrive as an EOS; a bus error would mean this check is not what catches it")
+
+	ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+	require.True(t, ok)
+	require.InDelta(t, advertised.Seconds(), time.Duration(d).Seconds(), 0.5,
+		"duration must be what the manifest advertises, not what arrived")
+
+	ok, pos := p.pipeline.QueryPosition(gst.FormatTime)
+	require.True(t, ok)
+	require.InDelta(t, float64(hlsGoodSegments), time.Duration(pos).Seconds(), 1,
+		"position must reflect the fragments that arrived")
+
+	require.Error(t, p.checkSourceComplete())
+}
+
+// The same topology playing to the end of its playlist has to stay complete,
+// which is what keeps the tolerance from failing an ordinary HLS finish.
+func TestCompleteHLSPullIsComplete(t *testing.T) {
+	dir, advertised := newHLSFixture(t, hlsFixtureSegments)
+
+	p, msgType := runHLSPull(t, serveHLS(t, dir, hlsFixtureSegments+1))
+
+	require.Equal(t, gst.MessageEOS, msgType)
+
+	ok, pos := p.pipeline.QueryPosition(gst.FormatTime)
+	require.True(t, ok)
+	require.InDelta(t, advertised.Seconds(), time.Duration(pos).Seconds(), 0.5,
+		"the whole playlist should have played out")
+
+	require.NoError(t, p.checkSourceComplete())
 }

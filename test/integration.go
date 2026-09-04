@@ -158,6 +158,9 @@ func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, getState
 		t.Run("URL pul", func(t *testing.T) {
 			RunURLTest(t, conf, bus, commandPsrpcClient, psrpcClient, sn, newCmd)
 		})
+		t.Run("URL pull truncated", func(t *testing.T) {
+			RunURLTruncatedTest(t, conf, bus, psrpcClient, sn, newCmd)
+		})
 	}
 
 }
