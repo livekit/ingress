@@ -280,14 +280,12 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 		// EOS received - close and return
 		logger.Debugw("EOS received, stopping pipeline")
 
-		// A NULL pipeline reports no position, so this sits ahead of the state
-		// change. Skip it when the stop was requested: that ends playback early
-		// too, so it says nothing about the source. The fuse is read twice on
-		// purpose, once to keep the queries off the shutdown path and once after
-		// them, so a stop arriving while they run still wins.
+		// This has to run before the pipeline goes to NULL, since a NULL
+		// pipeline answers no position query. A stop we asked for also ends
+		// playback early, so it says nothing about the source: skip the check
+		// then.
 		if !p.closed.IsBroken() {
-			err := p.checkSourceComplete()
-			if err != nil && !p.closed.IsBroken() {
+			if err := p.checkSourceComplete(); err != nil {
 				select {
 				case p.pipelineErr <- err:
 				default:
