@@ -21,6 +21,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/logger"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/testing/protocmp"
 )
@@ -86,33 +87,38 @@ func TestPopulateVideoEncodingOptionsDefaults(t *testing.T) {
 	require.Empty(t, cmp.Diff(expected, out.Layers, protocmp.Transform()))
 }
 
-// A terminal status is final. Late callbacks can still fire after an input has
-// gone away -- GStreamer pad notifications in particular run on their own
-// streaming threads and can land after the session has already ended -- and
-// must not move the session back to a running status. Reopening a session that
-// has already reported its end leaves it looking live forever.
-func TestSetStatusIgnoresTransitionsOutOfTerminalState(t *testing.T) {
+func newTestParams() *Params {
+	return &Params{
+		IngressInfo: &livekit.IngressInfo{State: &livekit.IngressState{}},
+		logger:      logger.GetLogger(),
+	}
+}
+
+// An ended session does not start again. Pads notify on their own GStreamer
+// streaming threads and can fire after the input has gone away, and rolling
+// the status back to a running one would leave the session looking live to
+// anything tracking it by status.
+func TestSetStatusIgnoresRunningStatusOnEndedSession(t *testing.T) {
 	terminal := []livekit.IngressState_Status{
 		livekit.IngressState_ENDPOINT_COMPLETE,
 		livekit.IngressState_ENDPOINT_INACTIVE,
 		livekit.IngressState_ENDPOINT_ERROR,
 	}
-	subsequent := []livekit.IngressState_Status{
+	running := []livekit.IngressState_Status{
 		livekit.IngressState_ENDPOINT_PUBLISHING,
 		livekit.IngressState_ENDPOINT_BUFFERING,
-		livekit.IngressState_ENDPOINT_COMPLETE,
 	}
 
 	for _, term := range terminal {
-		for _, next := range subsequent {
-			t.Run(fmt.Sprintf("%s_then_%s", term, next), func(t *testing.T) {
-				p := &Params{IngressInfo: &livekit.IngressInfo{State: &livekit.IngressState{}}}
+		for _, run := range running {
+			t.Run(fmt.Sprintf("%s_then_%s", term, run), func(t *testing.T) {
+				p := newTestParams()
 
 				p.SetStatus(term, errors.New("room disconnected"))
 				endedAt := p.State.EndedAt
 				require.NotZero(t, endedAt)
 
-				p.SetStatus(next, nil)
+				p.SetStatus(run, nil)
 
 				require.Equal(t, term, p.State.Status)
 				require.Equal(t, endedAt, p.State.EndedAt)
@@ -122,8 +128,24 @@ func TestSetStatusIgnoresTransitionsOutOfTerminalState(t *testing.T) {
 	}
 }
 
+// A finished session can still be enriched with further terminal state. The
+// first end time and the first error stand.
+func TestSetStatusAllowsTerminalUpdatesOnEndedSession(t *testing.T) {
+	p := newTestParams()
+
+	p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, errors.New("room disconnected"))
+	endedAt := p.State.EndedAt
+	require.NotZero(t, endedAt)
+
+	p.SetStatus(livekit.IngressState_ENDPOINT_COMPLETE, errors.New("later error"))
+
+	require.Equal(t, livekit.IngressState_ENDPOINT_COMPLETE, p.State.Status)
+	require.Equal(t, endedAt, p.State.EndedAt)
+	require.EqualError(t, p.err, "room disconnected")
+}
+
 func TestSetStatusAllowsTransitionsBeforeTermination(t *testing.T) {
-	p := &Params{IngressInfo: &livekit.IngressInfo{State: &livekit.IngressState{}}}
+	p := newTestParams()
 
 	p.SetStatus(livekit.IngressState_ENDPOINT_BUFFERING, nil)
 	require.Equal(t, livekit.IngressState_ENDPOINT_BUFFERING, p.State.Status)

@@ -337,27 +337,18 @@ func isTerminalStatus(status livekit.IngressState_Status) bool {
 	}
 }
 
-// Ended reports whether the session has reached a terminal status.
-//
-// EndedAt is the marker rather than Status because ENDPOINT_INACTIVE is both
-// terminal and the zero value, so status alone cannot tell a session that has
-// not started yet from one that has already finished.
-func (p *Params) Ended() bool {
-	p.stateLock.Lock()
-	defer p.stateLock.Unlock()
-
-	return p.State.EndedAt != 0
-}
-
 func (p *Params) SetStatus(status livekit.IngressState_Status, err error) {
 	p.stateLock.Lock()
 	defer p.stateLock.Unlock()
 
-	// A terminal status is final. Callbacks can outlive the input -- GStreamer
-	// pad notifications run on their own streaming threads and can land after
-	// the session ended -- and moving back to a running status here would
-	// reopen a session that has already reported its end.
-	if p.State.EndedAt != 0 {
+	// An ended session does not start again. Callbacks can outlive the input --
+	// pads notify on their own GStreamer streaming threads -- and rolling the
+	// status back to a running one leaves the session looking live to anything
+	// tracking it by status. Terminal updates still apply, so a finished
+	// session can still be enriched.
+	if p.State.EndedAt != 0 && !isTerminalStatus(status) {
+		p.logger.Infow("ignoring status change on a session that already ended",
+			"status", status, "endedAt", p.State.EndedAt)
 		return
 	}
 
@@ -367,7 +358,7 @@ func (p *Params) SetStatus(status livekit.IngressState_Status, err error) {
 		p.err = err
 	}
 
-	if isTerminalStatus(status) {
+	if isTerminalStatus(status) && p.State.EndedAt == 0 {
 		p.State.EndedAt = time.Now().UnixNano()
 	}
 }
