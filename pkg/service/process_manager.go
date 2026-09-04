@@ -185,6 +185,12 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 		h.ipcHandlerClient.Close()
 		h.ipcServiceServer.Stop()
 
+		// The handler is gone and its transport with it, so nothing can report
+		// this session again. cmd.Run returns however the handler died, and a
+		// killed one never ran its own final update, so say so here rather than
+		// trust that it managed to.
+		s.stateNotifier.EnsureTerminal(ctx, h.params.State.ResourceId)
+
 		if p.TmpDir != "" {
 			os.RemoveAll(p.TmpDir)
 		}
@@ -240,6 +246,17 @@ func (s *ProcessManager) runHandlerTry(ctx context.Context, h *process, p *param
 		}
 		return false, err
 	}
+}
+
+// handlerCount reports how many handlers have not finished cleaning up. A
+// session leaves the session manager at the start of that cleanup, so idleness
+// there says nothing about whether the rest of it -- reporting the session as
+// ended, among other things -- has run yet. A handler is removed here last.
+func (s *ProcessManager) handlerCount() int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return len(s.activeHandlers)
 }
 
 func (s *ProcessManager) killAll() {
