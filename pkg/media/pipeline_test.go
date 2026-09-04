@@ -27,10 +27,17 @@ import (
 	"github.com/go-gst/go-gst/gst"
 	"github.com/stretchr/testify/require"
 
+	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/utils"
+	"github.com/livekit/protocol/livekit"
 )
 
 const testSystemMemoryCaps = "video/x-raw,format=NV12,width=1280,height=720,framerate=30/1"
+
+// Caps carrying no resolution, which AddTrack reads before it touches the sink.
+const testCapsWithoutResolution = "video/x-raw,format=NV12"
 
 // newCapsHoldingGhostPad returns a src ghost pad carrying capsStr, the shape
 // Input surfaces. A pad's caps property is its sticky CAPS event, and an
@@ -364,4 +371,62 @@ func runChild(t *testing.T, testName string) ([]byte, error) {
 	cmd.Env = append(os.Environ(), eosChildEnv+"=1")
 
 	return cmd.CombinedOutput()
+}
+
+func newTestParams(t *testing.T) *params.Params {
+	t.Helper()
+
+	info := &livekit.IngressInfo{
+		IngressId:           "IN_test",
+		Name:                "test",
+		StreamKey:           "streamkey",
+		InputType:           livekit.IngressInput_RTMP_INPUT,
+		RoomName:            "room",
+		ParticipantIdentity: "identity",
+		ParticipantName:     "name",
+		State:               &livekit.IngressState{ResourceId: "RS_test"},
+	}
+
+	conf := &config.Config{ServiceConfig: &config.ServiceConfig{}, InternalConfig: &config.InternalConfig{}}
+
+	p, err := params.GetParams(context.Background(), utils.NewNoopStateNotifier(), conf, info,
+		"ws://localhost:7880", "token", "project", "relay", nil, nil, nil)
+	require.NoError(t, err)
+
+	return p
+}
+
+// A session that cannot build one of its outputs reports a terminal status, and
+// downstream reads that as the session having ended, so it has to stop rather
+// than keep running unreported.
+//
+// The sink is nil: AddTrack reads the resolution before it touches the sink, so
+// caps without one reach the real failure path. A reordering there panics
+// instead of silently passing.
+func TestTrackBuildFailureStopsTheSession(t *testing.T) {
+	gst.Init(nil)
+
+	p := &Pipeline{
+		Params:      newTestParams(t),
+		loop:        glib.NewMainLoop(glib.MainContextDefault(), false),
+		pipelineErr: make(chan error, 1),
+		established: make(map[types.StreamKind]string),
+	}
+
+	go p.loop.Run()
+	require.Eventually(t, p.loop.IsRunning, 2*time.Second, 10*time.Millisecond, "loop did not start")
+
+	p.onParamsReady(types.Video, newCapsHoldingGhostPad(t, testCapsWithoutResolution))
+
+	require.Equal(t, livekit.IngressState_ENDPOINT_ERROR, p.State.Status)
+	require.Empty(t, p.established, "a failed output must not be recorded as built")
+	require.Eventually(t, func() bool { return !p.loop.IsRunning() }, 2*time.Second, 10*time.Millisecond,
+		"the session kept running after a track failed to build")
+
+	select {
+	case err := <-p.pipelineErr:
+		require.Error(t, err, "Run must end with the track failure as its cause")
+	default:
+		t.Fatal("no error was handed to Run, so the session would end as a clean shutdown")
+	}
 }
