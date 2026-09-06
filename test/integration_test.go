@@ -34,7 +34,7 @@ func TestIngress(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, rc, "redis required")
 
-	bus := psrpc.NewRedisMessageBus(rc)
+	bus := psrpc.NewRedisMessageBus(rc, conf.PSRPC.BusOptions()...)
 
 	RunTestSuite(t, conf, bus, func(psrpcClient rpc.IOInfoClient) utils.StateNotifier {
 		return utils.NewServiceStateNotifier(psrpcClient)
