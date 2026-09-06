@@ -67,6 +67,16 @@ rtc_config: configuration for ICE and other RTC related settings, same settings 
 enable_udp_url_pull: allow URL pull ingresses to pull from udp:// urls (default false, see the security note below)
 multicast_interface: network interface to join multicast groups on for UDP url pull. Empty lets the OS decide
 
+# optional gzip compression of psrpc bus payloads (see the compatibility note below)
+psrpc:
+  compression:
+    # gzip level 1-9. 0, the default, disables compression
+    quality: 0
+    # payload bytes below which compression is skipped
+    threshold: 1024
+    # cap on an inbound payload after decompression, 0 for unlimited
+    max_decompressed_size: 0
+
 # cpu costs for various Ingress types with their default values
 cpu_cost:
   rtmp_cpu_cost: 2.0
@@ -89,6 +99,16 @@ The config file can be added to a mounted volume with its location passed in the
 > - Have the handler join arbitrary multicast groups and republish whatever it receives into a LiveKit
 >   room, using the ingress as a relay for streams on the handler's local network that the caller has no
 >   direct access to.
+
+> **Compatibility note on `psrpc.compression`**
+>
+> Bus compression requires psrpc v0.7.6 or newer on every node sharing the Redis bus. An older peer
+> ignores the compression marker and tries to decode the gzipped bytes as the message payload, so the
+> message is dropped without an error. Enabling it is therefore a two-stage operator action: roll a
+> build with psrpc v0.7.6+ out to livekit-server, ingress, egress, SIP and any agent workers first,
+> then raise `quality` at the publishers. It is off by default.
+>
+> `max_decompressed_size` only affects reading, so it can be set ahead of `quality`.
 
 In order for the LiveKit server to be able to create Ingress sessions, an `ingress` section must also be added to the livekit-server configuration:
 

@@ -100,7 +100,7 @@ func (s *ioServer) RecordCallContext(context.Context, *rpc.RecordCallContextRequ
 func GetDefaultConfig() *TestConfig {
 	tc := &TestConfig{
 		Config: &config.Config{
-			ServiceConfig:  &config.ServiceConfig{},
+			ServiceConfig:  &config.ServiceConfig{PSRPC: rpc.DefaultPSRPCConfig},
 			InternalConfig: &config.InternalConfig{},
 		},
 	}
