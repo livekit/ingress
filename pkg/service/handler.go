@@ -89,6 +89,12 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	result := make(chan error, 1)
 	go func() {
 		err := p.Run(ctx)
+
+		// Publish before signaling completion. killAndReturnState reads the
+		// state as soon as h.done breaks, and returning to the select loop
+		// lets the process exit, so publishing later races both.
+		h.publishFinalState(ctx, p.Params, err)
+
 		result <- err
 		h.done.Break()
 	}()
@@ -103,13 +109,8 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 			kill = nil
 
 		case err = <-result:
-			// The pipeline has torn down, so publish the final state here
-			// rather than from a defer: nothing else is left to report, and
-			// this is the last update this handler makes.
-			if err != nil {
-				span.RecordError(err)
-			}
-			h.publishFinalState(ctx, p.Params, err)
+			// ingress finished; the final state was already published
+			span.RecordError(err)
 			return err
 		}
 	}
@@ -117,7 +118,13 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 
 // publishFinalState records how the session ended and sends the last update
 // this handler makes.
+//
+// Cancellation is stripped from the context: a session that ended because its
+// context was canceled would otherwise carry a canceled one into the update
+// that reports it, and the update would be dropped exactly when it is needed.
 func (h *Handler) publishFinalState(ctx context.Context, p *params.Params, err error) {
+	ctx = context.WithoutCancel(ctx)
+
 	switch {
 	case err != nil:
 		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
