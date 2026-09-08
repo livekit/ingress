@@ -26,13 +26,16 @@ import (
 type StateNotifier interface {
 	UpdateIngressState(ctx context.Context, projectID string, info *livekit.IngressInfo) error
 
-	// EnsureTerminal reports that a session is over and that nothing will send
-	// another update for it, whatever its last state update said. It is called
-	// once the handler is gone and its transport with it, so an implementation
-	// holding per-session state can finalize that state even when the session's
-	// own terminal update never arrived -- a killed handler runs no deferred
-	// code, so it never sends one.
-	EnsureTerminal(ctx context.Context, resourceID string)
+	// SessionStarted reports that a session has begun, before any state is
+	// reported for it. An implementation holding per-session state creates it
+	// here rather than inferring a start from an update, so a late or stray
+	// update cannot conjure a session that nothing will ever end.
+	SessionStarted(ctx context.Context, projectID string, info *livekit.IngressInfo)
+
+	// SessionEnded reports that a session is over. It is called wherever the
+	// session leaves the session manager, so it covers every exit including a
+	// handler that was killed and never sent a terminal update of its own.
+	SessionEnded(ctx context.Context, resourceID string)
 }
 
 type serviceStateNotifier struct {
@@ -57,8 +60,9 @@ func (sn *serviceStateNotifier) UpdateIngressState(ctx context.Context, _ string
 }
 
 // These forward every update onward and hold no per-session state of their
-// own, so there is nothing to finalize.
-func (sn *serviceStateNotifier) EnsureTerminal(_ context.Context, _ string) {}
+// own, so there is nothing to track.
+func (sn *serviceStateNotifier) SessionStarted(context.Context, string, *livekit.IngressInfo) {}
+func (sn *serviceStateNotifier) SessionEnded(context.Context, string)                         {}
 
 type handlerStateNotifier struct {
 	ipcClient ipc.IngressServiceClient
@@ -81,9 +85,8 @@ func (sn *handlerStateNotifier) UpdateIngressState(ctx context.Context, projectI
 	return err
 }
 
-// These forward every update onward and hold no per-session state of their
-// own, so there is nothing to finalize.
-func (sn *handlerStateNotifier) EnsureTerminal(_ context.Context, _ string) {}
+func (sn *handlerStateNotifier) SessionStarted(context.Context, string, *livekit.IngressInfo) {}
+func (sn *handlerStateNotifier) SessionEnded(context.Context, string)                         {}
 
 type noopStateNotifier struct {
 }
@@ -96,6 +99,5 @@ func (sn *noopStateNotifier) UpdateIngressState(_ context.Context, _ string, _ *
 	return nil
 }
 
-// These forward every update onward and hold no per-session state of their
-// own, so there is nothing to finalize.
-func (sn *noopStateNotifier) EnsureTerminal(_ context.Context, _ string) {}
+func (sn *noopStateNotifier) SessionStarted(context.Context, string, *livekit.IngressInfo) {}
+func (sn *noopStateNotifier) SessionEnded(context.Context, string)                         {}

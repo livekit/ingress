@@ -237,12 +237,15 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 		}
 
 		if !*p.EnableTranscoding {
-			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
-			p.SendStateUpdate(ctx)
-
+			// Register before reporting: the notifier creates its entry from
+			// this, and an update that arrived first would have nowhere to land.
 			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(_ context.Context) {
 				s.whipSrv.CloseHandler(resourceId)
 			}})
+			s.stateNotifier.SessionStarted(ctx, p.ProjectID, p.IngressInfo)
+
+			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
+			p.SendStateUpdate(ctx)
 		} else {
 			p.SetExtraParams(&params.WhipExtraParams{
 				MimeTypes: mimeTypes,
@@ -278,6 +281,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 
 			p.SendStateUpdate(ctx)
 			s.sm.IngressEnded(p.State.ResourceId)
+			s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
 		}
 	}
 
@@ -467,13 +471,8 @@ func (s *Service) Run() error {
 
 	<-s.shutdown.Watch()
 	logger.Infow("shutting down")
-	// Waiting on the session manager alone would let this return while handler
-	// cleanup is still running: a session is removed from the session manager
-	// at the start of that cleanup, and the final state update it sends comes
-	// later. Wait for the handlers to drain too.
-	for !s.sm.IsIdle() || s.manager.handlerCount() > 0 {
-		logger.Debugw("instance waiting for sessions to finish",
-			"sessions_count", len(s.ListIngress()), "handlers_count", s.manager.handlerCount())
+	for !s.sm.IsIdle() {
+		logger.Debugw("instance waiting for sessions to finish", "sessions_count", len(s.ListIngress()))
 		time.Sleep(shutdownTimer)
 	}
 
