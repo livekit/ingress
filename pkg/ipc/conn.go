@@ -95,13 +95,13 @@ func (ihc *IngressHandlerClientWrapper) Close() error {
 	return ihc.conn.Close()
 }
 
-func StartHandlerServer(tmpDir string, h IngressHandlerServer) error {
+func StartHandlerServer(tmpDir string, h IngressHandlerServer) (*grpc.Server, error) {
 	socketAddr := getHandlerSocketAddress(tmpDir)
 	os.Remove(socketAddr)
 
 	listener, err := net.Listen(network, socketAddr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	grpcServer := grpc.NewServer()
@@ -115,7 +115,7 @@ func StartHandlerServer(tmpDir string, h IngressHandlerServer) error {
 		}
 	}()
 
-	return nil
+	return grpcServer, nil
 }
 
 func getServiceSocketAddress(handlerTmpDir string) string {
