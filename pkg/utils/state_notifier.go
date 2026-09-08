@@ -25,6 +25,14 @@ import (
 
 type StateNotifier interface {
 	UpdateIngressState(ctx context.Context, projectID string, info *livekit.IngressInfo) error
+
+	// EnsureTerminal reports that a session is over and that nothing will send
+	// another update for it, whatever its last state update said. It is called
+	// once the handler is gone and its transport with it, so an implementation
+	// holding per-session state can finalize that state even when the session's
+	// own terminal update never arrived -- a killed handler runs no deferred
+	// code, so it never sends one.
+	EnsureTerminal(ctx context.Context, resourceID string)
 }
 
 type serviceStateNotifier struct {
@@ -48,6 +56,10 @@ func (sn *serviceStateNotifier) UpdateIngressState(ctx context.Context, _ string
 	return err
 }
 
+// These forward every update onward and hold no per-session state of their
+// own, so there is nothing to finalize.
+func (sn *serviceStateNotifier) EnsureTerminal(_ context.Context, _ string) {}
+
 type handlerStateNotifier struct {
 	ipcClient ipc.IngressServiceClient
 }
@@ -69,6 +81,10 @@ func (sn *handlerStateNotifier) UpdateIngressState(ctx context.Context, projectI
 	return err
 }
 
+// These forward every update onward and hold no per-session state of their
+// own, so there is nothing to finalize.
+func (sn *handlerStateNotifier) EnsureTerminal(_ context.Context, _ string) {}
+
 type noopStateNotifier struct {
 }
 
@@ -79,3 +95,7 @@ func NewNoopStateNotifier() StateNotifier {
 func (sn *noopStateNotifier) UpdateIngressState(_ context.Context, _ string, _ *livekit.IngressInfo) error {
 	return nil
 }
+
+// These forward every update onward and hold no per-session state of their
+// own, so there is nothing to finalize.
+func (sn *noopStateNotifier) EnsureTerminal(_ context.Context, _ string) {}

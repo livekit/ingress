@@ -77,26 +77,11 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	}
 	h.pipeline = p
 
-	defer func() {
-		switch err {
-		case nil:
-			if p.Reusable {
-				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, nil)
-			} else {
-				p.SetStatus(livekit.IngressState_ENDPOINT_COMPLETE, nil)
-			}
-		default:
-			span.RecordError(err)
-			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
-		}
-
-		p.SendStateUpdate(ctx)
-	}()
-
 	err = ipc.StartHandlerServer(p.TmpDir, h)
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("failed starting hander server", err)
+		h.publishFinalState(ctx, p.Params, err)
 		return err
 	}
 
@@ -104,6 +89,12 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	result := make(chan error, 1)
 	go func() {
 		err := p.Run(ctx)
+
+		// Publish before signaling completion. killAndReturnState reads the
+		// state as soon as h.done breaks, and returning to the select loop
+		// lets the process exit, so publishing later races both.
+		h.publishFinalState(ctx, p.Params, err)
+
 		result <- err
 		h.done.Break()
 	}()
@@ -118,10 +109,32 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 			kill = nil
 
 		case err = <-result:
-			// ingress finished
+			// ingress finished; the final state was already published
+			span.RecordError(err)
 			return err
 		}
 	}
+}
+
+// publishFinalState records how the session ended and sends the last update
+// this handler makes.
+//
+// Cancellation is stripped from the context: a session that ended because its
+// context was canceled would otherwise carry a canceled one into the update
+// that reports it, and the update would be dropped exactly when it is needed.
+func (h *Handler) publishFinalState(ctx context.Context, p *params.Params, err error) {
+	ctx = context.WithoutCancel(ctx)
+
+	switch {
+	case err != nil:
+		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
+	case p.Reusable:
+		p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, nil)
+	default:
+		p.SetStatus(livekit.IngressState_ENDPOINT_COMPLETE, nil)
+	}
+
+	p.SendStateUpdate(ctx)
 }
 
 func (h *Handler) killAndReturnState(ctx context.Context) (*livekit.IngressState, error) {
