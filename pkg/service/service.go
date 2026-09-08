@@ -131,7 +131,7 @@ func NewService(
 	}
 	s.rpcSrv = srv
 
-	s.sm = NewSessionManager(monitor, srv)
+	s.sm = NewSessionManager(monitor, srv, stateNotifier)
 
 	s.manager, err = NewProcessManager(s.sm, stateNotifier, bus, newCmd)
 	if err != nil {

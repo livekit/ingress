@@ -27,6 +27,7 @@ import (
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/testutil"
+	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/psrpc"
@@ -34,7 +35,7 @@ import (
 
 func newTestProcessManager(t *testing.T) (*ProcessManager, psrpc.MessageBus) {
 	bus := psrpc.NewLocalMessageBus()
-	sm := NewSessionManager(stats.NewMonitor(), nil)
+	sm := NewSessionManager(stats.NewMonitor(), nil, utils.NewNoopStateNotifier())
 	pm, err := NewProcessManager(sm, nil, bus, nil)
 	require.NoError(t, err)
 	return pm, bus
