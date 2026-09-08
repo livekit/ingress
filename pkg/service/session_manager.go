@@ -25,7 +25,6 @@ import (
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
-	"github.com/livekit/ingress/pkg/utils"
 )
 
 type sessionRecord struct {
@@ -36,20 +35,18 @@ type sessionRecord struct {
 }
 
 type SessionManager struct {
-	monitor       *stats.Monitor
-	rpcSrv        rpc.IngressInternalServer
-	stateNotifier utils.StateNotifier
+	monitor *stats.Monitor
+	rpcSrv  rpc.IngressInternalServer
 
 	lock     sync.Mutex
 	sessions map[string]*sessionRecord // resourceId -> sessionRecord
 }
 
-func NewSessionManager(monitor *stats.Monitor, rpcSrv rpc.IngressInternalServer, stateNotifier utils.StateNotifier) *SessionManager {
+func NewSessionManager(monitor *stats.Monitor, rpcSrv rpc.IngressInternalServer) *SessionManager {
 	return &SessionManager{
-		monitor:       monitor,
-		rpcSrv:        rpcSrv,
-		stateNotifier: stateNotifier,
-		sessions:      make(map[string]*sessionRecord),
+		monitor:  monitor,
+		rpcSrv:   rpcSrv,
+		sessions: make(map[string]*sessionRecord),
 	}
 }
 
@@ -75,39 +72,18 @@ func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI t
 }
 
 func (sm *SessionManager) IngressEnded(resourceID string) {
-	if !sm.removeSession(resourceID) {
-		return
-	}
-
-	// Every path that ends a session comes through here, whether it ran in a
-	// handler process or in the service, so this is the one place that can say
-	// a session is over however it ended -- including a handler that was killed
-	// and so never sent a final update of its own.
-	//
-	// The context is deliberately not derived from a caller's: a session that
-	// ended because it was cancelled would carry a cancelled context, and the
-	// report would be dropped exactly when it is needed.
-	sm.stateNotifier.EnsureTerminal(context.Background(), resourceID)
-}
-
-// removeSession drops a session and reports whether it was there to drop.
-func (sm *SessionManager) removeSession(resourceID string) bool {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
 
 	p := sm.sessions[resourceID]
-	if p == nil {
-		return false
+	if p != nil {
+		logger.Infow("ingress ended", "ingressID", p.info.IngressId, "resourceID", resourceID)
+
+		delete(sm.sessions, p.info.State.ResourceId)
+		p.sessionAPI.CloseSession(context.Background())
+		p.mediaStats.Close()
+		sm.monitor.IngressEnded(p.info)
 	}
-
-	logger.Infow("ingress ended", "ingressID", p.info.IngressId, "resourceID", resourceID)
-
-	delete(sm.sessions, p.info.State.ResourceId)
-	p.sessionAPI.CloseSession(context.Background())
-	p.mediaStats.Close()
-	sm.monitor.IngressEnded(p.info)
-
-	return true
 }
 
 func (sm *SessionManager) GetIngressSessionAPI(resourceId string) (types.SessionAPI, error) {
