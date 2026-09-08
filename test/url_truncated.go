@@ -112,8 +112,6 @@ func serveTruncatedHLS(t *testing.T, dir string, goodSegments int) string {
 // share of the state updates, which surfaces here as an ingress that never
 // reaches a terminal state. A separate Redis instance is required rather than a
 // separate database, since psrpc rides pub/sub and pub/sub is not scoped to one.
-//
-//nolint:revive // TODO(milos) reduce argument count, as with the tests beside this one
 func RunURLTruncatedTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, psrpcClient rpc.IOInfoClient, sn utils.StateNotifier, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
 	svc, err := service.NewService(conf.Config, psrpcClient, sn, bus, nil, nil, newCmd, "")
 	require.NoError(t, err)
