@@ -226,18 +226,6 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 		return nil, nil, nil, err
 	}
 
-	// Register here rather than from the ready callback. ready and ended are
-	// handed to the caller as a pair with no ordering between them, and a
-	// session that ends immediately can deliver ended first -- which would
-	// otherwise end a session that had not started. The transcoding path
-	// registers from startIngress instead.
-	if !*p.EnableTranscoding {
-		s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(_ context.Context) {
-			s.whipSrv.CloseHandler(resourceId)
-		}})
-		s.stateNotifier.SessionStarted(ctx, p.ProjectID, p.IngressInfo)
-	}
-
 	ready = func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer {
 		ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ready")
 		defer span.End()
@@ -248,10 +236,10 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			p.SendStateUpdate(ctx)
 
 			// The session was announced by its first state update and is not
-			// going to run, so release it. IngressEnded is a no-op unless the
-			// bypass path registered it above.
+			// going to run, so release it. Nothing is registered yet: ready
+			// runs once per session, and the paths that fail it do so before
+			// anything below has run.
 			s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
-			s.sm.IngressEnded(p.State.ResourceId)
 
 			span.RecordError(err)
 			return nil
@@ -260,6 +248,11 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 		if !*p.EnableTranscoding {
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
 			p.SendStateUpdate(ctx)
+
+			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(_ context.Context) {
+				s.whipSrv.CloseHandler(resourceId)
+			}})
+			s.stateNotifier.SessionStarted(ctx, p.ProjectID, p.IngressInfo)
 		} else {
 			p.SetExtraParams(&params.WhipExtraParams{
 				MimeTypes: mimeTypes,
