@@ -199,6 +199,9 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 		s.rtmpSrv.CloseHandler(resourceId)
 	})
 	if err != nil {
+		// The session was announced by its first state update and is not going to
+		// run, so nothing else will report it as over.
+		s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
 		return nil, nil, err
 	}
 
@@ -266,6 +269,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 				s.whipSrv.CloseHandler(resourceId)
 			})
 			if err != nil {
+				s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
 				return nil
 			}
 		}
@@ -319,6 +323,7 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 
 	err = s.manager.startIngress(ctx, p, nil)
 	if err != nil {
+		s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
 		return nil, err
 	}
 
