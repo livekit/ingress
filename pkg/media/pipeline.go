@@ -207,17 +207,17 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 	})
 }
 
-// fail stops the pipeline and records err as the session error.
+// fail stops the pipeline and reports err as the session error.
 //
 // A session that cannot build one of its outputs will never publish that track,
 // and a terminal status is read downstream as the session having ended, so it
 // must not carry on running under one.
 //
-// This runs on a GStreamer streaming thread, so it does no I/O: the state
-// update goes out once Run returns, from the terminal report the handler
-// already makes.
+// The update goes out last, on a GStreamer streaming thread, and has no
+// deadline. Everything that ends the session has already run by then, so a
+// stalled update parks this thread alone rather than holding up the teardown.
 func (p *Pipeline) fail(err error) {
-	// Run drains this once the loop stops, so the session ends with this as its
+	// Run reads this once the loop stops, so the session ends with this as its
 	// cause rather than as a clean shutdown.
 	select {
 	case p.pipelineErr <- err:
@@ -226,6 +226,8 @@ func (p *Pipeline) fail(err error) {
 
 	p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 	p.quitLoop()
+
+	p.SendStateUpdate(context.Background())
 }
 
 func (p *Pipeline) Run(ctx context.Context) error {

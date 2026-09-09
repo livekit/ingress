@@ -701,7 +701,7 @@ func TestCompleteHLSPullIsComplete(t *testing.T) {
 	require.NoError(t, p.checkSourceComplete())
 }
 
-func newTestParams(t *testing.T) *params.Params {
+func newTestParams(t *testing.T, sn utils.StateNotifier) *params.Params {
 	t.Helper()
 
 	info := &livekit.IngressInfo{
@@ -717,7 +717,7 @@ func newTestParams(t *testing.T) *params.Params {
 
 	conf := &config.Config{ServiceConfig: &config.ServiceConfig{}, InternalConfig: &config.InternalConfig{}}
 
-	p, err := params.GetParams(context.Background(), utils.NewNoopStateNotifier(), conf, info,
+	p, err := params.GetParams(context.Background(), sn, conf, info,
 		"ws://localhost:7880", "token", "project", "relay", nil, nil, nil)
 	require.NoError(t, err)
 
@@ -735,7 +735,7 @@ func TestTrackBuildFailureStopsTheSession(t *testing.T) {
 	gst.Init(nil)
 
 	p := &Pipeline{
-		Params:      newTestParams(t),
+		Params:      newTestParams(t, utils.NewNoopStateNotifier()),
 		loop:        glib.NewMainLoop(glib.MainContextDefault(), false),
 		pipelineErr: make(chan error, 1),
 		established: make(map[types.StreamKind]string),
@@ -756,5 +756,49 @@ func TestTrackBuildFailureStopsTheSession(t *testing.T) {
 		require.Error(t, err, "Run must end with the track failure as its cause")
 	default:
 		t.Fatal("no error was handed to Run, so the session would end as a clean shutdown")
+	}
+}
+
+// stalledNotifier never answers, like a state RPC that hangs.
+type stalledNotifier struct{ release <-chan struct{} }
+
+func (n stalledNotifier) UpdateIngressState(context.Context, string, *livekit.IngressInfo) error {
+	<-n.release
+	return nil
+}
+
+func (n stalledNotifier) SessionStarted(context.Context, string, *livekit.IngressInfo) {}
+
+func (n stalledNotifier) SessionEnded(context.Context, string) {}
+
+// fail reports on a GStreamer streaming thread, with no deadline on the update.
+// The teardown must not wait behind it.
+func TestTrackBuildFailureStopsTheSessionWhileReportingStalls(t *testing.T) {
+	gst.Init(nil)
+
+	release := make(chan struct{})
+	defer close(release)
+
+	p := &Pipeline{
+		Params:      newTestParams(t, stalledNotifier{release}),
+		loop:        glib.NewMainLoop(glib.MainContextDefault(), false),
+		pipelineErr: make(chan error, 1),
+		established: make(map[types.StreamKind]string),
+	}
+
+	pad := newCapsHoldingGhostPad(t, testCapsWithoutResolution)
+	returned := startLoop(p)
+
+	// The notification never returns while the update is stalled.
+	go p.onParamsReady(types.Video, pad)
+
+	require.True(t, stoppedWithin(returned, 5*time.Second),
+		"the teardown waited for the state update")
+
+	select {
+	case err := <-p.pipelineErr:
+		require.Error(t, err, "Run must still end with the track failure as its cause")
+	default:
+		t.Fatal("no cause was handed to Run")
 	}
 }
