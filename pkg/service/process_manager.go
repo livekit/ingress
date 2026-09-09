@@ -162,6 +162,7 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 	}
 
 	s.sm.IngressStarted(p.IngressInfo, h)
+	s.stateNotifier.SessionStarted(ctx, p.ProjectID, p.IngressInfo)
 
 	s.mu.Lock()
 	s.activeHandlers[p.State.ResourceId] = h
@@ -179,17 +180,15 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 
 	defer func() {
 		h.closed.Break()
+		// Release before the session leaves the session manager. Shutdown waits
+		// on IsIdle, which IngressEnded satisfies, and these two calls are not
+		// atomic -- releasing afterwards lets the process exit in between.
+		s.stateNotifier.SessionEnded(context.WithoutCancel(ctx), h.params.State.ResourceId)
 		s.sm.IngressEnded(h.params.State.ResourceId)
 
 		utils.DeregisterIngressRpcHandlers(h.rpcServer, p.IngressInfo)
 		h.ipcHandlerClient.Close()
 		h.ipcServiceServer.Stop()
-
-		// The handler is gone and its transport with it, so nothing can report
-		// this session again. cmd.Run returns however the handler died, and a
-		// killed one never ran its own final update, so say so here rather than
-		// trust that it managed to.
-		s.stateNotifier.EnsureTerminal(context.WithoutCancel(ctx), h.params.State.ResourceId)
 
 		if p.TmpDir != "" {
 			os.RemoveAll(p.TmpDir)
@@ -246,17 +245,6 @@ func (s *ProcessManager) runHandlerTry(ctx context.Context, h *process, p *param
 		}
 		return false, err
 	}
-}
-
-// handlerCount reports how many handlers have not finished cleaning up. A
-// session leaves the session manager at the start of that cleanup, so idleness
-// there says nothing about whether the rest of it -- reporting the session as
-// ended, among other things -- has run yet. A handler is removed here last.
-func (s *ProcessManager) handlerCount() int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	return len(s.activeHandlers)
 }
 
 func (s *ProcessManager) killAll() {
