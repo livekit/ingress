@@ -380,6 +380,9 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) 
 		logger.Infow("Using proxied WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
 		h, err = NewProxyWHIPHandler(p, s.bus, ua)
 		if err != nil {
+			// The caller is handed ready and ended together and expects one of
+			// them; returning without either strands whatever it set up.
+			ready(nil, err)
 			return "", nil, err
 		}
 	}

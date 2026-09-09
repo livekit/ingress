@@ -100,7 +100,7 @@ func (s *ioServer) RecordCallContext(context.Context, *rpc.RecordCallContextRequ
 func GetDefaultConfig() *TestConfig {
 	tc := &TestConfig{
 		Config: &config.Config{
-			ServiceConfig:  &config.ServiceConfig{},
+			ServiceConfig:  &config.ServiceConfig{PSRPC: rpc.DefaultPSRPCConfig},
 			InternalConfig: &config.InternalConfig{},
 		},
 	}
@@ -157,6 +157,9 @@ func RunTestSuite(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, getState
 	if !conf.RtmpOnly && !conf.WhipOnly {
 		t.Run("URL pul", func(t *testing.T) {
 			RunURLTest(t, conf, bus, commandPsrpcClient, psrpcClient, sn, newCmd)
+		})
+		t.Run("URL pull truncated", func(t *testing.T) {
+			RunURLTruncatedTest(t, conf, bus, psrpcClient, sn, newCmd)
 		})
 	}
 

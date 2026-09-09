@@ -25,6 +25,21 @@ import (
 
 type StateNotifier interface {
 	UpdateIngressState(ctx context.Context, projectID string, info *livekit.IngressInfo) error
+
+	// SessionStarted reports that a session is running. It does not mark the
+	// first the notifier hears of one: a session is announced by its first
+	// state update, which carries ENDPOINT_BUFFERING and is sent before this
+	// call on every path. What this marks is the point from which the session
+	// is live, so anything an implementation meters belongs between here and
+	// SessionEnded rather than from whenever an update first arrived.
+	SessionStarted(ctx context.Context, projectID string, info *livekit.IngressInfo)
+
+	// SessionEnded reports that a session is over and that nothing more will be
+	// reported for it. It is called wherever a session stops running, whether
+	// it ended, failed to start, or had its handler killed, so an
+	// implementation can release whatever it holds without waiting for a
+	// terminal update that may never arrive.
+	SessionEnded(ctx context.Context, resourceID string)
 }
 
 type serviceStateNotifier struct {
@@ -48,6 +63,11 @@ func (sn *serviceStateNotifier) UpdateIngressState(ctx context.Context, _ string
 	return err
 }
 
+// These forward every update onward and hold no per-session state of their
+// own, so there is nothing to track.
+func (sn *serviceStateNotifier) SessionStarted(context.Context, string, *livekit.IngressInfo) {}
+func (sn *serviceStateNotifier) SessionEnded(context.Context, string)                         {}
+
 type handlerStateNotifier struct {
 	ipcClient ipc.IngressServiceClient
 }
@@ -69,6 +89,9 @@ func (sn *handlerStateNotifier) UpdateIngressState(ctx context.Context, projectI
 	return err
 }
 
+func (sn *handlerStateNotifier) SessionStarted(context.Context, string, *livekit.IngressInfo) {}
+func (sn *handlerStateNotifier) SessionEnded(context.Context, string)                         {}
+
 type noopStateNotifier struct {
 }
 
@@ -79,3 +102,6 @@ func NewNoopStateNotifier() StateNotifier {
 func (sn *noopStateNotifier) UpdateIngressState(_ context.Context, _ string, _ *livekit.IngressInfo) error {
 	return nil
 }
+
+func (sn *noopStateNotifier) SessionStarted(context.Context, string, *livekit.IngressInfo) {}
+func (sn *noopStateNotifier) SessionEnded(context.Context, string)                         {}

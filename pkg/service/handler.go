@@ -18,6 +18,8 @@ import (
 	"context"
 	"time"
 
+	"google.golang.org/grpc"
+
 	"github.com/frostbyte73/core"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -35,6 +37,10 @@ import (
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/utils"
 )
+
+// ipcDrainTimeout bounds how long a handler waits for in-flight IPC calls to
+// answer before it exits.
+const ipcDrainTimeout = 5 * time.Second
 
 type Handler struct {
 	ipc.UnimplementedIngressHandlerServer
@@ -77,35 +83,33 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 	}
 	h.pipeline = p
 
-	defer func() {
-		switch err {
-		case nil:
-			if p.Reusable {
-				p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, nil)
-			} else {
-				p.SetStatus(livekit.IngressState_ENDPOINT_COMPLETE, nil)
-			}
-		default:
-			span.RecordError(err)
-			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
-		}
-
-		p.SendStateUpdate(ctx)
-	}()
-
-	err = ipc.StartHandlerServer(p.TmpDir, h)
+	ipcServer, err := ipc.StartHandlerServer(p.TmpDir, h)
 	if err != nil {
 		span.RecordError(err)
 		logger.Errorw("failed starting hander server", err)
+		h.publishFinalState(ctx, p.Params, err)
 		return err
 	}
+
+	// Returning from here ends the process, so drain the IPC server first.
+	// KillIngress answers once the session is over, and its reply has to reach
+	// the caller before the process goes away.
+	defer drainIPCServer(ipcServer)
 
 	// start ingress
 	result := make(chan error, 1)
 	go func() {
 		err := p.Run(ctx)
-		result <- err
+
+		// Publish before signaling completion. killAndReturnState reads the
+		// state as soon as h.done breaks, and returning to the select loop
+		// lets the process exit, so publishing later races both.
+		h.publishFinalState(ctx, p.Params, err)
+
+		// Break before signaling the loop: an in-flight KillIngress is
+		// waiting on this, and the drain on the way out waits on that.
 		h.done.Break()
+		result <- err
 	}()
 
 	kill := h.kill.Watch()
@@ -118,10 +122,50 @@ func (h *Handler) HandleIngress(ctx context.Context, info *livekit.IngressInfo, 
 			kill = nil
 
 		case err = <-result:
-			// ingress finished
+			// ingress finished; the final state was already published
+			span.RecordError(err)
 			return err
 		}
 	}
+}
+
+// drainIPCServer lets in-flight IPC calls answer before the process exits, and
+// gives up rather than blocking forever: a handler that cannot drain is about
+// to be killed by the service anyway.
+func drainIPCServer(srv *grpc.Server) {
+	stopped := make(chan struct{})
+	go func() {
+		srv.GracefulStop()
+		close(stopped)
+	}()
+
+	select {
+	case <-stopped:
+	case <-time.After(ipcDrainTimeout):
+		logger.Infow("ipc server did not drain, stopping it")
+		srv.Stop()
+	}
+}
+
+// publishFinalState records how the session ended and sends the last update
+// this handler makes.
+//
+// Cancellation is stripped from the context: a session that ended because its
+// context was canceled would otherwise carry a canceled one into the update
+// that reports it, and the update would be dropped exactly when it is needed.
+func (h *Handler) publishFinalState(ctx context.Context, p *params.Params, err error) {
+	ctx = context.WithoutCancel(ctx)
+
+	switch {
+	case err != nil:
+		p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
+	case p.Reusable:
+		p.SetStatus(livekit.IngressState_ENDPOINT_INACTIVE, nil)
+	default:
+		p.SetStatus(livekit.IngressState_ENDPOINT_COMPLETE, nil)
+	}
+
+	p.SendStateUpdate(ctx)
 }
 
 func (h *Handler) killAndReturnState(ctx context.Context) (*livekit.IngressState, error) {

@@ -13,11 +13,11 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20251031234730-75a652881771
 	github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731
-	github.com/livekit/media-sdk v0.0.0-20260828235137-cb2363a4cb4f
+	github.com/livekit/media-sdk v0.0.0-20260903090624-c6c8d0976284
 	github.com/livekit/mediatransportutil v0.0.0-20260821083140-f234b534b095
-	github.com/livekit/protocol v1.50.5-0.20260829123501-a469dd43727b
-	github.com/livekit/psrpc v0.7.5
-	github.com/livekit/server-sdk-go/v2 v2.18.2-0.20260831001713-a41bea984454
+	github.com/livekit/protocol v1.51.1-0.20260905133529-a4f4b5c0c23f
+	github.com/livekit/psrpc v0.7.6
+	github.com/livekit/server-sdk-go/v2 v2.18.2-0.20260904062056-1da58cd7b795
 	github.com/pion/dtls/v3 v3.1.5
 	github.com/pion/interceptor v0.1.47
 	github.com/pion/rtcp v1.2.17
@@ -26,11 +26,11 @@ require (
 	github.com/pion/webrtc/v4 v4.2.18
 	github.com/prometheus/client_golang v1.24.1
 	github.com/sirupsen/logrus v1.9.4
-	github.com/stretchr/testify v1.12.0
+	github.com/stretchr/testify v1.12.1
 	github.com/yutopp/go-flv v0.3.1
 	go.opentelemetry.io/otel v1.45.0
 	go.uber.org/atomic v1.11.0
-	google.golang.org/grpc v1.83.1
+	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.12
 	gopkg.in/yaml.v3 v3.0.1
 )
@@ -103,7 +103,7 @@ require (
 	go.uber.org/zap/exp v0.3.0 // indirect
 	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/exp v0.0.0-20260603202125-055de637280b // indirect
-	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
