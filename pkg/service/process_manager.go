@@ -122,10 +122,18 @@ func (s *ProcessManager) startIngress(ctx context.Context, p *params.Params, clo
 	}
 
 	// on any startup failure below, remove the temp directory and the sockets
-	// it contains; on success runHandler owns the cleanup
+	// it contains, and release the session: it was announced by its first state
+	// update and will never run, so nothing else will report it as over. On
+	// success runHandler owns both.
 	started := false
 	defer func() {
-		if !started && p.TmpDir != "" {
+		if started {
+			return
+		}
+
+		s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
+
+		if p.TmpDir != "" {
 			os.RemoveAll(p.TmpDir)
 		}
 	}()

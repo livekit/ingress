@@ -244,10 +244,11 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			p.SendStateUpdate(ctx)
 
-			if !*p.EnableTranscoding {
-				s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
-				s.sm.IngressEnded(p.State.ResourceId)
-			}
+			// The session was announced by its first state update and is not
+			// going to run, so release it. IngressEnded is a no-op unless the
+			// bypass path registered it above.
+			s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
+			s.sm.IngressEnded(p.State.ResourceId)
 
 			span.RecordError(err)
 			return nil

@@ -26,15 +26,19 @@ import (
 type StateNotifier interface {
 	UpdateIngressState(ctx context.Context, projectID string, info *livekit.IngressInfo) error
 
-	// SessionStarted reports that a session has begun, before any state is
-	// reported for it. An implementation holding per-session state creates it
-	// here rather than inferring a start from an update, so a late or stray
-	// update cannot conjure a session that nothing will ever end.
+	// SessionStarted reports that a session is running. It does not mark the
+	// first the notifier hears of one: a session is announced by its first
+	// state update, which carries ENDPOINT_BUFFERING and is sent before this
+	// call on every path. What this marks is the point from which the session
+	// is live, so anything an implementation meters belongs between here and
+	// SessionEnded rather than from whenever an update first arrived.
 	SessionStarted(ctx context.Context, projectID string, info *livekit.IngressInfo)
 
-	// SessionEnded reports that a session is over. It is called wherever the
-	// session leaves the session manager, so it covers every exit including a
-	// handler that was killed and never sent a terminal update of its own.
+	// SessionEnded reports that a session is over and that nothing more will be
+	// reported for it. It is called wherever a session stops running, whether
+	// it ended, failed to start, or had its handler killed, so an
+	// implementation can release whatever it holds without waiting for a
+	// terminal update that may never arrive.
 	SessionEnded(ctx context.Context, resourceID string)
 }
 
