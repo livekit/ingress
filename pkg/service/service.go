@@ -223,6 +223,18 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 		return nil, nil, nil, err
 	}
 
+	// Register here rather than from the ready callback. ready and ended are
+	// handed to the caller as a pair with no ordering between them, and a
+	// session that ends immediately can deliver ended first -- which would
+	// otherwise end a session that had not started. The transcoding path
+	// registers from startIngress instead.
+	if !*p.EnableTranscoding {
+		s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(_ context.Context) {
+			s.whipSrv.CloseHandler(resourceId)
+		}})
+		s.stateNotifier.SessionStarted(ctx, p.ProjectID, p.IngressInfo)
+	}
+
 	ready = func(mimeTypes map[types.StreamKind]string, err error) *stats.LocalMediaStatsGatherer {
 		ctx, span := tracer.Start(context.Background(), "Service.HandleWHIPPublishRequest.ready")
 		defer span.End()
@@ -232,18 +244,16 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			p.SendStateUpdate(ctx)
 
+			if !*p.EnableTranscoding {
+				s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
+				s.sm.IngressEnded(p.State.ResourceId)
+			}
+
 			span.RecordError(err)
 			return nil
 		}
 
 		if !*p.EnableTranscoding {
-			// Register before reporting: the notifier creates its entry from
-			// this, and an update that arrived first would have nowhere to land.
-			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(_ context.Context) {
-				s.whipSrv.CloseHandler(resourceId)
-			}})
-			s.stateNotifier.SessionStarted(ctx, p.ProjectID, p.IngressInfo)
-
 			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
 			p.SendStateUpdate(ctx)
 		} else {
