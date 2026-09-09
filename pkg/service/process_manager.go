@@ -180,8 +180,11 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 
 	defer func() {
 		h.closed.Break()
-		s.sm.IngressEnded(h.params.State.ResourceId)
+		// Release before the session leaves the session manager. Shutdown waits
+		// on IsIdle, which IngressEnded satisfies, and these two calls are not
+		// atomic -- releasing afterwards lets the process exit in between.
 		s.stateNotifier.SessionEnded(context.WithoutCancel(ctx), h.params.State.ResourceId)
+		s.sm.IngressEnded(h.params.State.ResourceId)
 
 		utils.DeregisterIngressRpcHandlers(h.rpcServer, p.IngressInfo)
 		h.ipcHandlerClient.Close()

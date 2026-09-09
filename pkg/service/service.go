@@ -280,8 +280,8 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			}
 
 			p.SendStateUpdate(ctx)
-			s.sm.IngressEnded(p.State.ResourceId)
 			s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
+			s.sm.IngressEnded(p.State.ResourceId)
 		}
 	}
 
