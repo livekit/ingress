@@ -199,7 +199,9 @@ func IntegrationDocker(configFile string) error {
 		_ = down.Run()
 	}()
 
-	cmd := exec.Command("docker", "compose", "-f", composeFile, "run", "--rm", "test")
+	// --build because run reuses whatever image already exists, which would
+	// silently test a stale one after any source or Dockerfile change.
+	cmd := exec.Command("docker", "compose", "-f", composeFile, "run", "--build", "--rm", "test")
 	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

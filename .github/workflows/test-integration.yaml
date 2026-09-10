@@ -71,7 +71,8 @@ jobs:
           INGRESS_TEST_CONFIG: /tmp/ingress-integration.yaml
           GSTVERSION: ${{ steps.gst-version.outputs.version }}
           SECURITY_REFRESH: ${{ github.run_id }}-${{ github.run_attempt }}
-        run: docker compose -f build/test/compose.yaml run --rm test
+        # --build because run reuses whatever image already exists.
+        run: docker compose -f build/test/compose.yaml run --build --rm test
 
       - name: Room server log
         if: failure()
