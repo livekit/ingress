@@ -346,17 +346,24 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 // arrives as an ordinary EOS, so the advertised duration is what separates a
 // truncated pull from a finished one.
 //
-// Only a pull has a duration to fall short of. A push input is judged on its
-// input type rather than on the duration query declining, because on a live
-// FLV chain that query is answered from the timestamps that have arrived: the
-// gap it reports is pipeline latency at teardown, not missing source, and it
-// widens as a share of the whole the shorter the session is.
+// Only a source being pulled over HTTP has a duration to fall short of. Live
+// inputs are excluded by what they are rather than by the duration query
+// declining for them, because that query is answered from the timestamps that
+// have arrived: the gap it reports is pipeline latency at teardown, not
+// missing source, and it widens as a share of the whole the shorter the
+// session is. RTMP was seen answering it.
 //
-// Within pulls this catches HLS. A playlist declares no end, so the position
-// query is answered upstream, by what actually arrived. mp4 and matroska do
-// declare an end, so their sinks answer it instead and this returns nil.
+// That rules out the push inputs, and the srt:// and udp:// urls a URL pull
+// also accepts. The prefix test is the one NewURLSource selects the source
+// element with, so the two cannot disagree about what HTTP is.
+//
+// Within HTTP pulls this catches HLS. A playlist declares no end, so the
+// position query is answered upstream, by what actually arrived. mp4 and
+// matroska do declare an end, so their sinks answer it instead and this
+// returns nil.
 func (p *Pipeline) checkSourceComplete() error {
-	if p.InputType != livekit.IngressInput_URL_INPUT {
+	if p.InputType != livekit.IngressInput_URL_INPUT ||
+		!(strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://")) {
 		return nil
 	}
 

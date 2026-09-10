@@ -413,15 +413,22 @@ func newSeekablePipeline(t *testing.T, length time.Duration) *Pipeline {
 	require.NoError(t, read.BlockSetState(gst.StatePaused))
 	t.Cleanup(func() { _ = read.BlockSetState(gst.StateNull) })
 
-	return &Pipeline{pipeline: read, Params: pullParams()}
+	return &Pipeline{pipeline: read, Params: pullParams(testPullURL)}
 }
 
-// pullParams marks a Pipeline as the URL pull these fixtures stand in for.
-// checkSourceComplete reads the input type, so a Pipeline carrying none is not
-// the shape under test.
-func pullParams() *params.Params {
+// The fixtures below build their own pipelines, so this is only ever read as a
+// scheme.
+const testPullURL = "http://fixture.invalid/playlist.m3u8"
+
+// pullParams marks a Pipeline as the HTTP URL pull these fixtures stand in
+// for. checkSourceComplete reads both the input type and the url scheme, so a
+// Pipeline carrying neither is not the shape under test.
+func pullParams(url string) *params.Params {
 	return &params.Params{
-		IngressInfo: &livekit.IngressInfo{InputType: livekit.IngressInput_URL_INPUT},
+		IngressInfo: &livekit.IngressInfo{
+			InputType: livekit.IngressInput_URL_INPUT,
+			Url:       url,
+		},
 	}
 }
 
@@ -508,7 +515,7 @@ func TestLivePullWithoutDurationIsComplete(t *testing.T) {
 	require.NoError(t, live.BlockSetState(gst.StatePlaying))
 	t.Cleanup(func() { _ = live.BlockSetState(gst.StateNull) })
 
-	p := &Pipeline{pipeline: live, Params: pullParams()}
+	p := &Pipeline{pipeline: live, Params: pullParams(testPullURL)}
 
 	ok, d := p.pipeline.QueryDuration(gst.FormatTime)
 	require.True(t, ok, "the duration query is answered even with no duration to give")
@@ -537,6 +544,31 @@ func TestPushInputWithADurationIsComplete(t *testing.T) {
 		t.Run(input.String(), func(t *testing.T) {
 			p := newSeekablePipeline(t, testSourceLength)
 			p.InputType = input
+
+			stopAt(t, p, 2*time.Second)
+
+			ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+			require.True(t, ok)
+			require.Positive(t, d,
+				"the fixture must answer a duration, or the gate is not what keeps this complete")
+
+			require.NoError(t, p.checkSourceComplete())
+		})
+	}
+}
+
+// A URL pull is not necessarily a pull over HTTP: NewURLSource also accepts
+// srt:// and udp://, both of them live. They reach the check as URL_INPUT, so
+// the input type alone does not exclude them, and assuming they answer no
+// duration is the assumption that put RTMP here in the first place.
+func TestLiveURLSchemesAreComplete(t *testing.T) {
+	for _, url := range []string{
+		"srt://fixture.invalid:9000",
+		"udp://239.0.0.1:1234",
+	} {
+		t.Run(url, func(t *testing.T) {
+			p := newSeekablePipeline(t, testSourceLength)
+			p.Url = url
 
 			stopAt(t, p, 2*time.Second)
 
@@ -719,7 +751,7 @@ func runHLSPull(t *testing.T, url string) (*Pipeline, gst.MessageType) {
 		gst.ClockTime(60*time.Second), gst.MessageEOS|gst.MessageError)
 	require.NotNil(t, msg, "the pull neither finished nor failed")
 
-	return &Pipeline{pipeline: pipeline, Params: pullParams()}, msg.Type()
+	return &Pipeline{pipeline: pipeline, Params: pullParams(url)}, msg.Type()
 }
 
 // The reported case, over the topology it was reported on. A 5xx part way
