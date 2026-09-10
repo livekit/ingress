@@ -17,15 +17,21 @@ on:
   workflow_dispatch:
   pull_request:
     branches: [ main ]
+    # Everything the test image is built from. A change to any of these can
+    # alter the binary the suite exercises, and a path missing here means no
+    # run at all rather than a run that passes.
     paths:
       - .github/workflows/test-integration.yaml
       - .golangci.yaml
+      - .go-version
       - .gst-version
       - build/test/**
       - cmd/**
       - pkg/**
       - test/**
+      - version/**
       - go.mod
+      - go.sum
 
 permissions:
   contents: read
