@@ -16,6 +16,7 @@ package media
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -225,7 +226,9 @@ func (p *Pipeline) fail(err error) {
 	}
 
 	p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
-	p.quitLoop()
+
+	// SendEOS runs the full shutdown: it cancels the input and stops the loop.
+	p.SendEOS(context.Background())
 
 	p.SendStateUpdate(context.Background())
 }
@@ -286,15 +289,27 @@ func (p *Pipeline) Run(ctx context.Context) error {
 		err = sinkErr
 	}
 
-	if err == nil {
-		// Retrieve any pipeline error
-		select {
-		case err = <-p.pipelineErr:
-		default:
-		}
+	return resolveRunError(err, p.pipelineErr)
+}
+
+// resolveRunError picks what Run reports from the error the pipeline shut down
+// with and any cause recorded on the way down.
+//
+// A cancellation is how the shutdown unblocks a source that is waiting on
+// bytes, so it describes the teardown rather than what caused it. A recorded
+// cause is preferred over one. Anything else stands: a genuine input failure is
+// more upstream than anything recorded downstream of it.
+func resolveRunError(err error, recorded <-chan error) error {
+	if err != nil && !errors.Is(err, context.Canceled) {
+		return err
 	}
 
-	return err
+	select {
+	case cause := <-recorded:
+		return cause
+	default:
+		return err
+	}
 }
 
 func (p *Pipeline) messageWatch(msg *gst.Message) bool {
