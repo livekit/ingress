@@ -378,15 +378,18 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 //
 // That rules out the push inputs, and the srt:// and udp:// urls a URL pull
 // also accepts. The prefix test is the one NewURLSource selects the source
-// element with, so the two cannot disagree about what HTTP is.
+// element with, so the two cannot disagree about what HTTP is. Naming HTTP
+// rather than the live schemes is deliberate: a scheme added later stays
+// outside the check until someone has decided it belongs there.
 //
 // Within HTTP pulls this catches HLS. A playlist declares no end, so the
 // position query is answered upstream, by what actually arrived. mp4 and
 // matroska do declare an end, so their sinks answer it instead and this
 // returns nil.
 func (p *Pipeline) checkSourceComplete() error {
-	if p.InputType != livekit.IngressInput_URL_INPUT ||
-		!(strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://")) {
+	httpPull := p.InputType == livekit.IngressInput_URL_INPUT &&
+		(strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://"))
+	if !httpPull {
 		return nil
 	}
 
