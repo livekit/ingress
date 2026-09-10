@@ -45,6 +45,11 @@ const (
 	// complete, as a percentage of it. A manifest duration is the sum of its
 	// segment durations, and the final segment can be shorter than it declares.
 	durationTolerancePercent = 5.0
+
+	// Floor under that percentage. On a short asset the percentage collapses to
+	// a few tens of milliseconds, which is narrower than the overshoot of a
+	// final segment. Unmeasured, like the percentage above it.
+	durationToleranceFloor = time.Second
 )
 
 type Pipeline struct {
@@ -364,11 +369,30 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 // arrives as an ordinary EOS, so the advertised duration is what separates a
 // truncated pull from a finished one.
 //
-// This catches HLS. A playlist declares no end, so the position query is
-// answered upstream, by what actually arrived. mp4 and matroska do declare an
-// end, so their sinks answer it instead and this returns nil. A source with no
-// duration is complete too: live HLS, RTMP and WHIP.
+// Only a source being pulled over HTTP has a duration to fall short of. Live
+// inputs are excluded by what they are rather than by the duration query
+// declining for them, because that query is answered from the timestamps that
+// have arrived: the gap it reports is pipeline latency at teardown, not
+// missing source, and it widens as a share of the whole the shorter the
+// session is. RTMP was seen answering it.
+//
+// That rules out the push inputs, and the srt:// and udp:// urls a URL pull
+// also accepts. The prefix test is the one NewURLSource selects the source
+// element with, so the two cannot disagree about what HTTP is. Naming HTTP
+// rather than the live schemes is deliberate: a scheme added later stays
+// outside the check until someone has decided it belongs there.
+//
+// Within HTTP pulls this catches HLS. A playlist declares no end, so the
+// position query is answered upstream, by what actually arrived. mp4 and
+// matroska do declare an end, so their sinks answer it instead and this
+// returns nil.
 func (p *Pipeline) checkSourceComplete() error {
+	httpPull := p.InputType == livekit.IngressInput_URL_INPUT &&
+		(strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://"))
+	if !httpPull {
+		return nil
+	}
+
 	ok, d := p.pipeline.QueryDuration(gst.FormatTime)
 	if !ok || d <= 0 {
 		return nil
@@ -382,7 +406,11 @@ func (p *Pipeline) checkSourceComplete() error {
 	}
 
 	duration, position := time.Duration(d), time.Duration(pos)
-	if position+time.Duration(float64(duration)*durationTolerancePercent/100) >= duration {
+	tolerance := max(
+		time.Duration(float64(duration)*durationTolerancePercent/100),
+		durationToleranceFloor,
+	)
+	if position+tolerance >= duration {
 		return nil
 	}
 

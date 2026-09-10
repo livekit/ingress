@@ -418,7 +418,23 @@ func newSeekablePipeline(t *testing.T, length time.Duration) *Pipeline {
 	require.NoError(t, read.BlockSetState(gst.StatePaused))
 	t.Cleanup(func() { _ = read.BlockSetState(gst.StateNull) })
 
-	return &Pipeline{pipeline: read}
+	return &Pipeline{pipeline: read, Params: pullParams(testPullURL)}
+}
+
+// The fixtures below build their own pipelines, so this is only ever read as a
+// scheme.
+const testPullURL = "http://fixture.invalid/playlist.m3u8"
+
+// pullParams marks a Pipeline as the HTTP URL pull these fixtures stand in
+// for. checkSourceComplete reads both the input type and the url scheme, so a
+// Pipeline carrying neither is not the shape under test.
+func pullParams(url string) *params.Params {
+	return &params.Params{
+		IngressInfo: &livekit.IngressInfo{
+			InputType: livekit.IngressInput_URL_INPUT,
+			Url:       url,
+		},
+	}
 }
 
 // stopAt leaves the pipeline reporting pos as its position. A flushing seek
@@ -487,14 +503,16 @@ func TestToleranceIsProportionalToTheSource(t *testing.T) {
 		"%s of 1m0s is within the tolerance", shortfall)
 }
 
-// Live HLS along with the RTMP and WHIP inputs have no end to fall short of,
-// so the check has to leave them alone.
+// A live playlist has no end to fall short of, so the check has to leave it
+// alone. This is the live HLS shape only: it reaches the duration guard as a
+// pull and is turned away there. The push inputs never get that far, and
+// TestPushInputWithADurationIsComplete covers them instead.
 //
 // The two query assertions carry this test. GStreamer answers a duration query
 // for such a source rather than declining it, and reports the unknown duration
 // as a negative value, which is why the guard reads the value and not the
 // boolean. Were that to change, the whole path would shift.
-func TestSourceWithoutDurationIsComplete(t *testing.T) {
+func TestLivePullWithoutDurationIsComplete(t *testing.T) {
 	gst.Init(nil)
 
 	live, err := gst.NewPipelineFromString("audiotestsrc is-live=true ! fakesink sync=false")
@@ -502,11 +520,93 @@ func TestSourceWithoutDurationIsComplete(t *testing.T) {
 	require.NoError(t, live.BlockSetState(gst.StatePlaying))
 	t.Cleanup(func() { _ = live.BlockSetState(gst.StateNull) })
 
-	p := &Pipeline{pipeline: live}
+	p := &Pipeline{pipeline: live, Params: pullParams(testPullURL)}
 
 	ok, d := p.pipeline.QueryDuration(gst.FormatTime)
 	require.True(t, ok, "the duration query is answered even with no duration to give")
 	require.Negative(t, d, "an unknown duration is reported as a negative value")
+
+	require.NoError(t, p.checkSourceComplete())
+}
+
+// The reported case this gate exists for. A push input's pipeline answers a
+// duration query: on a live FLV chain the answer is the timestamps that have
+// arrived, so position trails it by the queue depth at teardown. Judged against
+// that, an ordinary publisher disconnect reads as a truncated source, and the
+// shorter the session the larger that fixed gap is as a share of the whole. A
+// live RTMP session was failed this way on a 1.2435s gap over 24.355s: 5.106%,
+// against a 5% tolerance.
+//
+// The fixture is the seekable wav rather than a real FLV chain, since what is
+// under test is that the input type turns the check away before it reads any
+// query. The duration assertion pins that: a fixture answering no duration
+// would pass this test for the wrong reason.
+func TestPushInputWithADurationIsComplete(t *testing.T) {
+	for _, input := range []livekit.IngressInput{
+		livekit.IngressInput_RTMP_INPUT,
+		livekit.IngressInput_WHIP_INPUT,
+	} {
+		t.Run(input.String(), func(t *testing.T) {
+			p := newSeekablePipeline(t, testSourceLength)
+			p.InputType = input
+
+			stopAt(t, p, 2*time.Second)
+
+			ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+			require.True(t, ok)
+			require.Positive(t, d,
+				"the fixture must answer a duration, or the gate is not what keeps this complete")
+
+			require.NoError(t, p.checkSourceComplete())
+		})
+	}
+}
+
+// A URL pull is not necessarily a pull over HTTP: NewURLSource also accepts
+// srt:// and udp://, both of them live. They reach the check as URL_INPUT, so
+// the input type alone does not exclude them, and assuming they answer no
+// duration is the assumption that put RTMP here in the first place.
+func TestLiveURLSchemesAreComplete(t *testing.T) {
+	for _, url := range []string{
+		"srt://fixture.invalid:9000",
+		"udp://239.0.0.1:1234",
+	} {
+		t.Run(url, func(t *testing.T) {
+			p := newSeekablePipeline(t, testSourceLength)
+			p.Url = url
+
+			stopAt(t, p, 2*time.Second)
+
+			ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+			require.True(t, ok)
+			require.Positive(t, d,
+				"the fixture must answer a duration, or the gate is not what keeps this complete")
+
+			require.NoError(t, p.checkSourceComplete())
+		})
+	}
+}
+
+// Under roughly 20s the percentage is narrower than the overshoot of a final
+// segment, so the floor takes over. The two shortfall assertions are what make
+// this a test of the floor rather than of the percentage.
+func TestShortSourceIsHeldToTheToleranceFloor(t *testing.T) {
+	const length = 10 * time.Second
+
+	p := newSeekablePipeline(t, length)
+
+	stopAt(t, p, length-750*time.Millisecond)
+
+	ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+	require.True(t, ok)
+	ok, pos := p.pipeline.QueryPosition(gst.FormatTime)
+	require.True(t, ok)
+
+	shortfall := time.Duration(d - pos)
+	require.Greater(t, shortfall, time.Duration(float64(d)*durationTolerancePercent/100),
+		"the shortfall must clear the percentage, or the floor is not what is being exercised")
+	require.Less(t, shortfall, durationToleranceFloor,
+		"the shortfall must sit under the floor for it to apply")
 
 	require.NoError(t, p.checkSourceComplete())
 }
@@ -656,7 +756,7 @@ func runHLSPull(t *testing.T, url string) (*Pipeline, gst.MessageType) {
 		gst.ClockTime(60*time.Second), gst.MessageEOS|gst.MessageError)
 	require.NotNil(t, msg, "the pull neither finished nor failed")
 
-	return &Pipeline{pipeline: pipeline}, msg.Type()
+	return &Pipeline{pipeline: pipeline, Params: pullParams(url)}, msg.Type()
 }
 
 // The reported case, over the topology it was reported on. A 5xx part way
