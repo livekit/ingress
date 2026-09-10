@@ -133,8 +133,7 @@ func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
 	var err error
 	defer func() {
 		if err != nil {
-			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
-			p.SendStateUpdate(context.Background())
+			p.fail(err)
 		}
 	}()
 
@@ -175,10 +174,11 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 
 	defer func() {
 		if err != nil {
-			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
-		} else {
-			p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
+			p.fail(err)
+			return
 		}
+
+		p.SetStatus(livekit.IngressState_ENDPOINT_PUBLISHING, nil)
 
 		// Is it ok to send this message here? The update handler is not waiting for a response but still doing I/O.
 		// We could send this in a separate goroutine, but this would make races more likely.
@@ -210,6 +210,29 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 
 		return gst.PadProbeRemove
 	})
+}
+
+// fail stops the pipeline and reports err as the session error.
+//
+// A session that cannot build one of its outputs will never publish that track,
+// and a terminal status is read downstream as the session having ended, so it
+// must not carry on running under one.
+//
+// The update goes out last, on a GStreamer streaming thread, and has no
+// deadline. Everything that ends the session has already run by then, so a
+// stalled update parks this thread alone rather than holding up the teardown.
+func (p *Pipeline) fail(err error) {
+	// Run reads this once the loop stops, so the session ends with this as its
+	// cause rather than as a clean shutdown.
+	select {
+	case p.pipelineErr <- err:
+	default:
+	}
+
+	p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
+	p.quitLoop()
+
+	p.SendStateUpdate(context.Background())
 }
 
 func (p *Pipeline) Run(ctx context.Context) error {

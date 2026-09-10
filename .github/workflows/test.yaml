@@ -28,11 +28,21 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Resolve GStreamer version
+        id: gst-version
+        run: |
+          # Assign first so a failed read trips `set -e`; inside echo its exit
+          # status would be discarded and an empty version written.
+          version=$(cat .gst-version)
+          if [ -z "$version" ]; then echo ".gst-version is empty" >&2; exit 1; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Build docker image
         run: |
           docker build \
             -t ingress-test \
             -f ./build/test/Dockerfile \
+            --build-arg GSTVERSION=${{ steps.gst-version.outputs.version }} \
             --build-arg SECURITY_REFRESH=${{ github.run_id }}-${{ github.run_attempt }} .
 
       - name: Run tests
