@@ -34,10 +34,17 @@ import (
 	"github.com/go-gst/go-gst/gst"
 	"github.com/stretchr/testify/require"
 
+	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/ingress/pkg/utils"
+	"github.com/livekit/protocol/livekit"
 )
 
 const testSystemMemoryCaps = "video/x-raw,format=NV12,width=1280,height=720,framerate=30/1"
+
+// Caps carrying no resolution, which AddTrack reads before it touches the sink.
+const testCapsWithoutResolution = "video/x-raw,format=NV12"
 
 // newCapsHoldingGhostPad returns a src ghost pad carrying capsStr, the shape
 // Input surfaces. A pad's caps property is its sticky CAPS event, and an
@@ -692,4 +699,106 @@ func TestCompleteHLSPullIsComplete(t *testing.T) {
 		"the whole playlist should have played out")
 
 	require.NoError(t, p.checkSourceComplete())
+}
+
+func newTestParams(t *testing.T, sn utils.StateNotifier) *params.Params {
+	t.Helper()
+
+	info := &livekit.IngressInfo{
+		IngressId:           "IN_test",
+		Name:                "test",
+		StreamKey:           "streamkey",
+		InputType:           livekit.IngressInput_RTMP_INPUT,
+		RoomName:            "room",
+		ParticipantIdentity: "identity",
+		ParticipantName:     "name",
+		State:               &livekit.IngressState{ResourceId: "RS_test"},
+	}
+
+	conf := &config.Config{ServiceConfig: &config.ServiceConfig{}, InternalConfig: &config.InternalConfig{}}
+
+	p, err := params.GetParams(context.Background(), sn, conf, info,
+		"ws://localhost:7880", "token", "project", "relay", nil, nil, nil)
+	require.NoError(t, err)
+
+	return p
+}
+
+// A session that cannot build one of its outputs reports a terminal status, and
+// downstream reads that as the session having ended, so it has to stop rather
+// than keep running unreported.
+//
+// The sink is nil: AddTrack reads the resolution before it touches the sink, so
+// caps without one reach the real failure path. A reordering there panics
+// instead of silently passing.
+func TestTrackBuildFailureStopsTheSession(t *testing.T) {
+	gst.Init(nil)
+
+	p := &Pipeline{
+		Params:      newTestParams(t, utils.NewNoopStateNotifier()),
+		loop:        glib.NewMainLoop(glib.MainContextDefault(), false),
+		pipelineErr: make(chan error, 1),
+		established: make(map[types.StreamKind]string),
+	}
+
+	go p.loop.Run()
+	require.Eventually(t, p.loop.IsRunning, 2*time.Second, 10*time.Millisecond, "loop did not start")
+
+	p.onParamsReady(types.Video, newCapsHoldingGhostPad(t, testCapsWithoutResolution))
+
+	require.Equal(t, livekit.IngressState_ENDPOINT_ERROR, p.State.Status)
+	require.Empty(t, p.established, "a failed output must not be recorded as built")
+	require.Eventually(t, func() bool { return !p.loop.IsRunning() }, 2*time.Second, 10*time.Millisecond,
+		"the session kept running after a track failed to build")
+
+	select {
+	case err := <-p.pipelineErr:
+		require.Error(t, err, "Run must end with the track failure as its cause")
+	default:
+		t.Fatal("no error was handed to Run, so the session would end as a clean shutdown")
+	}
+}
+
+// stalledNotifier never answers, like a state RPC that hangs.
+type stalledNotifier struct{ release <-chan struct{} }
+
+func (n stalledNotifier) UpdateIngressState(context.Context, string, *livekit.IngressInfo) error {
+	<-n.release
+	return nil
+}
+
+func (n stalledNotifier) SessionStarted(context.Context, string, *livekit.IngressInfo) {}
+
+func (n stalledNotifier) SessionEnded(context.Context, string) {}
+
+// fail reports on a GStreamer streaming thread, with no deadline on the update.
+// The teardown must not wait behind it.
+func TestTrackBuildFailureStopsTheSessionWhileReportingStalls(t *testing.T) {
+	gst.Init(nil)
+
+	release := make(chan struct{})
+	defer close(release)
+
+	p := &Pipeline{
+		Params:      newTestParams(t, stalledNotifier{release}),
+		loop:        glib.NewMainLoop(glib.MainContextDefault(), false),
+		pipelineErr: make(chan error, 1),
+		established: make(map[types.StreamKind]string),
+	}
+
+	pad := newCapsHoldingGhostPad(t, testCapsWithoutResolution)
+	returned := startLoop(p)
+
+	// The notification never returns while the update is stalled.
+	go p.onParamsReady(types.Video, pad)
+
+	require.True(t, stoppedWithin(returned, 5*time.Second),
+		"the teardown waited for the state update")
+
+	select {
+	case err := <-p.pipelineErr:
+		require.Error(t, err, "Run must still end with the track failure as its cause")
+	default:
+		t.Fatal("no cause was handed to Run")
+	}
 }
