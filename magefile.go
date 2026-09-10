@@ -24,6 +24,7 @@ import (
 	"go/build"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -33,8 +34,9 @@ import (
 var Default = Build
 
 const (
-	imageName  = "livekit/ingress"
-	gstVersion = "1.26.7"
+	imageName   = "livekit/ingress"
+	gstVersion  = "1.26.7"
+	composeFile = "build/test/compose.yaml"
 )
 
 var plugins = []string{"gstreamer", "gst-plugins-base", "gst-plugins-good", "gst-plugins-bad", "gst-plugins-ugly", "gst-libav"}
@@ -151,6 +153,42 @@ func Integration(configFile string) error {
 	}
 
 	return Retest(configFile)
+}
+
+// IntegrationDocker runs the integration suite the way CI does: the suite and
+// the Redis and room server it needs, all in containers. Unlike Integration it
+// needs no local GStreamer, and it runs the same images CI runs, so a pass
+// here means the same thing a green check does.
+//
+// The config has to reach the services by their compose names, redis:6379 and
+// ws://livekit:7880, rather than localhost.
+func IntegrationDocker(configFile string) error {
+	abs, err := filepath.Abs(configFile)
+	if err != nil {
+		return err
+	}
+
+	env := append(os.Environ(),
+		fmt.Sprintf("INGRESS_TEST_CONFIG=%s", abs),
+		fmt.Sprintf("SECURITY_REFRESH=%s", time.Now().UTC().Format("20060102")),
+	)
+
+	// run leaves the services it started behind, so they are torn down here
+	// whatever the suite did.
+	defer func() {
+		down := exec.Command("docker", "compose", "-f", composeFile, "down", "-v")
+		down.Env = env
+		down.Stdout = os.Stdout
+		down.Stderr = os.Stderr
+		_ = down.Run()
+	}()
+
+	cmd := exec.Command("docker", "compose", "-f", composeFile, "run", "--rm", "test")
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
 }
 
 func Retest(configFile string) error {

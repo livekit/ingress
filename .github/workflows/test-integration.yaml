@@ -44,57 +44,26 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Start Redis
-        run: |
-          docker run -d --name redis --network host redis:7-alpine
-          for _ in $(seq 30); do
-            docker exec redis redis-cli ping && break
-            sleep 1
-          done
-
-      # The suite needs a room server: the handler joins a room and publishes to
-      # it. Dev mode gives it the devkey/secret pair the config below uses, so
-      # this needs no repository secrets.
-      - name: Start a room server
-        run: |
-          docker run -d --name livekit-server --network host \
-            livekit/livekit-server:v1.13.6 --dev
-          for _ in $(seq 30); do
-            curl -s http://localhost:7880 >/dev/null && break
-            sleep 1
-          done
-
-      - name: Build the test image
-        run: |
-          docker build \
-            -t ingress-integration \
-            -f ./build/test/Dockerfile \
-            --build-arg SECURITY_REFRESH=${{ github.run_id }}-${{ github.run_attempt }} .
-
-      # Redis must carry nothing but this suite. Any other service that
-      # registers an IOInfoServer on the same bus takes a share of the state
-      # updates, and the ingress under test then never reaches a terminal state.
-      # A separate Redis database would not help, since psrpc rides pub/sub and
-      # pub/sub is not scoped to one.
-      - name: Run the ${{ matrix.suite }} suite
+      - name: Write the ${{ matrix.suite }} config
         run: |
           cat > /tmp/ingress-integration.yaml <<EOF
           logging:
-            level: info
+            level: debug
           redis:
-            address: localhost:6379
+            address: redis:6379
           api_key: devkey
           api_secret: secret
-          ws_url: ws://localhost:7880
+          ws_url: ws://livekit:7880
           room_name: ingress-integration-${{ matrix.suite }}
           ${{ matrix.suite }}_only: true
           EOF
-          docker run --rm --network host \
-            -e GITHUB_WORKFLOW=1 \
-            -e INTEGRATION=1 \
-            -e INGRESS_CONFIG_BODY="$(cat /tmp/ingress-integration.yaml)" \
-            ingress-integration
+
+      - name: Run the ${{ matrix.suite }} suite
+        env:
+          INGRESS_TEST_CONFIG: /tmp/ingress-integration.yaml
+          SECURITY_REFRESH: ${{ github.run_id }}-${{ github.run_attempt }}
+        run: docker compose -f build/test/compose.yaml run --rm test
 
       - name: Room server log
         if: failure()
-        run: docker logs livekit-server
+        run: docker compose -f build/test/compose.yaml logs livekit
