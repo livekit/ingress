@@ -52,6 +52,9 @@ services:
       context: ../..
       dockerfile: build/test/Dockerfile
       args:
+        # No default in the Dockerfile, on purpose: a second copy of the
+        # version would drift. mage reads it from .gst-version.
+        GSTVERSION: ${GSTVERSION:?read it from .gst-version}
         SECURITY_REFRESH: ${SECURITY_REFRESH:-}
     depends_on:
       redis:

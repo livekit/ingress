@@ -14,7 +14,13 @@
 
 ARG LINT_VERSION=v2.11.3
 
-FROM livekit/gstreamer:1.26.7-dev AS builder
+# The GStreamer version is pinned in .gst-version, the single source of truth that
+# Renovate keeps current via an approvable PR. It has no default here on purpose: a
+# default would be a second copy of the version and would drift. CI reads the file and
+# passes it in, so build this by hand with --build-arg GSTVERSION=$(cat .gst-version).
+ARG GSTVERSION
+
+FROM livekit/gstreamer:$GSTVERSION-dev AS builder
 
 ARG TARGETPLATFORM
 

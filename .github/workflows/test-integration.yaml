@@ -20,6 +20,7 @@ on:
     paths:
       - .github/workflows/test-integration.yaml
       - .golangci.yaml
+      - .gst-version
       - build/test/**
       - cmd/**
       - pkg/**
@@ -44,6 +45,13 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Read the pinned GStreamer version
+        id: gst-version
+        run: |
+          version=$(cat .gst-version)
+          if [ -z "$version" ]; then echo ".gst-version is empty" >&2; exit 1; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Write the ${{ matrix.suite }} config
         run: |
           cat > /tmp/ingress-integration.yaml <<EOF
@@ -61,6 +69,7 @@ jobs:
       - name: Run the ${{ matrix.suite }} suite
         env:
           INGRESS_TEST_CONFIG: /tmp/ingress-integration.yaml
+          GSTVERSION: ${{ steps.gst-version.outputs.version }}
           SECURITY_REFRESH: ${{ github.run_id }}-${{ github.run_attempt }}
         run: docker compose -f build/test/compose.yaml run --rm test
 

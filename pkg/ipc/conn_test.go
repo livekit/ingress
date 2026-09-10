@@ -29,9 +29,11 @@ type testHandler struct {
 func TestStartHandlerServerRebindsExistingSocket(t *testing.T) {
 	tmpDir := testutil.ShortTempDir(t)
 
-	require.NoError(t, StartHandlerServer(tmpDir, &testHandler{}))
+	_, err := StartHandlerServer(tmpDir, &testHandler{})
+	require.NoError(t, err)
 
 	// a relaunched handler must be able to bind after a previous process
 	// died without unlinking its socket
-	require.NoError(t, StartHandlerServer(tmpDir, &testHandler{}))
+	_, err = StartHandlerServer(tmpDir, &testHandler{})
+	require.NoError(t, err)
 }

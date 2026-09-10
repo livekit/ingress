@@ -34,9 +34,9 @@ import (
 var Default = Build
 
 const (
-	imageName   = "livekit/ingress"
-	gstVersion  = "1.26.7"
-	composeFile = "build/test/compose.yaml"
+	imageName      = "livekit/ingress"
+	gstVersionFile = ".gst-version"
+	composeFile    = "build/test/compose.yaml"
 )
 
 var plugins = []string{"gstreamer", "gst-plugins-base", "gst-plugins-good", "gst-plugins-bad", "gst-plugins-ugly", "gst-libav"}
@@ -127,6 +127,11 @@ func BuildDocker() error {
 	// updates on every local build.
 	securityRefresh := time.Now().UTC().Format("20060102")
 
+	gstVersion, err := getGstVersion()
+	if err != nil {
+		return err
+	}
+
 	return mageutil.Run(context.Background(),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-dev", gstVersion),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-prod", gstVersion),
@@ -139,6 +144,11 @@ func BuildDockerLinux() error {
 	// build arg is stable within a day and Docker layer caching avoids fetching
 	// updates on every local build.
 	securityRefresh := time.Now().UTC().Format("20060102")
+
+	gstVersion, err := getGstVersion()
+	if err != nil {
+		return err
+	}
 
 	return mageutil.Run(context.Background(),
 		fmt.Sprintf("docker pull livekit/gstreamer:%s-dev", gstVersion),
@@ -168,8 +178,14 @@ func IntegrationDocker(configFile string) error {
 		return err
 	}
 
+	gstVersion, err := getGstVersion()
+	if err != nil {
+		return err
+	}
+
 	env := append(os.Environ(),
 		fmt.Sprintf("INGRESS_TEST_CONFIG=%s", abs),
+		fmt.Sprintf("GSTVERSION=%s", gstVersion),
 		fmt.Sprintf("SECURITY_REFRESH=%s", time.Now().UTC().Format("20060102")),
 	)
 
@@ -234,6 +250,22 @@ func WhipClient() error {
 }
 
 // helpers
+
+// getGstVersion returns the GStreamer version pinned in .gst-version, the single source of
+// truth shared with CI and with the Dockerfiles, which take it as the GSTVERSION build arg.
+func getGstVersion() (string, error) {
+	b, err := os.ReadFile(gstVersionFile)
+	if err != nil {
+		return "", err
+	}
+
+	v := strings.TrimSpace(string(b))
+	if v == "" {
+		return "", fmt.Errorf("%s is empty", gstVersionFile)
+	}
+
+	return v, nil
+}
 
 func getBrewPrefix() (string, error) {
 	out, err := exec.Command("brew", "--prefix").Output()

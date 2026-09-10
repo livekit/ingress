@@ -199,6 +199,9 @@ func (s *Service) HandleRTMPPublishRequest(streamKey, resourceId string) (*param
 		s.rtmpSrv.CloseHandler(resourceId)
 	})
 	if err != nil {
+		// The session was announced by its first state update and is not going to
+		// run, so nothing else will report it as over.
+		s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
 		return nil, nil, err
 	}
 
@@ -232,6 +235,12 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, err)
 			p.SendStateUpdate(ctx)
 
+			// The session was announced by its first state update and is not
+			// going to run, so release it. Nothing is registered yet: ready
+			// runs once per session, and the paths that fail it do so before
+			// anything below has run.
+			s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
+
 			span.RecordError(err)
 			return nil
 		}
@@ -243,6 +252,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			s.sm.IngressStarted(p.IngressInfo, &localSessionAPI{stats.LocalStatsUpdater{Params: p}, func(_ context.Context) {
 				s.whipSrv.CloseHandler(resourceId)
 			}})
+			s.stateNotifier.SessionStarted(ctx, p.ProjectID, p.IngressInfo)
 		} else {
 			p.SetExtraParams(&params.WhipExtraParams{
 				MimeTypes: mimeTypes,
@@ -252,6 +262,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 				s.whipSrv.CloseHandler(resourceId)
 			})
 			if err != nil {
+				s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
 				return nil
 			}
 		}
@@ -277,6 +288,7 @@ func (s *Service) HandleWHIPPublishRequest(streamKey, resourceId string) (p *par
 			}
 
 			p.SendStateUpdate(ctx)
+			s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
 			s.sm.IngressEnded(p.State.ResourceId)
 		}
 	}
@@ -304,6 +316,7 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 
 	err = s.manager.startIngress(ctx, p, nil)
 	if err != nil {
+		s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
 		return nil, err
 	}
 
