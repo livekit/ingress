@@ -16,6 +16,7 @@ package media
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -36,6 +37,7 @@ import (
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/params"
+	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
@@ -834,12 +836,9 @@ func newTestParams(t *testing.T, sn utils.StateNotifier) *params.Params {
 func TestTrackBuildFailureStopsTheSession(t *testing.T) {
 	gst.Init(nil)
 
-	p := &Pipeline{
-		Params:      newTestParams(t, utils.NewNoopStateNotifier()),
-		loop:        glib.NewMainLoop(glib.MainContextDefault(), false),
-		pipelineErr: make(chan error, 1),
-		established: make(map[types.StreamKind]string),
-	}
+	p := newTestPipeline(t)
+	p.Params = newTestParams(t, utils.NewNoopStateNotifier())
+	p.established = make(map[types.StreamKind]string)
 
 	go p.loop.Run()
 	require.Eventually(t, p.loop.IsRunning, 2*time.Second, 10*time.Millisecond, "loop did not start")
@@ -879,12 +878,9 @@ func TestTrackBuildFailureStopsTheSessionWhileReportingStalls(t *testing.T) {
 	release := make(chan struct{})
 	defer close(release)
 
-	p := &Pipeline{
-		Params:      newTestParams(t, stalledNotifier{release}),
-		loop:        glib.NewMainLoop(glib.MainContextDefault(), false),
-		pipelineErr: make(chan error, 1),
-		established: make(map[types.StreamKind]string),
-	}
+	p := newTestPipeline(t)
+	p.Params = newTestParams(t, stalledNotifier{release})
+	p.established = make(map[types.StreamKind]string)
 
 	pad := newCapsHoldingGhostPad(t, testCapsWithoutResolution)
 	returned := startLoop(p)
@@ -900,5 +896,81 @@ func TestTrackBuildFailureStopsTheSessionWhileReportingStalls(t *testing.T) {
 		require.Error(t, err, "Run must still end with the track failure as its cause")
 	default:
 		t.Fatal("no cause was handed to Run")
+	}
+}
+
+// A cancellation is how the shutdown unblocks the input, so it must not be what
+// Run reports when a cause was recorded.
+func TestResolveRunErrorPrefersRecordedCause(t *testing.T) {
+	cause := errors.New("could not add video track")
+
+	recorded := func() <-chan error {
+		c := make(chan error, 1)
+		c <- cause
+		return c
+	}
+	empty := func() <-chan error { return make(chan error, 1) }
+
+	require.Equal(t, cause, resolveRunError(context.Canceled, recorded()),
+		"a cancellation must not mask the recorded cause")
+	require.Equal(t, cause, resolveRunError(nil, recorded()))
+	require.Equal(t, cause, resolveRunError(fmt.Errorf("closing: %w", context.Canceled), recorded()),
+		"a wrapped cancellation must not mask it either")
+
+	require.Equal(t, context.Canceled, resolveRunError(context.Canceled, empty()),
+		"with nothing recorded the shutdown error stands, so a kill still reports as it did")
+
+	inputErr := errors.New("relay returned 500")
+	require.Equal(t, inputErr, resolveRunError(inputErr, recorded()),
+		"a genuine input failure is more upstream than anything recorded downstream")
+}
+
+// A track failure ends the session even when the publisher is connected and
+// sending nothing, which leaves the relay read with no bytes to return.
+func TestTrackBuildFailureClosesAStalledInput(t *testing.T) {
+	gst.Init(nil)
+
+	// A relay that answers, then goes quiet.
+	hold := make(chan struct{})
+	relay := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.(http.Flusher).Flush()
+		<-hold
+	}))
+	defer relay.Close()
+	defer close(hold)
+
+	p := newTestPipeline(t)
+	p.Params = newTestParams(t, utils.NewNoopStateNotifier())
+	p.RelayUrl = relay.URL
+	p.established = make(map[types.StreamKind]string)
+
+	input, err := NewInput(context.Background(), p.Params, stats.NewLocalMediaStatsGatherer())
+	require.NoError(t, err)
+	p.input = input
+
+	// Run stores the cancel for the context it hands the input.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	p.cancel.Store(&cancel)
+	require.NoError(t, input.Start(ctx, func(context.Context) {}))
+
+	// Let the relay read park with nothing to read.
+	time.Sleep(300 * time.Millisecond)
+
+	returned := startLoop(p)
+
+	p.onParamsReady(types.Video, newCapsHoldingGhostPad(t, testCapsWithoutResolution))
+
+	require.True(t, stoppedWithin(returned, 5*time.Second),
+		"the session kept running after a track failed to build")
+
+	closed := make(chan error, 1)
+	go func() { closed <- p.input.Close() }()
+
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the input was left waiting on a relay read that may never return")
 	}
 }
