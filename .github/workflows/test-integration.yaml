@@ -80,6 +80,12 @@ jobs:
         # --build because run reuses whatever image already exists.
         run: docker compose -f build/test/compose.yaml run --build --rm test
 
+      # Compose interpolates the whole file whatever the command, so this
+      # needs the same variables the run step does or it fails instead of
+      # printing the logs a red run is here to explain.
       - name: Room server log
         if: failure()
+        env:
+          INGRESS_TEST_CONFIG: /tmp/ingress-integration.yaml
+          GSTVERSION: ${{ steps.gst-version.outputs.version }}
         run: docker compose -f build/test/compose.yaml logs livekit
