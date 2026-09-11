@@ -16,7 +16,21 @@
 set -exo pipefail
 
 
-# Run tests
+# Run tests. INTEGRATION selects the prebuilt integration suite, which needs a
+# Redis and a room server that INGRESS_CONFIG_BODY or INGRESS_CONFIG_FILE points
+# at. Without it, the unit tests run and need neither.
+if [[ -n "${INTEGRATION}" ]]; then
+  if [[ -z "${GITHUB_WORKFLOW}" ]]; then
+    exec ./test.test -test.v -test.timeout 20m
+  fi
+
+  # Without the exit, the unit tests below run too: exec in a pipeline
+  # replaces the subshell running that stage, not this script.
+  go install github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest
+  go tool test2json -p ingress ./test.test -test.v -test.timeout 20m 2>&1 | "$HOME"/go/bin/gotestfmt
+  exit
+fi
+
 if [[ -z "${GITHUB_WORKFLOW}" ]]; then
   exec go test -v -timeout 20m ./pkg/...
 else

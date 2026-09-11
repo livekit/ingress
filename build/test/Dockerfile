@@ -58,8 +58,19 @@ ARG SECURITY_REFRESH
 RUN apt-get update && apt-get -y dist-upgrade && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
 
 # copy source
+COPY cmd/ cmd/
 COPY pkg/ pkg/
+COPY test/ test/
 COPY version/ version/
+
+# The integration suite spawns the handler as a subprocess and looks for
+# "ingress" on PATH, so the binary has to be in the image. Compiling the suite
+# here rather than at run time means a build error under test/ fails the image,
+# which the unit test job also gets.
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/go/build-cache \
+    go build -o /usr/local/bin/ingress ./cmd/server && \
+    go test -c -tags integration -o test.test ./test/
 
 FROM golangci/golangci-lint:${LINT_VERSION} AS golangci
 

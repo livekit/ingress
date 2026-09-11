@@ -1,0 +1,91 @@
+# Copyright 2023 LiveKit, Inc.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: Integration Test
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    # Everything the test image is built from. A change to any of these can
+    # alter the binary the suite exercises, and a path missing here means no
+    # run at all rather than a run that passes.
+    paths:
+      - .github/workflows/test-integration.yaml
+      - .golangci.yaml
+      - .go-version
+      - .gst-version
+      - build/test/**
+      - cmd/**
+      - pkg/**
+      - test/**
+      - version/**
+      - go.mod
+      - go.sum
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    # The suite's own deadline is 20m, so this only catches a hang outside it.
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        # WHIP is missing on purpose: its publisher is the livekit-whip-bot
+        # submodule, which has to be checked out and built into the image first.
+        suite: [rtmp, url]
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Read the pinned GStreamer version
+        id: gst-version
+        run: |
+          version=$(cat .gst-version)
+          if [ -z "$version" ]; then echo ".gst-version is empty" >&2; exit 1; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Write the ${{ matrix.suite }} config
+        run: |
+          cat > /tmp/ingress-integration.yaml <<EOF
+          logging:
+            level: debug
+          redis:
+            address: redis:6379
+          api_key: devkey
+          api_secret: secret
+          ws_url: ws://livekit:7880
+          room_name: ingress-integration-${{ matrix.suite }}
+          ${{ matrix.suite }}_only: true
+          EOF
+
+      - name: Run the ${{ matrix.suite }} suite
+        env:
+          INGRESS_TEST_CONFIG: /tmp/ingress-integration.yaml
+          GSTVERSION: ${{ steps.gst-version.outputs.version }}
+          SECURITY_REFRESH: ${{ github.run_id }}-${{ github.run_attempt }}
+        # --build because run reuses whatever image already exists.
+        run: docker compose -f build/test/compose.yaml run --build --rm test
+
+      # Compose interpolates the whole file whatever the command, so this
+      # needs the same variables the run step does or it fails instead of
+      # printing the logs a red run is here to explain.
+      - name: Room server log
+        if: failure()
+        env:
+          INGRESS_TEST_CONFIG: /tmp/ingress-integration.yaml
+          GSTVERSION: ${{ steps.gst-version.outputs.version }}
+        run: docker compose -f build/test/compose.yaml logs livekit
