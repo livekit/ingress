@@ -399,31 +399,30 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) 
 		ctx, done := context.WithTimeout(s.ctx, sessionStartTimeout)
 		defer done()
 
-		var err error
-		var mimeTypes map[types.StreamKind]string
-		if ready != nil {
-			defer func() {
-				stats := ready(mimeTypes, err)
-				if stats != nil {
-					h.SetMediaStatsGatherer(stats)
-				}
-
-				if err != nil {
-					h.Close()
-
-					s.handlersLock.Lock()
-					delete(s.handlers, resourceId)
-					s.handlersLock.Unlock()
-				}
-			}()
-		}
-
 		s.handlersLock.Lock()
 		s.handlers[resourceId] = h
 		s.handlersLock.Unlock()
 
-		mimeTypes, err = h.Start(ctx)
+		mimeTypes, err := h.Start(ctx)
+
+		// Call ready here rather than on the way out. The goroutine below
+		// calls ended, and a session whose done channel is already broken
+		// reaches ended without blocking, so deferring ready lets ended
+		// overtake it -- ready sends a state update, and the round trip is
+		// long enough for the whole of ended to run in the middle of it.
+		if ready != nil {
+			if stats := ready(mimeTypes, err); stats != nil {
+				h.SetMediaStatsGatherer(stats)
+			}
+		}
+
 		if err != nil {
+			h.Close()
+
+			s.handlersLock.Lock()
+			delete(s.handlers, resourceId)
+			s.handlersLock.Unlock()
+
 			return
 		}
 
