@@ -62,8 +62,9 @@ type Pipeline struct {
 	sink     *WebRTCSink
 	input    *Input
 
-	closed core.Fuse
-	cancel atomic.Pointer[context.CancelFunc]
+	closed  core.Fuse
+	drained core.Fuse
+	cancel  atomic.Pointer[context.CancelFunc]
 
 	pipelineErr chan error
 
@@ -337,6 +338,7 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 		}
 
 		_ = p.pipeline.BlockSetState(gst.StateNull)
+		p.drained.Break()
 		p.loop.Quit()
 		return false
 
@@ -492,16 +494,26 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 		(*cancel)()
 	}
 
-	c := make(chan struct{})
+	// Draining only works once the pipeline is running: EOS has to travel the
+	// streaming threads to reach the bus. Below PAUSED nothing carries it, so
+	// the drain would always time out. Stop directly in that case.
+	// The state read can be stale if Run is mid-startup, but that window is the
+	// same one the unconditional stop already had. Stop off the caller's
+	// goroutine so a slow state change never blocks the kill path.
+	if p.pipeline.GetCurrentState() < gst.StatePaused {
+		go func() {
+			p.forceStop()
+			p.quitLoop()
+		}()
+		return
+	}
 
-	go func() {
-		err := p.pipeline.BlockSetState(gst.StateNull)
-		if err != nil {
-			logger.Errorw("failed stopping pipeline", err)
-		}
+	// Drain first: EOS travels the streaming threads and messageWatch stops the
+	// pipeline once it reaches the bus, so no chain call is in flight when the
+	// state change runs. Going straight to NULL races those threads.
+	p.pipeline.SendEvent(gst.NewEOSEvent())
 
-		close(c)
-	}()
+	c := p.drained.Watch()
 
 	go func() {
 		t := time.NewTimer(5 * time.Second)
@@ -510,6 +522,7 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 		case <-c:
 			t.Stop()
 		case <-t.C:
+			p.forceStop()
 			// Do not set ingress in error state as we are stopping and this causes some media at the end
 			// to not be sent to the room at worse
 			logger.Errorw("pipeline frozen", psrpc.NewErrorf(psrpc.Internal, "pipeline frozen"))
@@ -517,6 +530,13 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 
 		p.quitLoop()
 	}()
+}
+
+// forceStop drops the pipeline to NULL without waiting for it to drain.
+func (p *Pipeline) forceStop() {
+	if err := p.pipeline.BlockSetState(gst.StateNull); err != nil {
+		logger.Errorw("failed stopping pipeline", err)
+	}
 }
 
 // quitLoop stops the main loop, and is safe to call before Run has started it:

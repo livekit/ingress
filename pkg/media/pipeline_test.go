@@ -974,3 +974,64 @@ func TestTrackBuildFailureClosesAStalledInput(t *testing.T) {
 		t.Fatal("the input was left waiting on a relay read that may never return")
 	}
 }
+
+// SendEOS must drain a running pipeline rather than forcing it to NULL: the
+// forced stop races the streaming threads, which is what wedges videorate on
+// GStreamer 1.28. Draining is observable, so assert on it rather than on the
+// stop: a real EOS travels the pipeline and surfaces on the bus, and only
+// then does messageWatch break the fuse.
+func TestSendEOSDrainsARunningPipeline(t *testing.T) {
+	if os.Getenv(eosChildEnv) == "1" {
+		p := newRunningTestPipeline(t)
+
+		p.pipeline.GetPipelineBus().AddWatch(p.messageWatch)
+		returned := startLoop(p)
+
+		p.SendEOS(context.Background())
+
+		// The fallback fires at 5s, so anything inside that came from the
+		// drain. Allow margin for a loaded machine without reaching it.
+		require.True(t, stoppedWithin(returned, 3*time.Second),
+			"loop did not return: the drain never completed and the stop fell through to the timeout")
+		require.True(t, p.drained.IsBroken(),
+			"EOS never reached the bus: SendEOS stopped the pipeline without draining it")
+		return
+	}
+
+	out, err := runChild(t, "TestSendEOSDrainsARunningPipeline")
+
+	require.NoError(t, err, "child process failed:\n%s", out)
+	require.NotContains(t, string(out), "panic:", "child panicked:\n%s", out)
+}
+
+// newRunningTestPipeline returns a pipeline in PLAYING with real elements, so
+// an EOS event has something to travel through.
+func newRunningTestPipeline(t *testing.T) *Pipeline {
+	t.Helper()
+
+	gst.Init(nil)
+
+	pipeline, err := gst.NewPipeline("drain-test")
+	require.NoError(t, err)
+
+	src, err := gst.NewElement("fakesrc")
+	require.NoError(t, err)
+	sink, err := gst.NewElement("fakesink")
+	require.NoError(t, err)
+	require.NoError(t, pipeline.AddMany(src, sink))
+	require.NoError(t, src.Link(sink))
+
+	p := &Pipeline{
+		pipeline:    pipeline,
+		loop:        glib.NewMainLoop(glib.MainContextDefault(), false),
+		pipelineErr: make(chan error, 1),
+		eos:         newEOSDispatcher(),
+	}
+
+	require.NoError(t, p.pipeline.Start())
+	ret, state := p.pipeline.GetState(gst.StatePlaying, gst.ClockTime(5*time.Second))
+	require.NotEqual(t, gst.StateChangeFailure, ret, "pipeline failed to start")
+	require.GreaterOrEqual(t, state, gst.StatePaused, "pipeline must be running for the drain path")
+
+	return p
+}
