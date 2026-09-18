@@ -317,7 +317,7 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 	// The caller's deadline can expire while handleRequest runs. Spawning after
 	// that leaves a handler nothing will reap.
 	if err := ctx.Err(); err != nil {
-		s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
+		s.stateNotifier.SessionEnded(context.WithoutCancel(ctx), p.State.ResourceId)
 		return nil, err
 	}
 

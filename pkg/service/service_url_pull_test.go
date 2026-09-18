@@ -86,7 +86,7 @@ cpu_cost:
 		10*time.Second, 50*time.Millisecond, "cpu stats never became available")
 
 	var spawned int
-	newCmd := func(ctx context.Context, p *params.Params) (*exec.Cmd, error) {
+	newCmd := func(context.Context, *params.Params) (*exec.Cmd, error) {
 		spawned++
 		return exec.Command("true"), nil
 	}
