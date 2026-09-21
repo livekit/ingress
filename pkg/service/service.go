@@ -314,6 +314,13 @@ func (s *Service) HandleURLPublishRequest(ctx context.Context, resourceId string
 		return nil, err
 	}
 
+	// The caller's deadline can expire while handleRequest runs. Spawning after
+	// that leaves a handler nothing will reap.
+	if err := ctx.Err(); err != nil {
+		s.stateNotifier.SessionEnded(context.WithoutCancel(ctx), p.State.ResourceId)
+		return nil, err
+	}
+
 	err = s.manager.startIngress(ctx, p, nil)
 	if err != nil {
 		s.stateNotifier.SessionEnded(ctx, p.State.ResourceId)
