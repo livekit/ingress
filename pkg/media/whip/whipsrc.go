@@ -24,6 +24,7 @@ import (
 	"github.com/go-gst/go-gst/gst"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
+	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/utils"
 )
 
@@ -39,6 +40,7 @@ type WHIPSource struct {
 	params      *params.Params
 	resourceId  string
 	startOffset atomic.Int64
+	clampLogged atomic.Bool
 	trackSrc    map[types.StreamKind]*whipAppSource
 }
 
@@ -67,7 +69,7 @@ func NewWHIPRelaySource(ctx context.Context, p *params.Params) (*WHIPSource, err
 
 func (s *WHIPSource) Start(ctx context.Context, onClose func()) error {
 	for _, t := range s.trackSrc {
-		err := t.Start(ctx, s.getCorrctedTimestamp, onClose)
+		err := t.Start(ctx, s.getCorrectedTimestamp, onClose)
 		if err != nil {
 			return err
 		}
@@ -115,8 +117,26 @@ func (s *WHIPSource) getRelayUrl(kind types.StreamKind) string {
 	return fmt.Sprintf("%s/%s?token=%s", s.params.RelayUrl, kind, s.params.RelayToken)
 }
 
-func (s *WHIPSource) getCorrctedTimestamp(ts time.Duration) time.Duration {
+func (s *WHIPSource) getCorrectedTimestamp(ts time.Duration) time.Duration {
 	s.startOffset.CompareAndSwap(-1, int64(ts))
 
-	return ts - time.Duration(s.startOffset.Load())
+	offset := time.Duration(s.startOffset.Load())
+	corrected := ts - offset
+	if corrected < 0 {
+		// Both tracks share one offset, latched by whichever relay delivers its
+		// first packet first, and the other can carry an earlier timestamp.
+		// GstClockTime is unsigned, so a negative duration would reach the
+		// pipeline as a value near 2^64.
+		//
+		// Logged once per source: a large enough gap between the tracks clamps
+		// a run of packets, and this is on the per-packet path.
+		if s.clampLogged.CompareAndSwap(false, true) {
+			logger.Warnw("clamped a relay timestamp older than the stream offset", nil,
+				"resourceID", s.resourceId, "ts", ts, "startOffset", offset, "corrected", corrected)
+		}
+
+		return 0
+	}
+
+	return corrected
 }
