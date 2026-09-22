@@ -23,12 +23,22 @@ var actions = map[string]int{
 }
 
 func NewHandlerLogger(resourceID, ingressID string) *medialogutils.CmdLogger {
+	return NewHandlerLoggerWithSink(resourceID, ingressID, nil)
+}
+
+// NewHandlerLoggerWithSink sends the handler's own structured lines to sink. A
+// nil sink writes them to stdout.
+func NewHandlerLoggerWithSink(resourceID, ingressID string, sink func(line string)) *medialogutils.CmdLogger {
 	l := logger.GetLogger().WithValues("resourceID", resourceID, "ingressID", ingressID)
 	return medialogutils.NewCmdLogger(func(s string) {
 		lines := strings.Split(strings.TrimSuffix(s, "\n"), "\n")
 		for _, line := range lines {
 			if strings.HasSuffix(line, "}") {
-				fmt.Println(line)
+				if sink != nil {
+					sink(line)
+				} else {
+					fmt.Println(line)
+				}
 			} else {
 				action := logError
 				if len(line) > 5 {

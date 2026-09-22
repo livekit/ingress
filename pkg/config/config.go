@@ -23,6 +23,7 @@ import (
 	"github.com/livekit/mediatransportutil/pkg/rtcconfig"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/logger/medialogutils"
+	"github.com/livekit/protocol/logger/zaputil"
 	"github.com/livekit/protocol/redis"
 	"github.com/livekit/protocol/rpc"
 	"github.com/livekit/protocol/utils"
@@ -88,6 +89,10 @@ type ServiceConfig struct {
 	// Experimental config
 	// Reduces ingest e2e latency by dropping excess preroll buffers
 	EnableStreamLatencyReduction bool `yaml:"enable_stream_latency_reduction"`
+
+	// LoggerTee duplicates the log stream InitLogger builds. Set it before
+	// Init; the zero value is a no-op.
+	LoggerTee zaputil.Tee `yaml:"-"`
 }
 
 type InternalConfig struct {
@@ -183,7 +188,7 @@ func (c *Config) Init() error {
 }
 
 func (c *Config) InitLogger(values ...interface{}) error {
-	zl, err := logger.NewZapLogger(&c.Logging)
+	zl, err := logger.NewZapLogger(&c.Logging, logger.WithTee(c.LoggerTee))
 	if err != nil {
 		return err
 	}
