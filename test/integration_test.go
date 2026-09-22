@@ -12,6 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+//go:build integration
+
 package test
 
 import (
@@ -28,15 +30,15 @@ import (
 )
 
 func TestIngress(t *testing.T) {
-	conf := getConfig(t)
+	r := NewRunner(t)
 
-	rc, err := redis.GetRedisClient(conf.Redis)
+	rc, err := redis.GetRedisClient(r.Redis)
 	require.NoError(t, err)
 	require.NotNil(t, rc, "redis required")
 
-	bus := redisbus.New(rc, conf.PSRPC.BusOptions()...)
+	bus := redisbus.New(rc, r.PSRPC.BusOptions()...)
 
-	RunTestSuite(t, conf, bus, func(psrpcClient rpc.IOInfoClient) utils.StateNotifier {
+	RunTestSuite(t, r, bus, func(psrpcClient rpc.IOInfoClient) utils.StateNotifier {
 		return utils.NewServiceStateNotifier(psrpcClient)
 	}, service.NewCmd)
 }

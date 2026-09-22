@@ -69,11 +69,11 @@ jobs:
           api_secret: secret
           ws_url: ws://livekit:7880
           room_name: ingress-integration-${{ matrix.suite }}
-          ${{ matrix.suite }}_only: true
           EOF
 
       - name: Run the ${{ matrix.suite }} suite
         env:
+          INTEGRATION_TYPE: ${{ matrix.suite }}
           INGRESS_TEST_CONFIG: /tmp/ingress-integration.yaml
           GSTVERSION: ${{ steps.gst-version.outputs.version }}
           SECURITY_REFRESH: ${{ github.run_id }}-${{ github.run_attempt }}

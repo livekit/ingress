@@ -15,8 +15,11 @@
 # The integration suite and the two services it needs. CI and a developer run
 # the same three containers:
 #
-#   INGRESS_TEST_CONFIG=path/to/config.yaml \
+#   INTEGRATION_TYPE=rtmp INGRESS_TEST_CONFIG=path/to/config.yaml \
 #     docker compose -f build/test/compose.yaml run --rm test
+#
+# INTEGRATION_TYPE picks one of rtmp, whip or url. Leave it unset to run all
+# of them.
 #
 # Redis carries this suite and nothing else. Any other service that registers
 # an IOInfoServer on the same bus takes a share of the state updates, and the
@@ -65,5 +68,6 @@ services:
       INTEGRATION: "1"
       GITHUB_WORKFLOW: ${GITHUB_WORKFLOW:-}
       INGRESS_CONFIG_FILE: /config/ingress.yaml
+      INTEGRATION_TYPE: ${INTEGRATION_TYPE:-}
     volumes:
       - ${INGRESS_TEST_CONFIG:?point INGRESS_TEST_CONFIG at a test config}:/config/ingress.yaml:ro
