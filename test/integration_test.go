@@ -21,7 +21,7 @@ import (
 
 	"github.com/livekit/protocol/redis"
 	"github.com/livekit/protocol/rpc"
-	"github.com/livekit/psrpc"
+	"github.com/livekit/psrpc/pkg/bus/redisbus"
 
 	"github.com/livekit/ingress/pkg/service"
 	"github.com/livekit/ingress/pkg/utils"
@@ -34,7 +34,7 @@ func TestIngress(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, rc, "redis required")
 
-	bus := psrpc.NewRedisMessageBus(rc, conf.PSRPC.BusOptions()...)
+	bus := redisbus.New(rc, conf.PSRPC.BusOptions()...)
 
 	RunTestSuite(t, conf, bus, func(psrpcClient rpc.IOInfoClient) utils.StateNotifier {
 		return utils.NewServiceStateNotifier(psrpcClient)

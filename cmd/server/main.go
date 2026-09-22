@@ -32,7 +32,7 @@ import (
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/redis"
 	"github.com/livekit/protocol/rpc"
-	"github.com/livekit/psrpc"
+	"github.com/livekit/psrpc/pkg/bus/redisbus"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
@@ -129,7 +129,7 @@ func runService(_ context.Context, c *cli.Command) error {
 		return err
 	}
 
-	bus := psrpc.NewRedisMessageBus(rc, conf.PSRPC.BusOptions()...)
+	bus := redisbus.New(rc, conf.PSRPC.BusOptions()...)
 	psrpcClient, err := rpc.NewIOInfoClient(bus)
 	if err != nil {
 		return err
