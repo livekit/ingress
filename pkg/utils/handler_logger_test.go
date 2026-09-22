@@ -12,31 +12,31 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package test
+package utils
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-
-	"github.com/livekit/protocol/redis"
-	"github.com/livekit/protocol/rpc"
-	"github.com/livekit/psrpc/pkg/bus/redisbus"
-
-	"github.com/livekit/ingress/pkg/service"
-	"github.com/livekit/ingress/pkg/utils"
 )
 
-func TestIngress(t *testing.T) {
-	conf := getConfig(t)
+// Only the handler's own structured lines go to the sink.
+func TestHandlerLoggerSink(t *testing.T) {
+	var got []string
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line string) {
+		got = append(got, line)
+	})
 
-	rc, err := redis.GetRedisClient(conf.Redis)
+	_, err := l.Write([]byte(
+		`{"level":"info","msg":"started"}` + "\n" +
+			"0:00:00.1 gstreamer noise\n" +
+			"ice ERROR: something\n" +
+			`{"level":"error","msg":"failed"}` + "\n",
+	))
 	require.NoError(t, err)
-	require.NotNil(t, rc, "redis required")
 
-	bus := redisbus.New(rc, conf.PSRPC.BusOptions()...)
-
-	RunTestSuite(t, conf, bus, func(psrpcClient rpc.IOInfoClient) utils.StateNotifier {
-		return utils.NewServiceStateNotifier(psrpcClient)
-	}, service.NewCmd)
+	require.Equal(t, []string{
+		`{"level":"info","msg":"started"}`,
+		`{"level":"error","msg":"failed"}`,
+	}, got)
 }
