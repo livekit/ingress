@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/params"
@@ -30,29 +31,27 @@ import (
 	"github.com/livekit/psrpc"
 )
 
-// Only CreateIngress is reached on the URL pull path; the embedded nil
-// interface satisfies the rest.
-type fakeIOInfoClient struct {
-	rpc.IOInfoClient
-}
-
-func (c *fakeIOInfoClient) CreateIngress(context.Context, *livekit.IngressInfo, ...psrpc.RequestOption) (*rpc.CreateIngressResponse, error) {
-	return &rpc.CreateIngressResponse{}, nil
-}
-
-// recordingNotifier cancels the request context from UpdateIngressState, which
-// sendUpdate calls as the last step of handleRequest. That reproduces the real
-// window, a caller that gives up while the pod is still working, without
-// depending on timing.
+// recordingNotifier cancels the request context from CreateIngress, the last
+// step of handleRequest on the URL pull path. That reproduces the real window,
+// a caller that gives up while the pod is still working, without depending on
+// timing.
 type recordingNotifier struct {
 	onUpdate        func()
+	created         []*livekit.IngressInfo
+	updates         int
 	sessionEndedFor []string
 }
 
-func (n *recordingNotifier) UpdateIngressState(context.Context, string, *livekit.IngressInfo) error {
+func (n *recordingNotifier) CreateIngress(_ context.Context, _ string, info *livekit.IngressInfo) error {
+	n.created = append(n.created, proto.Clone(info).(*livekit.IngressInfo))
 	if n.onUpdate != nil {
 		n.onUpdate()
 	}
+	return nil
+}
+
+func (n *recordingNotifier) UpdateIngressState(context.Context, string, *livekit.IngressInfo) error {
+	n.updates++
 	return nil
 }
 
@@ -102,7 +101,6 @@ cpu_cost:
 		monitor:       monitor,
 		manager:       manager,
 		sm:            sm,
-		psrpcClient:   &fakeIOInfoClient{},
 		stateNotifier: notifier,
 	}
 
@@ -126,5 +124,11 @@ cpu_cost:
 	require.ErrorIs(t, err, context.Canceled)
 	require.Zero(t, spawned, "no handler may be spawned for a caller that has gone")
 	require.Equal(t, []string{"res_test"}, notifier.sessionEndedFor,
-		"the session announced by the first state update must be reported ended")
+		"the session announced by the create must be reported ended")
+
+	require.Len(t, notifier.created, 1)
+	state := notifier.created[0].State
+	require.Equal(t, livekit.IngressState_ENDPOINT_BUFFERING, state.Status)
+	require.NotZero(t, state.UpdatedAt, "the create carries the session's first state")
+	require.Zero(t, notifier.updates, "the create announces the session, so no update follows it")
 }

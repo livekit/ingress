@@ -381,22 +381,10 @@ func (s *Service) handleRequest(ctx context.Context, req requestParams) (p *para
 			rp.info = p.IngressInfo
 		}
 
-		// Create the ingress if it came through the request (URL Pull)
-		if rp.inputType == livekit.IngressInput_URL_INPUT && err == nil {
-			_, err = s.psrpcClient.CreateIngress(ctx, rp.info)
-			if err != nil {
-				logger.Warnw("failed creating ingress", err, "ingressID", rp.info.GetIngressId(), "resourceID", rp.info.GetState().GetResourceId())
-				// TODO remove this workaround once updated IOInfoService that handles CreateIngress is deployed widely
-				var psrpcErr psrpc.Error
-				if errors.As(err, &psrpcErr) && psrpcErr.Code() == psrpc.Unavailable {
-					err = nil
-				}
-				return
-			}
+		if cerr := s.sendUpdate(ctx, rp.projectID, rp.inputType, rp.info, err); cerr != nil {
+			err = cerr
+			return
 		}
-
-		// Send update for URL ingress as well to make sure the state gets updated even if CreateIngress fails because the ingress already exists
-		s.sendUpdate(ctx, rp.projectID, rp.info, err)
 
 		if rp.info != nil {
 			logger.Infow("received ingress info", "ingressID", rp.info.IngressId, "streamKey", rp.info.StreamKey, "resourceID", rp.info.State.ResourceId, "ingressInfo", params.CopyRedactedIngressInfo(rp.info))
@@ -499,10 +487,12 @@ func (s *Service) Run() error {
 	return nil
 }
 
-func (s *Service) sendUpdate(ctx context.Context, projectID string, info *livekit.IngressInfo, err error) {
+// sendUpdate reports a session's first state. A URL pull ingress is created
+// with it, and only a failed create is returned.
+func (s *Service) sendUpdate(ctx context.Context, projectID string, inputType livekit.IngressInput, info *livekit.IngressInfo, err error) error {
 	var state *livekit.IngressState
 	if info == nil {
-		return
+		return nil
 	}
 	state = info.State
 	if state == nil {
@@ -517,10 +507,18 @@ func (s *Service) sendUpdate(ctx context.Context, projectID string, info *liveki
 
 	state.UpdatedAt = time.Now().UnixNano()
 
-	err = s.stateNotifier.UpdateIngressState(ctx, projectID, info)
-	if err != nil {
+	if inputType == livekit.IngressInput_URL_INPUT && err == nil {
+		if err := s.stateNotifier.CreateIngress(ctx, projectID, info); err != nil {
+			logger.Warnw("failed creating ingress", err, "ingressID", info.IngressId, "resourceID", state.ResourceId)
+			return err
+		}
+		return nil
+	}
+
+	if err := s.stateNotifier.UpdateIngressState(ctx, projectID, info); err != nil {
 		logger.Errorw("failed to send update", err)
 	}
+	return nil
 }
 
 func (s *Service) GetAvailableCPU() float64 {
