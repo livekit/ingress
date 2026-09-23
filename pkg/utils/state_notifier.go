@@ -26,10 +26,15 @@ import (
 type StateNotifier interface {
 	UpdateIngressState(ctx context.Context, projectID string, info *livekit.IngressInfo) error
 
+	// IngressCreated announces a session whose first state CreateIngress has
+	// already stored. It does whatever UpdateIngressState does for that state
+	// except send it.
+	IngressCreated(ctx context.Context, projectID string, info *livekit.IngressInfo) error
+
 	// SessionStarted reports that a session is running. It does not mark the
 	// first the notifier hears of one: a session is announced by its first
-	// state update, which carries ENDPOINT_BUFFERING and is sent before this
-	// call on every path. What this marks is the point from which the session
+	// state update, or IngressCreated, which carries ENDPOINT_BUFFERING and is
+	// sent before this call on every path. What this marks is the point from which the session
 	// is live, so anything an implementation meters belongs between here and
 	// SessionEnded rather than from whenever an update first arrived.
 	SessionStarted(ctx context.Context, projectID string, info *livekit.IngressInfo)
@@ -65,6 +70,9 @@ func (sn *serviceStateNotifier) UpdateIngressState(ctx context.Context, _ string
 
 // These forward every update onward and hold no per-session state of their
 // own, so there is nothing to track.
+func (sn *serviceStateNotifier) IngressCreated(context.Context, string, *livekit.IngressInfo) error {
+	return nil
+}
 func (sn *serviceStateNotifier) SessionStarted(context.Context, string, *livekit.IngressInfo) {}
 func (sn *serviceStateNotifier) SessionEnded(context.Context, string)                         {}
 
@@ -89,6 +97,9 @@ func (sn *handlerStateNotifier) UpdateIngressState(ctx context.Context, projectI
 	return err
 }
 
+func (sn *handlerStateNotifier) IngressCreated(context.Context, string, *livekit.IngressInfo) error {
+	return nil
+}
 func (sn *handlerStateNotifier) SessionStarted(context.Context, string, *livekit.IngressInfo) {}
 func (sn *handlerStateNotifier) SessionEnded(context.Context, string)                         {}
 
@@ -100,6 +111,10 @@ func NewNoopStateNotifier() StateNotifier {
 }
 
 func (sn *noopStateNotifier) UpdateIngressState(_ context.Context, _ string, _ *livekit.IngressInfo) error {
+	return nil
+}
+
+func (sn *noopStateNotifier) IngressCreated(context.Context, string, *livekit.IngressInfo) error {
 	return nil
 }
 

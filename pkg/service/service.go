@@ -382,7 +382,15 @@ func (s *Service) handleRequest(ctx context.Context, req requestParams) (p *para
 		}
 
 		// Create the ingress if it came through the request (URL Pull)
+		var created bool
 		if rp.inputType == livekit.IngressInput_URL_INPUT && err == nil {
+			s.confLock.Lock()
+			created = s.conf.CreatePersistsState
+			s.confLock.Unlock()
+			if created {
+				rp.info.State.UpdatedAt = time.Now().UnixNano()
+			}
+
 			_, err = s.psrpcClient.CreateIngress(ctx, rp.info)
 			if err != nil {
 				logger.Warnw("failed creating ingress", err, "ingressID", rp.info.GetIngressId(), "resourceID", rp.info.GetState().GetResourceId())
@@ -395,8 +403,13 @@ func (s *Service) handleRequest(ctx context.Context, req requestParams) (p *para
 			}
 		}
 
-		// Send update for URL ingress as well to make sure the state gets updated even if CreateIngress fails because the ingress already exists
-		s.sendUpdate(ctx, rp.projectID, rp.info, err)
+		if created {
+			if nerr := s.stateNotifier.IngressCreated(ctx, rp.projectID, rp.info); nerr != nil {
+				logger.Errorw("failed to announce created ingress", nerr)
+			}
+		} else {
+			s.sendUpdate(ctx, rp.projectID, rp.info, err)
+		}
 
 		if rp.info != nil {
 			logger.Infow("received ingress info", "ingressID", rp.info.IngressId, "streamKey", rp.info.StreamKey, "resourceID", rp.info.State.ResourceId, "ingressInfo", params.CopyRedactedIngressInfo(rp.info))

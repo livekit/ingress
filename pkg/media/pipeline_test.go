@@ -866,6 +866,10 @@ func (n stalledNotifier) UpdateIngressState(context.Context, string, *livekit.In
 	return nil
 }
 
+func (n stalledNotifier) IngressCreated(context.Context, string, *livekit.IngressInfo) error {
+	return nil
+}
+
 func (n stalledNotifier) SessionStarted(context.Context, string, *livekit.IngressInfo) {}
 
 func (n stalledNotifier) SessionEnded(context.Context, string) {}
