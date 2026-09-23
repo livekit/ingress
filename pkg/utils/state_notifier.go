@@ -18,23 +18,25 @@ import (
 	"context"
 
 	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
+	"github.com/livekit/psrpc"
 
 	"github.com/livekit/ingress/pkg/ipc"
 )
 
 type StateNotifier interface {
+	// CreateIngress creates a URL pull ingress with its first state, and
+	// announces the session as that state's update would. An error means the
+	// ingress was not created.
+	CreateIngress(ctx context.Context, projectID string, info *livekit.IngressInfo) error
+
 	UpdateIngressState(ctx context.Context, projectID string, info *livekit.IngressInfo) error
 
-	// IngressCreated announces a session whose first state CreateIngress has
-	// already stored. It does whatever UpdateIngressState does for that state
-	// except send it.
-	IngressCreated(ctx context.Context, projectID string, info *livekit.IngressInfo) error
-
 	// SessionStarted reports that a session is running. It does not mark the
-	// first the notifier hears of one: a session is announced by its first
-	// state update, or IngressCreated, which carries ENDPOINT_BUFFERING and is
-	// sent before this call on every path. What this marks is the point from which the session
+	// first the notifier hears of one: a session is announced by CreateIngress
+	// or its first state update, which carry ENDPOINT_BUFFERING and are sent
+	// before this call on every path. What this marks is the point from which the session
 	// is live, so anything an implementation meters belongs between here and
 	// SessionEnded rather than from whenever an update first arrived.
 	SessionStarted(ctx context.Context, projectID string, info *livekit.IngressInfo)
@@ -57,6 +59,18 @@ func NewServiceStateNotifier(psrpcClient rpc.IOInfoClient) StateNotifier {
 	}
 }
 
+func (sn *serviceStateNotifier) CreateIngress(ctx context.Context, projectID string, info *livekit.IngressInfo) error {
+	if _, err := sn.psrpcClient.CreateIngress(ctx, info); err != nil {
+		return err
+	}
+
+	// The ingress exists, so a failed update does not fail the create.
+	if err := sn.UpdateIngressState(ctx, projectID, info); err != nil {
+		logger.Errorw("failed to send update", err)
+	}
+	return nil
+}
+
 func (sn *serviceStateNotifier) UpdateIngressState(ctx context.Context, _ string, info *livekit.IngressInfo) error {
 	req := &rpc.UpdateIngressStateRequest{
 		IngressId: info.IngressId,
@@ -70,9 +84,6 @@ func (sn *serviceStateNotifier) UpdateIngressState(ctx context.Context, _ string
 
 // These forward every update onward and hold no per-session state of their
 // own, so there is nothing to track.
-func (sn *serviceStateNotifier) IngressCreated(context.Context, string, *livekit.IngressInfo) error {
-	return nil
-}
 func (sn *serviceStateNotifier) SessionStarted(context.Context, string, *livekit.IngressInfo) {}
 func (sn *serviceStateNotifier) SessionEnded(context.Context, string)                         {}
 
@@ -86,6 +97,11 @@ func NewHandlerStateNotifier(ipcClient ipc.IngressServiceClient) StateNotifier {
 	}
 }
 
+// Handlers are started for an ingress that already exists.
+func (sn *handlerStateNotifier) CreateIngress(context.Context, string, *livekit.IngressInfo) error {
+	return psrpc.NewErrorf(psrpc.Unimplemented, "handlers do not create ingresses")
+}
+
 func (sn *handlerStateNotifier) UpdateIngressState(ctx context.Context, projectID string, info *livekit.IngressInfo) error {
 	req := &ipc.UpdateIngressStateRequest{
 		ProjectId: projectID,
@@ -97,9 +113,6 @@ func (sn *handlerStateNotifier) UpdateIngressState(ctx context.Context, projectI
 	return err
 }
 
-func (sn *handlerStateNotifier) IngressCreated(context.Context, string, *livekit.IngressInfo) error {
-	return nil
-}
 func (sn *handlerStateNotifier) SessionStarted(context.Context, string, *livekit.IngressInfo) {}
 func (sn *handlerStateNotifier) SessionEnded(context.Context, string)                         {}
 
@@ -110,11 +123,11 @@ func NewNoopStateNotifier() StateNotifier {
 	return &noopStateNotifier{}
 }
 
-func (sn *noopStateNotifier) UpdateIngressState(_ context.Context, _ string, _ *livekit.IngressInfo) error {
+func (sn *noopStateNotifier) CreateIngress(_ context.Context, _ string, _ *livekit.IngressInfo) error {
 	return nil
 }
 
-func (sn *noopStateNotifier) IngressCreated(context.Context, string, *livekit.IngressInfo) error {
+func (sn *noopStateNotifier) UpdateIngressState(_ context.Context, _ string, _ *livekit.IngressInfo) error {
 	return nil
 }
 

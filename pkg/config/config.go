@@ -64,9 +64,6 @@ type ServiceConfig struct {
 	Development      bool            `yaml:"development"`
 	PSRPCSkipClaim   bool            `yaml:"psrpc_skip_claim,omitempty"` // Lets psrpc servers skip the claim handshake on queue rpcs
 	PSRPC            rpc.PSRPCConfig `yaml:"psrpc,omitempty"`
-	// Set when the IOInfo service stores the state CreateIngress carries, so a URL pull
-	// session needs no UpdateIngressState after its create.
-	CreatePersistsState bool `yaml:"create_persists_state,omitempty"`
 	// Allow URL pull ingresses to pull from udp:// urls. Disabled by default, and should only be
 	// enabled on deployments where both the API callers and the network the handlers run on are trusted.
 	// Unlike the http and srt sources, udpsrc doesn't connect out to the url host: it binds a local

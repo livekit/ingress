@@ -382,16 +382,9 @@ func (s *Service) handleRequest(ctx context.Context, req requestParams) (p *para
 		}
 
 		// Create the ingress if it came through the request (URL Pull)
-		var created bool
 		if rp.inputType == livekit.IngressInput_URL_INPUT && err == nil {
-			s.confLock.Lock()
-			created = s.conf.CreatePersistsState
-			s.confLock.Unlock()
-			if created {
-				rp.info.State.UpdatedAt = time.Now().UnixNano()
-			}
-
-			_, err = s.psrpcClient.CreateIngress(ctx, rp.info)
+			rp.info.State.UpdatedAt = time.Now().UnixNano()
+			err = s.stateNotifier.CreateIngress(ctx, rp.projectID, rp.info)
 			if err != nil {
 				logger.Warnw("failed creating ingress", err, "ingressID", rp.info.GetIngressId(), "resourceID", rp.info.GetState().GetResourceId())
 				// TODO remove this workaround once updated IOInfoService that handles CreateIngress is deployed widely
@@ -400,12 +393,6 @@ func (s *Service) handleRequest(ctx context.Context, req requestParams) (p *para
 					err = nil
 				}
 				return
-			}
-		}
-
-		if created {
-			if nerr := s.stateNotifier.IngressCreated(ctx, rp.projectID, rp.info); nerr != nil {
-				logger.Errorw("failed to announce created ingress", nerr)
 			}
 		} else {
 			s.sendUpdate(ctx, rp.projectID, rp.info, err)
