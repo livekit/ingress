@@ -387,11 +387,6 @@ func (s *Service) handleRequest(ctx context.Context, req requestParams) (p *para
 			err = s.stateNotifier.CreateIngress(ctx, rp.projectID, rp.info)
 			if err != nil {
 				logger.Warnw("failed creating ingress", err, "ingressID", rp.info.GetIngressId(), "resourceID", rp.info.GetState().GetResourceId())
-				// TODO remove this workaround once updated IOInfoService that handles CreateIngress is deployed widely
-				var psrpcErr psrpc.Error
-				if errors.As(err, &psrpcErr) && psrpcErr.Code() == psrpc.Unavailable {
-					err = nil
-				}
 				return
 			}
 		} else {
