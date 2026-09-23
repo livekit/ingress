@@ -381,16 +381,9 @@ func (s *Service) handleRequest(ctx context.Context, req requestParams) (p *para
 			rp.info = p.IngressInfo
 		}
 
-		// Create the ingress if it came through the request (URL Pull)
-		if rp.inputType == livekit.IngressInput_URL_INPUT && err == nil {
-			rp.info.State.UpdatedAt = time.Now().UnixNano()
-			err = s.stateNotifier.CreateIngress(ctx, rp.projectID, rp.info)
-			if err != nil {
-				logger.Warnw("failed creating ingress", err, "ingressID", rp.info.GetIngressId(), "resourceID", rp.info.GetState().GetResourceId())
-				return
-			}
-		} else {
-			s.sendUpdate(ctx, rp.projectID, rp.info, err)
+		if cerr := s.sendUpdate(ctx, rp.projectID, rp.inputType, rp.info, err); cerr != nil {
+			err = cerr
+			return
 		}
 
 		if rp.info != nil {
@@ -494,10 +487,12 @@ func (s *Service) Run() error {
 	return nil
 }
 
-func (s *Service) sendUpdate(ctx context.Context, projectID string, info *livekit.IngressInfo, err error) {
+// sendUpdate reports a session's first state. A URL pull ingress is created
+// with it, and only a failed create is returned.
+func (s *Service) sendUpdate(ctx context.Context, projectID string, inputType livekit.IngressInput, info *livekit.IngressInfo, err error) error {
 	var state *livekit.IngressState
 	if info == nil {
-		return
+		return nil
 	}
 	state = info.State
 	if state == nil {
@@ -512,10 +507,18 @@ func (s *Service) sendUpdate(ctx context.Context, projectID string, info *liveki
 
 	state.UpdatedAt = time.Now().UnixNano()
 
-	err = s.stateNotifier.UpdateIngressState(ctx, projectID, info)
-	if err != nil {
+	if inputType == livekit.IngressInput_URL_INPUT && err == nil {
+		if err := s.stateNotifier.CreateIngress(ctx, projectID, info); err != nil {
+			logger.Warnw("failed creating ingress", err, "ingressID", info.IngressId, "resourceID", state.ResourceId)
+			return err
+		}
+		return nil
+	}
+
+	if err := s.stateNotifier.UpdateIngressState(ctx, projectID, info); err != nil {
 		logger.Errorw("failed to send update", err)
 	}
+	return nil
 }
 
 func (s *Service) GetAvailableCPU() float64 {
