@@ -508,14 +508,15 @@ func (s *Service) sendUpdate(ctx context.Context, projectID string, inputType li
 	state.UpdatedAt = time.Now().UnixNano()
 
 	if inputType == livekit.IngressInput_URL_INPUT && err == nil {
-		if err := s.stateNotifier.CreateIngress(ctx, projectID, info); err != nil {
+		if _, err := s.psrpcClient.CreateIngress(ctx, info); err != nil {
 			logger.Warnw("failed creating ingress", err, "ingressID", info.IngressId, "resourceID", state.ResourceId)
 			return err
 		}
-		return nil
-	}
-
-	if err := s.stateNotifier.UpdateIngressState(ctx, projectID, info); err != nil {
+		// The ingress exists, so failing to announce it does not fail the start.
+		if err := s.stateNotifier.IngressCreated(ctx, projectID, info); err != nil {
+			logger.Errorw("failed to announce created ingress", err, "ingressID", info.IngressId)
+		}
+	} else if err := s.stateNotifier.UpdateIngressState(ctx, projectID, info); err != nil {
 		logger.Errorw("failed to send update", err)
 	}
 	return nil
