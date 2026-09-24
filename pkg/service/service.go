@@ -516,10 +516,7 @@ func (s *Service) sendUpdate(ctx context.Context, projectID string, inputType li
 		if err := s.stateNotifier.IngressCreated(ctx, projectID, info); err != nil {
 			logger.Errorw("failed to announce created ingress", err, "ingressID", info.IngressId)
 		}
-		return nil
-	}
-
-	if err := s.stateNotifier.UpdateIngressState(ctx, projectID, info); err != nil {
+	} else if err := s.stateNotifier.UpdateIngressState(ctx, projectID, info); err != nil {
 		logger.Errorw("failed to send update", err)
 	}
 	return nil
