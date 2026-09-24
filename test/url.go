@@ -27,9 +27,9 @@ const hlsPullURL = "http://devimages.apple.com/iphone/samples/bipbop/gear4/prog_
 // hlsPull points the ingress at a public HLS source that outlasts any case.
 type hlsPull struct{}
 
-func (*hlsPull) pulls() bool                            { return true }
-func (*hlsPull) url(*testing.T, *Runner, string) string { return hlsPullURL }
-func (*hlsPull) publish(*testing.T, string)             {}
+func (*hlsPull) pulls() bool                              { return true }
+func (*hlsPull) url(*testing.T, *Runner, string) string   { return hlsPullURL }
+func (*hlsPull) publish(*testing.T, *livekit.IngressInfo) {}
 
 func (r *Runner) testURL(t *testing.T) {
 	if !r.runURL() {

@@ -31,6 +31,7 @@ import (
 	"github.com/go-gst/go-gst/gst"
 	"github.com/stretchr/testify/require"
 
+	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 )
 
@@ -113,4 +114,4 @@ func (s *truncatedHLS) url(t *testing.T, _ *Runner, _ string) string {
 	return url
 }
 
-func (*truncatedHLS) publish(*testing.T, string) {}
+func (*truncatedHLS) publish(*testing.T, *livekit.IngressInfo) {}

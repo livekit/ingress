@@ -24,6 +24,7 @@ on:
       - .github/workflows/test-integration.yaml
       - .golangci.yaml
       - .go-version
+      - .gitmodules
       - .gst-version
       - build/test/**
       - cmd/**
@@ -44,12 +45,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # WHIP is missing on purpose: its publisher is the livekit-whip-bot
-        # submodule, which has to be checked out and built into the image first.
-        suite: [rtmp, url]
+        suite: [rtmp, url, whip]
 
     steps:
+      # The WHIP publisher lives in the livekit-whip-bot submodule, which the
+      # image builds. Without it every suite fails at build time, not just whip.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
 
       - name: Read the pinned GStreamer version
         id: gst-version

@@ -18,43 +18,67 @@ package test
 
 import (
 	"fmt"
+	"os/exec"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
 	"github.com/livekit/protocol/livekit"
-	"github.com/livekit/protocol/logger"
 )
 
-const whipClientPath = "livekit-whip-bot/cmd/whip-client/whip-client"
+// whipClientBinary is the publisher from the livekit-whip-bot submodule. It is
+// looked up on PATH rather than at a path relative to the working directory,
+// which is /workspace under the prebuilt test binary and /workspace/test under
+// go test.
+const whipClientBinary = "whip-client"
 
-// RunWHIPTest publishes over WHIP with transcoding enabled and stops the
-// ingress once it has been streaming for a while, which is a stop we asked for
-// and must be reported as a clean end.
-func RunWHIPTest(t *testing.T, r *Runner) {
+// whipPublisher publishes a synthetic camera and microphone over WHIP for the
+// life of the case.
+type whipPublisher struct{}
+
+func (*whipPublisher) pulls() bool { return false }
+
+// url is the endpoint prefix. The stream key is appended per publisher rather
+// than baked in here, since it is also what the ingress is resolved by.
+func (*whipPublisher) url(_ *testing.T, r *Runner, _ string) string {
+	return fmt.Sprintf("http://localhost:%d/w", r.WHIPPort)
+}
+
+func (*whipPublisher) publish(t *testing.T, info *livekit.IngressInfo) {
+	bin, err := exec.LookPath(whipClientBinary)
+	require.NoError(t, err, "build it with: go build -o <dir on PATH>/%s "+
+		"./cmd/whip-client, from test/livekit-whip-bot", whipClientBinary)
+
+	publish(t, fmt.Sprintf("%s -url %s/%s", bin, info.Url, info.StreamKey))
+}
+
+func (r *Runner) testWHIP(t *testing.T) {
+	if !r.runWHIP() {
+		return
+	}
+
 	transcode := true
 
-	info := r.ingressInfo(livekit.IngressInput_WHIP_INPUT, "ingress-test-whip")
-	info.Url = fmt.Sprintf("http://localhost:%d/w", r.WHIPPort)
-	info.EnableTranscoding = &transcode
-	withVideo(info,
-		videoLayer(livekit.VideoQuality_HIGH, 1280, 720, 3000000),
-		videoLayer(livekit.VideoQuality_LOW, 640, 360, 1000000),
-	)
-
-	r.registerIngress(t, info)
-
-	whipURL := fmt.Sprintf("%s/%s", info.Url, info.StreamKey)
-	logger.Infow("whip url", "url", whipURL)
-
-	publish(t, fmt.Sprintf("%s -url %s", whipClientPath, whipURL))
-
-	r.checkUpdate(t, info.IngressId, livekit.IngressState_ENDPOINT_PUBLISHING)
-	time.Sleep(streamDuration)
-
-	state := r.stopIngress(t, info.IngressId)
-	require.Equal(t, livekit.IngressState_ENDPOINT_INACTIVE, state.Status)
-
-	r.awaitIdle(t)
+	t.Run("WHIP", func(t *testing.T) {
+		for _, tc := range []*testCase{
+			{
+				name:      "DeletedWhilePublishing",
+				inputType: livekit.IngressInput_WHIP_INPUT,
+				source:    &whipPublisher{},
+				video: videoOptions(
+					videoLayer(livekit.VideoQuality_HIGH, 1280, 720, 3000000),
+					videoLayer(livekit.VideoQuality_LOW, 640, 360, 1000000),
+				),
+				enableTranscoding: &transcode,
+				reusable:          true,
+				endBy:             endByDelete,
+				runFor:            streamDuration,
+				// Unlike RTMP, the WHIP read is not bound to the context the
+				// stop cancels, so the session ends clean.
+				expect: livekit.IngressState_ENDPOINT_INACTIVE,
+			},
+		} {
+			r.run(t, tc)
+		}
+	})
 }

@@ -432,10 +432,6 @@ func (r *Runner) ingressInfo(inputType livekit.IngressInput, name string) *livek
 	}
 }
 
-func withVideo(info *livekit.IngressInfo, layers ...*livekit.VideoLayer) {
-	info.Video = videoOptions(layers...)
-}
-
 func videoOptions(layers ...*livekit.VideoLayer) *livekit.IngressVideoOptions {
 	return &livekit.IngressVideoOptions{
 		Name:   "video",
@@ -480,8 +476,10 @@ type source interface {
 	// serves from, or the endpoint a push source publishes to.
 	url(t *testing.T, r *Runner, streamKey string) string
 	// publish brings a push source up once the ingress is resolvable, and does
-	// nothing for a pull source.
-	publish(t *testing.T, url string)
+	// nothing for a pull source. It takes the whole info because what a
+	// publisher connects to differs by input type: an RTMP url already carries
+	// the stream key, while a WHIP publisher appends it to the endpoint.
+	publish(t *testing.T, info *livekit.IngressInfo)
 }
 
 type testCase struct {
@@ -492,6 +490,9 @@ type testCase struct {
 	// reusable decides whether a source that ends is reported as INACTIVE or
 	// COMPLETE, so a case that asserts one of those has to set it.
 	reusable bool
+	// enableTranscoding is a pointer because unset and false are different
+	// requests, and only WHIP has a choice to make.
+	enableTranscoding *bool
 
 	// A source short enough to reach EOS before ICE completes never reports
 	// publishing, so a case on one waits for its terminal status directly.
@@ -512,6 +513,7 @@ func (r *Runner) run(t *testing.T, tc *testCase) {
 		info := r.ingressInfo(tc.inputType, caseIdent(tc.name))
 		info.Reusable = tc.reusable
 		info.Url = tc.source.url(t, r, info.StreamKey)
+		info.EnableTranscoding = tc.enableTranscoding
 		if tc.video != nil {
 			info.Video = tc.video
 		}
@@ -520,7 +522,7 @@ func (r *Runner) run(t *testing.T, tc *testCase) {
 			r.startIngress(t, info)
 		} else {
 			r.registerIngress(t, info)
-			tc.source.publish(t, info.Url)
+			tc.source.publish(t, info)
 		}
 
 		if !tc.skipPublishing {
@@ -663,6 +665,8 @@ func (r *Runner) awaitIdle(t *testing.T) {
 // reconnect against the next case's ingress.
 func publish(t *testing.T, command string) {
 	t.Helper()
+
+	logger.Infow("starting publisher", "command", command)
 
 	args := strings.Fields(command)
 	cmd := exec.Command(args[0], args[1:]...)

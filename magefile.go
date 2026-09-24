@@ -215,6 +215,11 @@ func Retest(configFile string) error {
 		return err
 	}
 
+	binDir, err := goBinDir()
+	if err != nil {
+		return err
+	}
+
 	cmd := exec.Command("go", "test", "-v", "-count=1", "--tags=integration", "./test/...")
 
 	brewPrefix, err := getBrewPrefix()
@@ -237,7 +242,10 @@ func Retest(configFile string) error {
 		return err
 	}
 
-	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=3", fmt.Sprintf("INGRESS_CONFIG_BODY=%s", string(confStr)))
+	// The suite looks whip-client up on PATH, and WhipClient installed it here.
+	cmd.Env = append(os.Environ(), sb.String(), "GST_DEBUG=3",
+		fmt.Sprintf("PATH=%s%c%s", binDir, os.PathListSeparator, os.Getenv("PATH")),
+		fmt.Sprintf("INGRESS_CONFIG_BODY=%s", string(confStr)))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
@@ -247,8 +255,34 @@ func Publish(ingressId string) error {
 	return run(fmt.Sprintf("gst-launch-1.0 -v flvmux name=mux ! rtmp2sink location=rtmp://localhost:1935/live/%s  audiotestsrc freq=200 ! faac ! mux.  videotestsrc pattern=ball is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 ! mux.", ingressId))
 }
 
+// WhipClient installs the WHIP publisher into GOPATH/bin, which is where Retest
+// puts on PATH for the suite to find it. The image installs it on PATH too.
 func WhipClient() error {
-	return run("go build -C ./test/livekit-whip-bot/cmd/whip-client/ ./...")
+	bin, err := goBinDir()
+	if err != nil {
+		return err
+	}
+
+	return run(fmt.Sprintf("go build -C ./test/livekit-whip-bot -o %s/whip-client ./cmd/whip-client", bin))
+}
+
+// goBinDir is where go build installs a tool, GOBIN when it is set and
+// GOPATH/bin otherwise.
+func goBinDir() (string, error) {
+	out, err := mageutil.Out(context.Background(), "go env GOBIN GOPATH")
+	if err != nil {
+		return "", err
+	}
+
+	lines := strings.Fields(string(out))
+	if len(lines) > 0 && lines[0] != "" {
+		return lines[0], nil
+	}
+	if len(lines) < 2 {
+		return "", fmt.Errorf("neither GOBIN nor GOPATH is set")
+	}
+
+	return filepath.Join(lines[1], "bin"), nil
 }
 
 // helpers

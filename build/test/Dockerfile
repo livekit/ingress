@@ -72,6 +72,17 @@ RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
     go build -o /usr/local/bin/ingress ./cmd/server && \
     go test -c -tags integration -o test.test ./test/
 
+# The WHIP publisher. It is its own module, vendored as the livekit-whip-bot
+# submodule, and it encodes with libx264 and libopus through cgo, both of which
+# the GStreamer image already carries. Installing it on PATH is what lets the
+# suite find it from either working directory.
+RUN --mount=type=cache,target=/go/pkg/mod,sharing=locked \
+    --mount=type=cache,target=/go/build-cache \
+    test -f test/livekit-whip-bot/go.mod || \
+        { echo "test/livekit-whip-bot is empty: git submodule update --init" >&2; exit 1; } && \
+    cd test/livekit-whip-bot && \
+    go build -o /usr/local/bin/whip-client ./cmd/whip-client
+
 FROM golangci/golangci-lint:${LINT_VERSION} AS golangci
 
 FROM builder AS lint
