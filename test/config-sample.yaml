@@ -5,4 +5,5 @@ redis:
 api_key: your-api-key
 api_secret: your-api-secret
 ws_url: wss://your-livekit-url.com
+room_name: ingress-test
 enable_stream_latency_reduction: true

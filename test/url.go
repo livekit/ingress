@@ -17,116 +17,51 @@
 package test
 
 import (
-	"context"
-	"os/exec"
 	"testing"
-	"time"
-
-	"github.com/stretchr/testify/require"
 
 	"github.com/livekit/protocol/livekit"
-	"github.com/livekit/protocol/logger"
-	"github.com/livekit/protocol/rpc"
-	"github.com/livekit/psrpc"
-
-	"github.com/livekit/ingress/pkg/params"
-	"github.com/livekit/ingress/pkg/service"
-	"github.com/livekit/ingress/pkg/utils"
 )
 
-func RunURLTest(t *testing.T, conf *TestConfig, bus psrpc.MessageBus, commandPsrpcClient rpc.IngressHandlerClient, psrpcClient rpc.IOInfoClient, sn utils.StateNotifier, newCmd func(ctx context.Context, p *params.Params) (*exec.Cmd, error)) {
-	svc, err := service.NewService(conf.Config, psrpcClient, sn, bus, nil, nil, newCmd, "")
-	require.NoError(t, err)
-	svc.StartDebugHandlers()
+const hlsPullURL = "http://devimages.apple.com/iphone/samples/bipbop/gear4/prog_index.m3u8"
 
-	go func() {
-		err := svc.Run()
-		require.NoError(t, err)
-	}()
+// hlsPull points the ingress at a public HLS source that outlasts any case.
+type hlsPull struct{}
 
-	t.Cleanup(func() {
-		svc.Stop(true)
-	})
+func (*hlsPull) pulls() bool                            { return true }
+func (*hlsPull) url(*testing.T, *Runner, string) string { return hlsPullURL }
+func (*hlsPull) publish(*testing.T, string)             {}
 
-	_, err = rpc.NewIngressInternalServer(svc, bus)
-	require.NoError(t, err)
-
-	internalPsrpcClient, err := rpc.NewIngressInternalClient(bus, psrpc.WithClientTimeout(5*time.Second))
-	require.NoError(t, err)
-
-	updates := make(chan *rpc.UpdateIngressStateRequest, 10)
-	ios := &ioServer{}
-	ios.updateIngressState = func(req *rpc.UpdateIngressStateRequest) error {
-		updates <- req
-		return nil
+func (r *Runner) testURL(t *testing.T) {
+	if !r.runURL() {
+		return
 	}
 
-	info := &livekit.IngressInfo{
-		IngressId:           "ingress_id",
-		InputType:           livekit.IngressInput_URL_INPUT,
-		Name:                "ingress-test",
-		RoomName:            conf.RoomName,
-		ParticipantIdentity: "ingress-test",
-		ParticipantName:     "ingress-test",
-		Reusable:            true,
-		StreamKey:           "ingress-test",
-		Url:                 "http://devimages.apple.com/iphone/samples/bipbop/gear4/prog_index.m3u8",
-		Audio: &livekit.IngressAudioOptions{
-			Name:   "audio",
-			Source: 0,
-			EncodingOptions: &livekit.IngressAudioOptions_Options{
-				Options: &livekit.IngressAudioEncodingOptions{
-					AudioCodec: livekit.AudioCodec_OPUS,
-					Bitrate:    64000,
-					DisableDtx: false,
-					Channels:   2,
-				},
+	t.Run("URL", func(t *testing.T) {
+		for _, tc := range []*testCase{
+			{
+				name:      "HLS/DeletedWhilePublishing",
+				inputType: livekit.IngressInput_URL_INPUT,
+				source:    &hlsPull{},
+				video:     videoOptions(videoLayer(livekit.VideoQuality_HIGH, 1280, 720, 3000000)),
+				reusable:  true,
+				endBy:     endByDelete,
+				runFor:    streamDuration,
+				expect:    livekit.IngressState_ENDPOINT_INACTIVE,
 			},
-		},
-		Video: &livekit.IngressVideoOptions{
-			Name:   "video",
-			Source: 0,
-			EncodingOptions: &livekit.IngressVideoOptions_Options{
-				Options: &livekit.IngressVideoEncodingOptions{
-					VideoCodec: livekit.VideoCodec_H264_BASELINE,
-					FrameRate:  20,
-					Layers: []*livekit.VideoLayer{
-						{
-							Quality: livekit.VideoQuality_HIGH,
-							Width:   1280,
-							Height:  720,
-							Bitrate: 3000000,
-						},
-					},
-				},
+			{
+				name:      "HLS/OriginFailsMidStream",
+				inputType: livekit.IngressInput_URL_INPUT,
+				source:    &truncatedHLS{segments: truncatedFixtureSegments, good: truncatedGoodSegments},
+				// A source that ran to its end is reported as COMPLETE, which
+				// is the status the error has to be distinguishable from.
+				reusable:       false,
+				skipPublishing: true,
+				endBy:          endBySource,
+				expect:         livekit.IngressState_ENDPOINT_ERROR,
+				errorLike:      "source ended after",
 			},
-		},
-	}
-	ios.getIngressInfo = func(_ *rpc.GetIngressInfoRequest) (*rpc.GetIngressInfoResponse, error) {
-		return nil, psrpc.NewErrorf(psrpc.NotFound, "not found")
-	}
-
-	ioPsrpc, err := rpc.NewIOInfoServer(ios, bus)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		ioPsrpc.Kill()
+		} {
+			r.run(t, tc)
+		}
 	})
-
-	time.Sleep(time.Second)
-
-	logger.Infow("http pull url", "url", info.Url)
-
-	info2, err := internalPsrpcClient.StartIngress(context.Background(), &rpc.StartIngressRequest{Info: info})
-	require.NoError(t, err)
-	require.Equal(t, info2.State.Status, livekit.IngressState_ENDPOINT_BUFFERING)
-
-	time.Sleep(time.Second * 45)
-
-	_, err = commandPsrpcClient.DeleteIngress(context.Background(), info.IngressId, &livekit.DeleteIngressRequest{IngressId: info.IngressId})
-	require.NoError(t, err)
-
-	time.Sleep(time.Second * 2)
-
-	final := <-updates
-	require.NotEqual(t, final.State.Status, livekit.IngressState_ENDPOINT_ERROR)
 }
