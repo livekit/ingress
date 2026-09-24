@@ -77,38 +77,83 @@ type Runner struct {
 	svc      *service.Service
 	internal rpc.IngressInternalClient
 	handler  rpc.IngressHandlerClient
-	updates  *latestStates
+	updates  *stateLog
 	infos    *ingressInfos
 }
 
 // TestConfig is the name the cloud suite embeds in its own config struct.
 type TestConfig = Runner
 
-// latestStates is the most recent state reported for each ingress. Updates
-// arrive on a psrpc handler goroutine, so holding a snapshot per ingress rather
-// than a channel per case keeps a case that has already returned from blocking
-// that goroutine.
-type latestStates struct {
+// stateLog records every state an ingress reports, in order.
+//
+// The cases ask what an ingress did, not what it is doing: whether it ever
+// reached publishing, and what it first ended as. Keeping only the newest state
+// answers neither once a session moves on, and a case polling for one can miss
+// a status the session passed through between two reads.
+//
+// Updates arrive on a psrpc handler goroutine, so recording never waits on a
+// case: it appends, wakes whatever is waiting, and returns.
+type stateLog struct {
 	mu     sync.Mutex
-	states map[string]*livekit.IngressState
+	states map[string][]*livekit.IngressState
+	// changed is closed and replaced on every record, so any number of waiters
+	// can block on one channel and all wake together.
+	changed chan struct{}
 }
 
-func newLatestStates() *latestStates {
-	return &latestStates{states: make(map[string]*livekit.IngressState)}
+func newStateLog() *stateLog {
+	return &stateLog{
+		states:  make(map[string][]*livekit.IngressState),
+		changed: make(chan struct{}),
+	}
 }
 
-func (l *latestStates) set(ingressID string, state *livekit.IngressState) {
+func (l *stateLog) record(ingressID string, state *livekit.IngressState) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	l.states[ingressID] = state
+	l.states[ingressID] = append(l.states[ingressID], state)
+
+	close(l.changed)
+	l.changed = make(chan struct{})
 }
 
-func (l *latestStates) get(ingressID string) *livekit.IngressState {
+// scan returns the first recorded state that matches, and a channel that closes
+// once something else is recorded.
+//
+// Both come from one locked section on purpose: taking the channel separately
+// would let a record land in between, and the caller would then wait for a
+// state it has already been told about.
+func (l *stateLog) scan(ingressID string, match func(*livekit.IngressState) bool) (*livekit.IngressState, <-chan struct{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	return l.states[ingressID]
+	for _, state := range l.states[ingressID] {
+		if match(state) {
+			return state, l.changed
+		}
+	}
+
+	return nil, l.changed
+}
+
+// history is what the ingress reported, in order, for a message that says what
+// happened rather than only what did not.
+func (l *stateLog) history(ingressID string) string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	states := l.states[ingressID]
+	if len(states) == 0 {
+		return "nothing"
+	}
+
+	reported := make([]string, 0, len(states))
+	for _, state := range states {
+		reported = append(reported, state.Status.String())
+	}
+
+	return strings.Join(reported, ", ")
 }
 
 // ingressInfos answers the fake IOInfo server. The service resolves an RTMP or
@@ -201,7 +246,7 @@ func (r *Runner) StartServer(
 	require.NoError(t, r.RTCConfig.Validate(r.Development))
 	r.RTCConfig.EnableLoopbackCandidate = true
 
-	r.updates = newLatestStates()
+	r.updates = newStateLog()
 	r.infos = newIngressInfos()
 
 	ios := &ioServer{
@@ -213,7 +258,7 @@ func (r *Runner) StartServer(
 			return &rpc.GetIngressInfoResponse{Info: info, WsUrl: r.WsUrl}, nil
 		},
 		updateIngressState: func(req *rpc.UpdateIngressStateRequest) error {
-			r.updates.set(req.IngressId, req.State)
+			r.updates.record(req.IngressId, req.State)
 			return nil
 		},
 	}
@@ -534,25 +579,46 @@ func (r *Runner) startIngress(t *testing.T, info *livekit.IngressInfo) *livekit.
 func (r *Runner) checkUpdate(t *testing.T, ingressID string, want livekit.IngressState_Status) *livekit.IngressState {
 	t.Helper()
 
-	deadline := time.Now().Add(stateTimeout)
+	return r.await(t, ingressID, want.String(), func(state *livekit.IngressState) bool {
+		return state.Status == want
+	})
+}
 
-	var state *livekit.IngressState
-	for time.Now().Before(deadline) {
-		if state = r.updates.get(ingressID); state != nil {
-			if state.Status == want {
-				return state
-			}
-			if isTerminal(state.Status) {
-				t.Fatalf("ingress %s reached %s while waiting for %s: %s",
-					ingressID, state.Status, want, state.Error)
-			}
+// await waits for the first state an ingress reported that matches.
+//
+// Matching against everything reported rather than the newest state means a
+// status the session only held briefly still counts, so a case cannot fail for
+// missing something that did happen.
+func (r *Runner) await(
+	t *testing.T,
+	ingressID string,
+	want string,
+	match func(*livekit.IngressState) bool,
+) *livekit.IngressState {
+	t.Helper()
+
+	timeout := time.After(stateTimeout)
+
+	for {
+		state, changed := r.updates.scan(ingressID, match)
+		if state != nil {
+			return state
 		}
-		time.Sleep(statePoll)
-	}
 
-	t.Fatalf("ingress %s did not reach %s within %s, last reported %s",
-		ingressID, want, stateTimeout, lastStatus(state))
-	return nil
+		// A session that has ended reports nothing further, so waiting out the
+		// timeout would only make the failure slower and less clear.
+		if ended, _ := r.updates.scan(ingressID, endedState); ended != nil {
+			t.Fatalf("ingress %s ended as %s without reaching %s: %s",
+				ingressID, ended.Status, want, ended.Error)
+		}
+
+		select {
+		case <-changed:
+		case <-timeout:
+			t.Fatalf("ingress %s did not reach %s within %s, reported: %s",
+				ingressID, want, stateTimeout, r.updates.history(ingressID))
+		}
+	}
 }
 
 // awaitTerminal waits for the ingress to stop, whatever the outcome. Cases that
@@ -561,20 +627,7 @@ func (r *Runner) checkUpdate(t *testing.T, ingressID string, want livekit.Ingres
 func (r *Runner) awaitTerminal(t *testing.T, ingressID string) *livekit.IngressState {
 	t.Helper()
 
-	deadline := time.Now().Add(stateTimeout)
-
-	var state *livekit.IngressState
-	for time.Now().Before(deadline) {
-		state = r.updates.get(ingressID)
-		if state != nil && isTerminal(state.Status) {
-			return state
-		}
-		time.Sleep(statePoll)
-	}
-
-	t.Fatalf("ingress %s did not reach a terminal status within %s, last reported %s",
-		ingressID, stateTimeout, lastStatus(state))
-	return nil
+	return r.await(t, ingressID, "a terminal status", endedState)
 }
 
 // stopIngress deletes the ingress and returns the state it ended in. The caller
@@ -636,6 +689,10 @@ func publish(t *testing.T, command string) {
 	})
 }
 
+func endedState(state *livekit.IngressState) bool {
+	return isTerminal(state.Status)
+}
+
 func isTerminal(status livekit.IngressState_Status) bool {
 	switch status {
 	case livekit.IngressState_ENDPOINT_COMPLETE,
@@ -644,11 +701,4 @@ func isTerminal(status livekit.IngressState_Status) bool {
 		return true
 	}
 	return false
-}
-
-func lastStatus(state *livekit.IngressState) string {
-	if state == nil {
-		return "nothing"
-	}
-	return state.Status.String()
 }
