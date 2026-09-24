@@ -268,21 +268,32 @@ func WhipClient() error {
 
 // goBinDir is where go build installs a tool, GOBIN when it is set and
 // GOPATH/bin otherwise.
+//
+// The two are queried separately because `go env A B` prints an empty line for
+// an unset variable, and splitting that on whitespace drops the line rather
+// than the value, so GOPATH arrives where GOBIN was expected.
 func goBinDir() (string, error) {
-	out, err := mageutil.Out(context.Background(), "go env GOBIN GOPATH")
+	ctx := context.Background()
+
+	gobin, err := mageutil.Out(ctx, "go env GOBIN")
+	if err != nil {
+		return "", err
+	}
+	if dir := strings.TrimSpace(string(gobin)); dir != "" {
+		return dir, nil
+	}
+
+	gopath, err := mageutil.Out(ctx, "go env GOPATH")
 	if err != nil {
 		return "", err
 	}
 
-	lines := strings.Fields(string(out))
-	if len(lines) > 0 && lines[0] != "" {
-		return lines[0], nil
-	}
-	if len(lines) < 2 {
+	dir := strings.TrimSpace(string(gopath))
+	if dir == "" {
 		return "", fmt.Errorf("neither GOBIN nor GOPATH is set")
 	}
 
-	return filepath.Join(lines[1], "bin"), nil
+	return filepath.Join(dir, "bin"), nil
 }
 
 // helpers
