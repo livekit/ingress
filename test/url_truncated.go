@@ -115,3 +115,7 @@ func (s *truncatedHLS) url(t *testing.T, _ *Runner, _ string) string {
 }
 
 func (*truncatedHLS) publish(*testing.T, *livekit.IngressInfo) {}
+
+// endStream is nothing to do: the origin failing part way through is what ends
+// this source.
+func (*truncatedHLS) endStream(*testing.T) {}

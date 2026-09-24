@@ -61,6 +61,10 @@ const (
 
 	// How long a publisher streams before the case stops the ingress.
 	streamDuration = 45 * time.Second
+
+	// How long a publisher streams before ending its own stream. Nothing about
+	// a clean end needs a long session.
+	sourceEndDuration = 15 * time.Second
 )
 
 // Runner holds the suite configuration and the state every case shares: one
@@ -480,6 +484,10 @@ type source interface {
 	// publisher connects to differs by input type: an RTMP url already carries
 	// the stream key, while a WHIP publisher appends it to the endpoint.
 	publish(t *testing.T, info *livekit.IngressInfo)
+	// endStream has the source finish its own stream, the way an encoder that
+	// is stopped at the keyboard does. A pull source has nothing to end: what
+	// it serves decides that.
+	endStream(t *testing.T)
 }
 
 type testCase struct {
@@ -529,9 +537,12 @@ func (r *Runner) run(t *testing.T, tc *testCase) {
 			r.checkUpdate(t, info.IngressId, livekit.IngressState_ENDPOINT_PUBLISHING)
 		}
 
+		time.Sleep(tc.runFor)
+
 		if tc.endBy == endByDelete {
-			time.Sleep(tc.runFor)
 			r.stopIngress(t, info.IngressId)
+		} else {
+			tc.source.endStream(t)
 		}
 
 		state := r.awaitTerminal(t, info.IngressId)
@@ -661,9 +672,15 @@ func (r *Runner) awaitIdle(t *testing.T) {
 	t.Fatalf("service still holds %d session(s) after %s", len(r.svc.ListIngress()), idleTimeout)
 }
 
+// publisher is a running publisher process.
+type publisher struct {
+	cmd    *exec.Cmd
+	exited chan struct{}
+}
+
 // publish runs a publisher for the rest of the case. One left running would
 // reconnect against the next case's ingress.
-func publish(t *testing.T, command string) {
+func publish(t *testing.T, command string) *publisher {
 	t.Helper()
 
 	logger.Infow("starting publisher", "command", command)
@@ -672,25 +689,59 @@ func publish(t *testing.T, command string) {
 	cmd := exec.Command(args[0], args[1:]...)
 	require.NoError(t, cmd.Start())
 
-	t.Cleanup(func() {
-		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-			return
-		}
+	p := &publisher{cmd: cmd, exited: make(chan struct{})}
+	go func() {
+		_ = cmd.Wait()
+		close(p.exited)
+	}()
 
-		exited := make(chan struct{})
-		go func() {
-			_ = cmd.Wait()
-			close(exited)
-		}()
+	t.Cleanup(func() { p.signal(syscall.SIGTERM) })
 
-		// SIGKILL cannot be ignored, so the second wait always returns.
+	return p
+}
+
+// endStream interrupts the publisher and waits for it to exit.
+//
+// A publisher that does not exit in time is killed, and the case is left
+// reporting whatever that produced, so this fails instead.
+func (p *publisher) endStream(t *testing.T) {
+	t.Helper()
+
+	require.True(t, p.signal(syscall.SIGINT),
+		"the publisher did not finish its stream within %s, so what reaches the "+
+			"ingress is a dropped connection rather than a clean end", publisherStopTimeout)
+}
+
+// signal sends sig and reports whether the process exited on it. A process that
+// has already exited is left alone.
+func (p *publisher) signal(sig syscall.Signal) bool {
+	select {
+	case <-p.exited:
+		return true
+	default:
+	}
+
+	// An error here is almost always the process having exited between the
+	// check above and this call, in which case Wait is about to close the
+	// channel and the stop succeeded.
+	if err := p.cmd.Process.Signal(sig); err != nil {
 		select {
-		case <-exited:
+		case <-p.exited:
+			return true
 		case <-time.After(publisherStopTimeout):
-			_ = cmd.Process.Kill()
-			<-exited
+			return false
 		}
-	})
+	}
+
+	// SIGKILL cannot be ignored, so the second wait always returns.
+	select {
+	case <-p.exited:
+		return true
+	case <-time.After(publisherStopTimeout):
+		_ = p.cmd.Process.Kill()
+		<-p.exited
+		return false
+	}
 }
 
 func endedState(state *livekit.IngressState) bool {
