@@ -16,6 +16,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"testing"
 	"time"
@@ -31,23 +32,35 @@ import (
 	"github.com/livekit/psrpc"
 )
 
-// recordingNotifier cancels the request context from CreateIngress, the last
+type fakeIOInfoClient struct {
+	rpc.IOInfoClient
+	createErr error
+	creates   int
+}
+
+func (c *fakeIOInfoClient) CreateIngress(context.Context, *livekit.IngressInfo, ...psrpc.RequestOption) (*rpc.CreateIngressResponse, error) {
+	c.creates++
+	return &rpc.CreateIngressResponse{}, c.createErr
+}
+
+// recordingNotifier cancels the request context from IngressCreated, the last
 // step of handleRequest on the URL pull path. That reproduces the real window,
 // a caller that gives up while the pod is still working, without depending on
 // timing.
 type recordingNotifier struct {
 	onUpdate        func()
+	createdErr      error
 	created         []*livekit.IngressInfo
 	updates         int
 	sessionEndedFor []string
 }
 
-func (n *recordingNotifier) CreateIngress(_ context.Context, _ string, info *livekit.IngressInfo) error {
+func (n *recordingNotifier) IngressCreated(_ context.Context, _ string, info *livekit.IngressInfo) error {
 	n.created = append(n.created, proto.Clone(info).(*livekit.IngressInfo))
 	if n.onUpdate != nil {
 		n.onUpdate()
 	}
-	return nil
+	return n.createdErr
 }
 
 func (n *recordingNotifier) UpdateIngressState(context.Context, string, *livekit.IngressInfo) error {
@@ -101,6 +114,7 @@ cpu_cost:
 		monitor:       monitor,
 		manager:       manager,
 		sm:            sm,
+		psrpcClient:   &fakeIOInfoClient{},
 		stateNotifier: notifier,
 	}
 
@@ -131,4 +145,34 @@ cpu_cost:
 	require.Equal(t, livekit.IngressState_ENDPOINT_BUFFERING, state.Status)
 	require.NotZero(t, state.UpdatedAt, "the create carries the session's first state")
 	require.Zero(t, notifier.updates, "the create announces the session, so no update follows it")
+}
+
+func TestSendUpdateURLPull(t *testing.T) {
+	newInfo := func() *livekit.IngressInfo {
+		return &livekit.IngressInfo{IngressId: "IN_test", State: &livekit.IngressState{ResourceId: "res_test"}}
+	}
+
+	t.Run("creates then announces", func(t *testing.T) {
+		client, notifier := &fakeIOInfoClient{}, &recordingNotifier{}
+		svc := &Service{psrpcClient: client, stateNotifier: notifier}
+		require.NoError(t, svc.sendUpdate(context.Background(), "proj", livekit.IngressInput_URL_INPUT, newInfo(), nil))
+		require.Equal(t, 1, client.creates)
+		require.Len(t, notifier.created, 1)
+		require.Zero(t, notifier.updates)
+	})
+
+	t.Run("a failed create is not announced", func(t *testing.T) {
+		client, notifier := &fakeIOInfoClient{createErr: psrpc.NewErrorf(psrpc.Internal, "boom")}, &recordingNotifier{}
+		svc := &Service{psrpcClient: client, stateNotifier: notifier}
+		require.Error(t, svc.sendUpdate(context.Background(), "proj", livekit.IngressInput_URL_INPUT, newInfo(), nil))
+		require.Empty(t, notifier.created)
+		require.Zero(t, notifier.updates)
+	})
+
+	t.Run("a failed announce does not fail the create", func(t *testing.T) {
+		client, notifier := &fakeIOInfoClient{}, &recordingNotifier{createdErr: errors.New("boom")}
+		svc := &Service{psrpcClient: client, stateNotifier: notifier}
+		require.NoError(t, svc.sendUpdate(context.Background(), "proj", livekit.IngressInput_URL_INPUT, newInfo(), nil))
+		require.Len(t, notifier.created, 1)
+	})
 }
