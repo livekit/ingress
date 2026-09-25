@@ -51,7 +51,7 @@ func (s *whipPublisher) publish(t *testing.T, info *livekit.IngressInfo) {
 	require.NoError(t, err, "build it with: go build -o <dir on PATH>/%s "+
 		"./cmd/whip-client, from test/livekit-whip-bot", whipClientBinary)
 
-	s.proc = publish(t, fmt.Sprintf("%s -url %s/%s", bin, info.Url, info.StreamKey))
+	s.proc = publish(t, bin, "-url", fmt.Sprintf("%s/%s", info.Url, info.StreamKey))
 }
 
 // endStream signals whip-client, which sends the WHIP DELETE for its session

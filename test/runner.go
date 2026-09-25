@@ -680,13 +680,15 @@ type publisher struct {
 
 // publish runs a publisher for the rest of the case. One left running would
 // reconnect against the next case's ingress.
-func publish(t *testing.T, command string) *publisher {
+//
+// The program and its arguments are taken already separated, so a path that
+// contains a space survives. A caller with a pipeline to pass splits it itself.
+func publish(t *testing.T, name string, args ...string) *publisher {
 	t.Helper()
 
-	logger.Infow("starting publisher", "command", command)
+	logger.Infow("starting publisher", "name", name, "args", args)
 
-	args := strings.Fields(command)
-	cmd := exec.Command(args[0], args[1:]...)
+	cmd := exec.Command(name, args...)
 	require.NoError(t, cmd.Start())
 
 	p := &publisher{cmd: cmd, exited: make(chan struct{})}

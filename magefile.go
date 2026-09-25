@@ -263,7 +263,10 @@ func WhipClient() error {
 		return err
 	}
 
-	return run(fmt.Sprintf("go build -C ./test/livekit-whip-bot -o %s/whip-client ./cmd/whip-client", bin))
+	// runArgs rather than run: the output path is a directory from the
+	// environment, and run splits its command on spaces.
+	return runArgs("go", "build", "-C", "./test/livekit-whip-bot",
+		"-o", filepath.Join(bin, "whip-client"), "./cmd/whip-client")
 }
 
 // goBinDir is where go build installs a tool, GOBIN when it is set and
@@ -288,7 +291,8 @@ func goBinDir() (string, error) {
 		return "", err
 	}
 
-	dir := strings.TrimSpace(string(gopath))
+	// GOPATH is a list, and a tool is installed under its first entry.
+	dir, _, _ := strings.Cut(strings.TrimSpace(string(gopath)), string(os.PathListSeparator))
 	if dir == "" {
 		return "", fmt.Errorf("neither GOBIN nor GOPATH is set")
 	}

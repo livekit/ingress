@@ -18,6 +18,7 @@ package test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/livekit/protocol/livekit"
@@ -38,11 +39,11 @@ func (*rtmpPublisher) url(_ *testing.T, r *Runner, streamKey string) string {
 // pipeline when the process is interrupted, so the publisher finishes the way a
 // stopped encoder does.
 func (s *rtmpPublisher) publish(t *testing.T, info *livekit.IngressInfo) {
-	s.proc = publish(t, fmt.Sprintf(
-		"gst-launch-1.0 -v -e flvmux name=mux ! rtmp2sink location=%s "+
+	s.proc = publish(t, "gst-launch-1.0", strings.Fields(fmt.Sprintf(
+		"-v -e flvmux name=mux ! rtmp2sink location=%s "+
 			"audiotestsrc freq=200 ! faac ! mux. "+
 			"videotestsrc pattern=ball is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 tune=zerolatency ! mux.",
-		info.Url))
+		info.Url))...)
 }
 
 func (s *rtmpPublisher) endStream(t *testing.T) { s.proc.endStream(t) }
