@@ -23,8 +23,10 @@ import (
 	"github.com/livekit/protocol/livekit"
 )
 
-// rtmpPublisher pushes a test pattern over RTMP for the life of the case.
-type rtmpPublisher struct{}
+// rtmpPublisher pushes a test pattern over RTMP until the case ends it.
+type rtmpPublisher struct {
+	proc *publisher
+}
 
 func (*rtmpPublisher) pulls() bool { return false }
 
@@ -32,13 +34,18 @@ func (*rtmpPublisher) url(_ *testing.T, r *Runner, streamKey string) string {
 	return fmt.Sprintf("rtmp://localhost:%d/live/%s", r.RTMPPort, streamKey)
 }
 
-func (*rtmpPublisher) publish(t *testing.T, info *livekit.IngressInfo) {
-	publish(t, fmt.Sprintf(
-		"gst-launch-1.0 -v flvmux name=mux ! rtmp2sink location=%s "+
+// publish runs gst-launch with -e, which drains an end of stream through the
+// pipeline when the process is interrupted, so the publisher finishes the way a
+// stopped encoder does.
+func (s *rtmpPublisher) publish(t *testing.T, info *livekit.IngressInfo) {
+	s.proc = publish(t, fmt.Sprintf(
+		"gst-launch-1.0 -v -e flvmux name=mux ! rtmp2sink location=%s "+
 			"audiotestsrc freq=200 ! faac ! mux. "+
 			"videotestsrc pattern=ball is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 tune=zerolatency ! mux.",
 		info.Url))
 }
+
+func (s *rtmpPublisher) endStream(t *testing.T) { s.proc.endStream(t) }
 
 func (r *Runner) testRTMP(t *testing.T) {
 	if !r.runRTMP() {
@@ -59,6 +66,19 @@ func (r *Runner) testRTMP(t *testing.T) {
 				// cancels its relay read mid-read. The session ends on that
 				// cancellation.
 				expect: livekit.IngressState_ENDPOINT_ERROR,
+			},
+			{
+				name:      "EndedByPublisher",
+				inputType: livekit.IngressInput_RTMP_INPUT,
+				source:    &rtmpPublisher{},
+				video:     videoOptions(videoLayer(livekit.VideoQuality_HIGH, 1280, 720, 3000000)),
+				// A source that ran to its end is reported as COMPLETE, which
+				// is what keeps this distinguishable from the INACTIVE a
+				// requested stop gives.
+				reusable: false,
+				endBy:    endBySource,
+				runFor:   sourceEndDuration,
+				expect:   livekit.IngressState_ENDPOINT_COMPLETE,
 			},
 		} {
 			r.run(t, tc)

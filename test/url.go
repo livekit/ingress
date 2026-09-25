@@ -30,6 +30,7 @@ type hlsPull struct{}
 func (*hlsPull) pulls() bool                              { return true }
 func (*hlsPull) url(*testing.T, *Runner, string) string   { return hlsPullURL }
 func (*hlsPull) publish(*testing.T, *livekit.IngressInfo) {}
+func (*hlsPull) endStream(*testing.T)                     {}
 
 func (r *Runner) testURL(t *testing.T) {
 	if !r.runURL() {
