@@ -39,12 +39,5 @@ func RunTestSuite(
 
 	r.testRTMP(t)
 	r.testURL(t)
-
-	// WHIP is written out rather than driven from a case table: its publisher
-	// binary is not in the test image, so a conversion here could not be run.
-	if r.runWHIP() {
-		t.Run("WHIP", func(t *testing.T) {
-			RunWHIPTest(t, r)
-		})
-	}
+	r.testWHIP(t)
 }

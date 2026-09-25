@@ -32,12 +32,12 @@ func (*rtmpPublisher) url(_ *testing.T, r *Runner, streamKey string) string {
 	return fmt.Sprintf("rtmp://localhost:%d/live/%s", r.RTMPPort, streamKey)
 }
 
-func (*rtmpPublisher) publish(t *testing.T, url string) {
+func (*rtmpPublisher) publish(t *testing.T, info *livekit.IngressInfo) {
 	publish(t, fmt.Sprintf(
 		"gst-launch-1.0 -v flvmux name=mux ! rtmp2sink location=%s "+
 			"audiotestsrc freq=200 ! faac ! mux. "+
 			"videotestsrc pattern=ball is-live=true ! video/x-raw,width=1280,height=720 ! x264enc speed-preset=3 tune=zerolatency ! mux.",
-		url))
+		info.Url))
 }
 
 func (r *Runner) testRTMP(t *testing.T) {

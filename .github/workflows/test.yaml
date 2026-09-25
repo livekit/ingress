@@ -26,7 +26,11 @@ jobs:
     runs-on: namespace-profile-8vcpu-cache
 
     steps:
+      # This job builds the test image, and that image builds the WHIP
+      # publisher from the livekit-whip-bot submodule.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          submodules: true
 
       - name: Resolve GStreamer version
         id: gst-version
