@@ -50,7 +50,7 @@ func (h *WHIPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	path := strings.TrimLeft(r.URL.Path, "/whip/") //nolint
+	path := strings.TrimPrefix(r.URL.Path, "/whip/")
 	v := strings.Split(path, "/")
 	if len(v) != 2 {
 		err = psrpc.NewErrorf(psrpc.NotFound, "invalid path")
