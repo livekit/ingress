@@ -25,8 +25,15 @@ import (
 	"github.com/livekit/psrpc"
 )
 
+// relayServer is the subset of WHIPServer the relay handler needs, so the
+// request handling can be tested without a full server.
+type relayServer interface {
+	AssociateRelay(resourceId string, kind types.StreamKind, token string, w io.WriteCloser) error
+	DissociateRelay(resourceId string, kind types.StreamKind)
+}
+
 type WHIPRelayHandler struct {
-	whipServer *WHIPServer
+	whipServer relayServer
 }
 
 func NewWHIPRelayHandler(whipServer *WHIPServer) *WHIPRelayHandler {
@@ -50,7 +57,7 @@ func (h *WHIPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	path := strings.TrimLeft(r.URL.Path, "/whip/") //nolint
+	path := strings.TrimPrefix(r.URL.Path, "/whip/")
 	v := strings.Split(path, "/")
 	if len(v) != 2 {
 		err = psrpc.NewErrorf(psrpc.NotFound, "invalid path")
@@ -64,7 +71,7 @@ func (h *WHIPRelayHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	log.Infow("relaying whip ingress")
 
 	pr, pw := io.Pipe()
-	done := make(chan error)
+	done := make(chan error, 1)
 
 	go func() {
 		b := make([]byte, 2000)
