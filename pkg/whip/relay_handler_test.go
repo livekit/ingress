@@ -56,7 +56,7 @@ func (f *fakeRelayServer) AssociateRelay(resourceId string, kind types.StreamKin
 	return w.Close()
 }
 
-func (f *fakeRelayServer) DissociateRelay(resourceId string, kind types.StreamKind) {
+func (f *fakeRelayServer) DissociateRelay(_ string, _ types.StreamKind) {
 	f.dissociated = true
 }
 
