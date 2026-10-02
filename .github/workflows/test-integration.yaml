@@ -50,7 +50,7 @@ jobs:
     steps:
       # The WHIP publisher lives in the livekit-whip-bot submodule, which the
       # image builds. Without it every suite fails at build time, not just whip.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           submodules: true
 
