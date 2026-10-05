@@ -18,11 +18,11 @@ require (
 	github.com/livekit/protocol v1.52.1-0.20260922162639-efea8680276b
 	github.com/livekit/psrpc v0.8.0
 	github.com/livekit/server-sdk-go/v2 v2.18.2-0.20260904062056-1da58cd7b795
-	github.com/pion/dtls/v3 v3.1.8
-	github.com/pion/interceptor v0.1.48
+	github.com/pion/dtls/v3 v3.1.9
+	github.com/pion/interceptor v0.1.49
 	github.com/pion/rtcp v1.2.17
 	github.com/pion/rtp v1.10.5
-	github.com/pion/sdp/v3 v3.0.19
+	github.com/pion/sdp/v3 v3.0.20
 	github.com/pion/webrtc/v4 v4.2.20
 	github.com/prometheus/client_golang v1.24.1
 	github.com/sirupsen/logrus v1.10.2
@@ -41,6 +41,7 @@ require (
 	github.com/petermattis/goid v0.0.0-20260820044319-269ab09b5261 // indirect
 	github.com/pion/stun/v4 v4.0.0 // indirect
 	github.com/pion/transport/v4 v4.1.0 // indirect
+	github.com/pion/transport/v5 v5.0.0 // indirect
 	github.com/pion/turn/v5 v5.1.0 // indirect
 	github.com/puzpuzpuz/xsync/v4 v4.5.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
