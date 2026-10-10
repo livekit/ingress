@@ -33,6 +33,8 @@ import (
 	"github.com/livekit/psrpc"
 )
 
+const testResourceID = "res_test"
+
 func newTestProcessManager(t *testing.T) (*ProcessManager, psrpc.MessageBus) {
 	bus := psrpc.NewLocalMessageBus()
 	sm := NewSessionManager(stats.NewMonitor(), nil)
@@ -45,7 +47,7 @@ func newTestParams(tmpDir string) *params.Params {
 	return &params.Params{
 		IngressInfo: &livekit.IngressInfo{
 			IngressId: "in_test",
-			State:     &livekit.IngressState{ResourceId: "res_test"},
+			State:     &livekit.IngressState{ResourceId: testResourceID},
 		},
 		TmpDir: tmpDir,
 	}

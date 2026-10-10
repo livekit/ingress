@@ -44,8 +44,8 @@ func getLatencyHistogram() *prometheus.HistogramVec {
 	latencyMetricOnce.Do(func() {
 		latencyHistogram = prometheus.NewHistogramVec(
 			prometheus.HistogramOpts{
-				Namespace: "livekit",
-				Subsystem: "ingress",
+				Namespace: promNamespace,
+				Subsystem: promSubsystemIngress,
 				Name:      "packet_latency_seconds",
 				Help:      "Observed end-to-end packet latency within the ingress pipeline",
 				Buckets:   prometheus.ExponentialBuckets(0.005, 2, 12),
