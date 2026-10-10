@@ -122,7 +122,7 @@ cpu_cost:
 	defer cancel()
 	notifier.onUpdate = cancel
 
-	_, err = svc.HandleURLPublishRequest(ctx, "res_test", "proj_test", &rpc.StartIngressRequest{
+	_, err = svc.HandleURLPublishRequest(ctx, testResourceID, "proj_test", &rpc.StartIngressRequest{
 		Info: &livekit.IngressInfo{
 			IngressId:           "IN_test",
 			InputType:           livekit.IngressInput_URL_INPUT,
@@ -137,7 +137,7 @@ cpu_cost:
 	require.Error(t, err, "an abandoned request must not report success")
 	require.ErrorIs(t, err, context.Canceled)
 	require.Zero(t, spawned, "no handler may be spawned for a caller that has gone")
-	require.Equal(t, []string{"res_test"}, notifier.sessionEndedFor,
+	require.Equal(t, []string{testResourceID}, notifier.sessionEndedFor,
 		"the session announced by the create must be reported ended")
 
 	require.Len(t, notifier.created, 1)
@@ -149,7 +149,7 @@ cpu_cost:
 
 func TestSendUpdateURLPull(t *testing.T) {
 	newInfo := func() *livekit.IngressInfo {
-		return &livekit.IngressInfo{IngressId: "IN_test", State: &livekit.IngressState{ResourceId: "res_test"}}
+		return &livekit.IngressInfo{IngressId: "IN_test", State: &livekit.IngressState{ResourceId: testResourceID}}
 	}
 
 	t.Run("creates then announces", func(t *testing.T) {

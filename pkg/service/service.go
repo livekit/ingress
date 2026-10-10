@@ -567,6 +567,7 @@ func (s *Service) ListActiveIngress(ctx context.Context, _ *rpc.ListActiveIngres
 	}
 
 	return &rpc.ListActiveIngressResponse{
+		//nolint:staticcheck // SA1019: ingress_ids is deprecated, still set for older clients
 		IngressIds:      ids,
 		IngressSessions: sessions,
 	}, nil

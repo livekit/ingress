@@ -12,7 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-ARG LINT_VERSION=v2.11.3
+# Must be a release built with a Go toolchain at least as new as .go-version.
+# The image type-checks with the Go it was compiled with, and an older binary
+# panics ("file requires newer Go version"). v2.13.0 is the first release
+# built with Go 1.27.
+ARG LINT_VERSION=v2.14.0
 
 # The GStreamer version is pinned in .gst-version, the single source of truth that
 # Renovate keeps current via an approvable PR. It has no default here on purpose: a

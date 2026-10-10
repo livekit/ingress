@@ -36,6 +36,17 @@ import (
 
 const (
 	defaultMinIdle float64 = 0.3 // Target at least 30% idle CPU
+
+	promNamespace        = "livekit"
+	promSubsystemIngress = "ingress"
+	promLabelNodeID      = "node_id"
+	promLabelType        = "type"
+	promLabelTranscoding = "transcoding"
+
+	publicationStatusSuccess  = "success"
+	publicationStatus4xx      = "4xx"
+	publicationStatus5xx      = "5xx"
+	publicationStatusInternal = "internal"
 )
 
 type Monitor struct {
@@ -79,16 +90,16 @@ func (m *Monitor) Start(conf *config.Config) error {
 	m.costConfigLock.Unlock()
 
 	m.promCPULoad = prometheus.NewGauge(prometheus.GaugeOpts{
-		Namespace:   "livekit",
+		Namespace:   promNamespace,
 		Subsystem:   "node",
 		Name:        "cpu_load",
-		ConstLabels: prometheus.Labels{"node_id": conf.NodeID, "node_type": "INGRESS"},
+		ConstLabels: prometheus.Labels{promLabelNodeID: conf.NodeID, "node_type": "INGRESS"},
 	})
 	m.promNodeAvailable = prometheus.NewGaugeFunc(prometheus.GaugeOpts{
-		Namespace:   "livekit",
-		Subsystem:   "ingress",
+		Namespace:   promNamespace,
+		Subsystem:   promSubsystemIngress,
 		Name:        "available",
-		ConstLabels: prometheus.Labels{"node_id": conf.NodeID},
+		ConstLabels: prometheus.Labels{promLabelNodeID: conf.NodeID},
 	}, func() float64 {
 		c := m.CanAccept()
 		if c {
@@ -97,17 +108,17 @@ func (m *Monitor) Start(conf *config.Config) error {
 		return 0
 	})
 	m.requestGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{
-		Namespace:   "livekit",
-		Subsystem:   "ingress",
+		Namespace:   promNamespace,
+		Subsystem:   promSubsystemIngress,
 		Name:        "requests",
-		ConstLabels: prometheus.Labels{"node_id": conf.NodeID},
-	}, []string{"type", "transcoding"})
+		ConstLabels: prometheus.Labels{promLabelNodeID: conf.NodeID},
+	}, []string{promLabelType, promLabelTranscoding})
 	m.promPublicationCounter = prometheus.NewCounterVec(prometheus.CounterOpts{
-		Namespace:   "livekit",
-		Subsystem:   "ingress",
+		Namespace:   promNamespace,
+		Subsystem:   promSubsystemIngress,
 		Name:        "publish_status",
-		ConstLabels: prometheus.Labels{"node_id": conf.NodeID},
-	}, []string{"type", "status"})
+		ConstLabels: prometheus.Labels{promLabelNodeID: conf.NodeID},
+	}, []string{promLabelType, "status"})
 
 	prometheus.MustRegister(m.promCPULoad, m.promNodeAvailable, m.requestGauge, m.promPublicationCounter)
 
@@ -157,19 +168,12 @@ func (m *Monitor) RecordPublicationResult(ingressType string, err error) {
 	}
 
 	m.promPublicationCounter.With(prometheus.Labels{
-		"type":   ingressType,
-		"status": publicationStatus(err),
+		promLabelType: ingressType,
+		"status":      publicationStatus(err),
 	}).Inc()
 }
 
 func publicationStatus(err error) string {
-	const (
-		publicationStatusSuccess  = "success"
-		publicationStatus4xx      = "4xx"
-		publicationStatus5xx      = "5xx"
-		publicationStatusInternal = "internal"
-	)
-
 	if err == nil {
 		return publicationStatusSuccess
 	}
@@ -365,11 +369,11 @@ func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "rtmp", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: "rtmp", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
 	case livekit.IngressInput_WHIP_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "whip", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: "whip", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
 	case livekit.IngressInput_URL_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "url", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: "url", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
 
 	}
 }
@@ -377,11 +381,11 @@ func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
 func (m *Monitor) IngressEnded(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "rtmp", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: "rtmp", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	case livekit.IngressInput_WHIP_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "whip", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: "whip", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	case livekit.IngressInput_URL_INPUT:
-		m.requestGauge.With(prometheus.Labels{"type": "url", "transcoding": fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: "url", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	}
 }
 
