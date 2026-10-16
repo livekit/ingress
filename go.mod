@@ -18,12 +18,12 @@ require (
 	github.com/livekit/protocol v1.52.1
 	github.com/livekit/psrpc v0.8.2
 	github.com/livekit/server-sdk-go/v2 v2.19.0
-	github.com/pion/dtls/v3 v3.1.9
+	github.com/pion/dtls/v3 v3.1.10
 	github.com/pion/interceptor v0.1.49
-	github.com/pion/rtcp v1.2.17
+	github.com/pion/rtcp v1.2.19
 	github.com/pion/rtp v1.10.5
 	github.com/pion/sdp/v3 v3.0.20
-	github.com/pion/webrtc/v4 v4.2.20
+	github.com/pion/webrtc/v4 v4.2.22
 	github.com/prometheus/client_golang v1.24.1
 	github.com/sirupsen/logrus v1.10.2
 	github.com/stretchr/testify v1.12.1
@@ -39,10 +39,10 @@ require (
 	buf.build/go/protovalidate v1.2.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/petermattis/goid v0.0.0-20260820044319-269ab09b5261 // indirect
-	github.com/pion/stun/v4 v4.0.0 // indirect
+	github.com/pion/stun/v4 v4.0.1 // indirect
 	github.com/pion/transport/v4 v4.1.0 // indirect
-	github.com/pion/transport/v5 v5.0.0 // indirect
-	github.com/pion/turn/v5 v5.1.0 // indirect
+	github.com/pion/transport/v5 v5.1.1 // indirect
+	github.com/pion/turn/v5 v5.1.2 // indirect
 	github.com/puzpuzpuz/xsync/v4 v4.5.0 // indirect
 	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/otel/metric v1.46.0 // indirect
@@ -79,13 +79,13 @@ require (
 	github.com/magefile/mage v1.17.2 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/pion/datachannel v1.6.2 // indirect
-	github.com/pion/ice/v4 v4.4.2 // indirect
+	github.com/pion/datachannel v1.6.3 // indirect
+	github.com/pion/ice/v4 v4.4.4 // indirect
 	github.com/pion/logging v0.2.4 // indirect
-	github.com/pion/mdns/v2 v2.2.0 // indirect
+	github.com/pion/mdns/v2 v2.2.1 // indirect
 	github.com/pion/randutil v0.1.0 // indirect
-	github.com/pion/sctp v1.11.1 // indirect
-	github.com/pion/srtp/v3 v3.0.13 // indirect
+	github.com/pion/sctp v1.11.3 // indirect
+	github.com/pion/srtp/v3 v3.1.0 // indirect
 	github.com/pion/stun/v3 v3.1.7 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_model v0.6.3 // indirect
