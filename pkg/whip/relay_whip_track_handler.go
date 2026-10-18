@@ -110,6 +110,10 @@ func (t *RelayWhipTrackHandler) Start(onDone func(err error)) (err error) {
 }
 
 func (t *RelayWhipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaStatsGatherer) {
+	// Read the jitter buffer stats before taking statsLock: the jitter buffer
+	// invokes onPacket, which takes statsLock, while holding its own lock.
+	jbStats := t.jb.Stats()
+
 	t.statsLock.Lock()
 
 	var path string
@@ -125,7 +129,7 @@ func (t *RelayWhipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaS
 
 	g := st.RegisterTrackStats(path)
 	t.trackStats = g
-	if jbStats := t.jb.Stats(); jbStats != nil {
+	if jbStats != nil {
 		t.lastJBStats = *jbStats
 	}
 
