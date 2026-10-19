@@ -59,10 +59,12 @@ type RelayWhipTrackHandler struct {
 
 	lastError atomic.Error
 
-	statsLock  sync.Mutex
-	trackStats *stats.MediaTrackStatGatherer
+	// trackStats is read from onPacket, which the jitter buffer calls while
+	// holding its own lock, so it must not be guarded by a mutex.
+	trackStats atomic.Pointer[stats.MediaTrackStatGatherer]
 
 	statsTicker *time.Ticker
+	// lastJBStats is only accessed from the stats reporter goroutine.
 	lastJBStats jitter.BufferStats
 }
 
@@ -110,8 +112,6 @@ func (t *RelayWhipTrackHandler) Start(onDone func(err error)) (err error) {
 }
 
 func (t *RelayWhipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaStatsGatherer) {
-	t.statsLock.Lock()
-
 	var path string
 
 	switch t.remoteTrack.Kind() {
@@ -123,13 +123,7 @@ func (t *RelayWhipTrackHandler) SetMediaTrackStatsGatherer(st *stats.LocalMediaS
 		path = "input.unknown"
 	}
 
-	g := st.RegisterTrackStats(path)
-	t.trackStats = g
-	if jbStats := t.jb.Stats(); jbStats != nil {
-		t.lastJBStats = *jbStats
-	}
-
-	t.statsLock.Unlock()
+	t.trackStats.Store(st.RegisterTrackStats(path))
 }
 
 func (t *RelayWhipTrackHandler) SetWriter(w io.WriteCloser) error {
@@ -259,9 +253,7 @@ func (t *RelayWhipTrackHandler) onPacket(sample []jitter.ExtPacket) {
 			return
 		}
 
-		t.statsLock.Lock()
-		stats := t.trackStats
-		t.statsLock.Unlock()
+		stats := t.trackStats.Load()
 
 		if len(pkt.Payload) <= 2 {
 			// Padding
@@ -327,9 +319,7 @@ func (t *RelayWhipTrackHandler) startStatsReporter() {
 }
 
 func (t *RelayWhipTrackHandler) reportJitterStats() {
-	t.statsLock.Lock()
-	g := t.trackStats
-	t.statsLock.Unlock()
+	g := t.trackStats.Load()
 
 	jbStats := t.jb.Stats()
 	if jbStats == nil {
