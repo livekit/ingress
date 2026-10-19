@@ -2,7 +2,7 @@ module github.com/livekit/ingress
 
 go 1.26.8
 
-replace github.com/go-gst/go-gst => github.com/livekit/gst-go v0.0.0-20250701011214-e7f61abd14cb
+replace github.com/go-gst/go-gst => github.com/livekit/gst-go v0.0.0-20261015120717-e0fc4e6af2ac
 
 require (
 	github.com/aclements/go-moremath v0.0.0-20241023150245-c8bbc672ef66
@@ -11,10 +11,10 @@ require (
 	github.com/go-gst/go-gst v1.4.0
 	github.com/google/go-cmp v0.7.0
 	github.com/gorilla/mux v1.8.1
-	github.com/livekit/go-rtmp v0.0.0-20251031234730-75a652881771
+	github.com/livekit/go-rtmp v0.0.0-20261019042323-a9bd9ffaba6f
 	github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731
 	github.com/livekit/media-sdk v0.1.1
-	github.com/livekit/mediatransportutil v0.0.0-20260821083140-f234b534b095
+	github.com/livekit/mediatransportutil v0.0.0-20261014192331-dd8e31a0adc0
 	github.com/livekit/protocol v1.52.1
 	github.com/livekit/psrpc v0.8.2
 	github.com/livekit/server-sdk-go/v2 v2.19.0
