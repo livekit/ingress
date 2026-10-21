@@ -221,7 +221,13 @@ func (s *ProcessManager) runHandlerTry(ctx context.Context, h *process, p *param
 
 	var exitErr *exec.ExitError
 
-	err = h.cmd.Run()
+	err = h.cmd.Start()
+	if err == nil {
+		pid := h.cmd.Process.Pid
+		s.sm.HandlerStarted(h.params.IngressInfo, pid)
+		err = h.cmd.Wait()
+		s.sm.HandlerExited(pid, h.cmd.ProcessState)
+	}
 	switch {
 	case err == nil:
 		// success

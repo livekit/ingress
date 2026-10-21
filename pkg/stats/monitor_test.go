@@ -16,12 +16,20 @@ package stats
 
 import (
 	"net/http"
+	"os"
+	"os/exec"
+	"runtime"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
+	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/psrpc"
 
+	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 )
 
@@ -83,4 +91,68 @@ func TestPublicationStatus(t *testing.T) {
 			require.Equal(t, c.expected, publicationStatus(c.err))
 		})
 	}
+}
+
+const (
+	burnCPUEnv = "INGRESS_TEST_BURN_CPU"
+	// burnCPU spans at least one tick of the 1s per-process sampler
+	burnCPU = 2 * time.Second
+)
+
+// TestHelperBurnCPU is the handler stand-in run by TestSessionUsage: it uses burnCPU of CPU, then exits.
+func TestHelperBurnCPU(t *testing.T) {
+	if os.Getenv(burnCPUEnv) == "" {
+		t.Skip("runs only as the child of TestSessionUsage")
+	}
+	var ru syscall.Rusage
+	for time.Duration(ru.Utime.Nano()+ru.Stime.Nano()) < burnCPU {
+		_ = syscall.Getrusage(syscall.RUSAGE_SELF, &ru)
+	}
+}
+
+func TestSessionUsage(t *testing.T) {
+	conf, err := config.NewConfig(`
+redis:
+  address: localhost:6379
+ws_url: ws://localhost:7880
+api_key: key
+api_secret: secret
+cpu_cost:
+  url_cpu_cost: 0.0001
+`)
+	require.NoError(t, err)
+
+	m := NewMonitor()
+	require.NoError(t, m.Start(conf))
+	t.Cleanup(m.Stop)
+
+	info := &livekit.IngressInfo{
+		IngressId:         "IN_test",
+		InputType:         livekit.IngressInput_URL_INPUT,
+		EnableTranscoding: proto.Bool(true),
+		State:             &livekit.IngressState{ResourceId: "res_test"},
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=^TestHelperBurnCPU$")
+	cmd.Env = append(os.Environ(), burnCPUEnv+"=1")
+	require.NoError(t, cmd.Start())
+	m.HandlerStarted(info, cmd.Process.Pid)
+	require.NoError(t, cmd.Wait())
+	m.HandlerExited(cmd.Process.Pid, cmd.ProcessState)
+
+	u := m.SessionEnded("res_test")
+	require.NotNil(t, u)
+	require.Equal(t, "IN_test", u.IngressID)
+	require.Equal(t, livekit.IngressInput_URL_INPUT, u.InputType)
+	require.True(t, u.Transcoding)
+	require.GreaterOrEqual(t, u.CPUTime, burnCPU, "the handler used burnCPU of CPU")
+	require.Positive(t, u.Duration)
+	require.Positive(t, u.AvgCPU())
+	if runtime.GOOS == "linux" {
+		// per-process sampling reads procfs
+		require.Positive(t, u.MaxCPU)
+		require.NotZero(t, u.MaxMemory)
+	}
+
+	require.Nil(t, m.SessionEnded("res_test"), "usage is reported once")
 }
