@@ -93,15 +93,19 @@ func TestPublicationStatus(t *testing.T) {
 	}
 }
 
-const burnCPUEnv = "INGRESS_TEST_BURN_CPU"
+const (
+	burnCPUEnv = "INGRESS_TEST_BURN_CPU"
+	// burnCPU spans at least one tick of the 1s per-process sampler
+	burnCPU = 2 * time.Second
+)
 
-// TestHelperBurnCPU is the handler stand-in run by TestSessionUsage: it uses 1s of CPU, then exits.
+// TestHelperBurnCPU is the handler stand-in run by TestSessionUsage: it uses burnCPU of CPU, then exits.
 func TestHelperBurnCPU(t *testing.T) {
 	if os.Getenv(burnCPUEnv) == "" {
 		t.Skip("runs only as the child of TestSessionUsage")
 	}
 	var ru syscall.Rusage
-	for time.Duration(ru.Utime.Nano()+ru.Stime.Nano()) < time.Second {
+	for time.Duration(ru.Utime.Nano()+ru.Stime.Nano()) < burnCPU {
 		_ = syscall.Getrusage(syscall.RUSAGE_SELF, &ru)
 	}
 }
@@ -141,7 +145,7 @@ cpu_cost:
 	require.Equal(t, "IN_test", u.IngressID)
 	require.Equal(t, livekit.IngressInput_URL_INPUT, u.InputType)
 	require.True(t, u.Transcoding)
-	require.GreaterOrEqual(t, u.CPUTime, time.Second, "the handler used 1s of CPU")
+	require.GreaterOrEqual(t, u.CPUTime, burnCPU, "the handler used burnCPU of CPU")
 	require.Positive(t, u.Duration)
 	require.Positive(t, u.AvgCPU())
 	if runtime.GOOS == "linux" {
