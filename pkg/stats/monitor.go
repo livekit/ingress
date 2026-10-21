@@ -16,6 +16,7 @@ package stats
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -59,16 +60,52 @@ type Monitor struct {
 	promNodeAvailable      prometheus.GaugeFunc
 	promPublicationCounter *prometheus.CounterVec
 
-	cpuStats *hwstats.CPUStats
+	// cpuStats (cgroup idle) drives admission; procStats only attributes usage to handler processes.
+	// TODO: use one sampler once admission is validated against per-process idle, which misses sub-second processes.
+	cpuStats  *hwstats.CPUStats
+	procStats *hwstats.CPUStats
 
 	pendingCPUs atomic.Float64
+
+	usageLock sync.Mutex
+	usage     map[string]*SessionUsage // resourceID -> usage
+	handlers  map[int]*handlerRun      // live handler pid -> run
 
 	started  core.Fuse
 	shutdown core.Fuse
 }
 
+// SessionUsage is the resource usage of all handler processes run for one session.
+type SessionUsage struct {
+	IngressID   string
+	ResourceID  string
+	InputType   livekit.IngressInput
+	Transcoding bool
+
+	CPUTime   time.Duration // user + system time, from the exited handlers' rusage
+	Duration  time.Duration // wall time the handlers ran
+	MaxCPU    float64       // highest 1s sample, in cores
+	MaxMemory int           // highest sampled RSS, in bytes
+}
+
+// AvgCPU is the average number of cores used while a handler ran.
+func (u *SessionUsage) AvgCPU() float64 {
+	if u.Duration <= 0 {
+		return 0
+	}
+	return u.CPUTime.Seconds() / u.Duration.Seconds()
+}
+
+type handlerRun struct {
+	usage     *SessionUsage
+	startedAt time.Time
+}
+
 func NewMonitor() *Monitor {
-	return &Monitor{}
+	return &Monitor{
+		usage:    make(map[string]*SessionUsage),
+		handlers: make(map[int]*handlerRun),
+	}
 }
 
 func (m *Monitor) Start(conf *config.Config) error {
@@ -122,6 +159,14 @@ func (m *Monitor) Start(conf *config.Config) error {
 
 	prometheus.MustRegister(m.promCPULoad, m.promNodeAvailable, m.requestGauge, m.promPublicationCounter)
 
+	// handler usage is diagnostic only, so a failure here does not stop admission
+	procStats, err := hwstats.NewProcMonitor(m.updateHandlerStats)
+	if err != nil {
+		logger.Warnw("failed to start handler process monitor", err)
+	} else {
+		m.procStats = procStats
+	}
+
 	m.started.Break()
 
 	return nil
@@ -151,6 +196,9 @@ func (m *Monitor) Shutdown() {
 func (m *Monitor) Stop() {
 	if m.cpuStats != nil {
 		m.cpuStats.Stop()
+	}
+	if m.procStats != nil {
+		m.procStats.Stop()
 	}
 
 	prometheus.Unregister(m.promCPULoad)
@@ -386,6 +434,72 @@ func (m *Monitor) IngressEnded(info *livekit.IngressInfo) {
 		m.requestGauge.With(prometheus.Labels{promLabelType: "whip", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	case livekit.IngressInput_URL_INPUT:
 		m.requestGauge.With(prometheus.Labels{promLabelType: "url", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
+	}
+}
+
+// HandlerStarted attributes the handler process pid to the session in info.
+func (m *Monitor) HandlerStarted(info *livekit.IngressInfo, pid int) {
+	resourceID := info.GetState().GetResourceId()
+
+	m.usageLock.Lock()
+	defer m.usageLock.Unlock()
+
+	u := m.usage[resourceID]
+	if u == nil {
+		u = &SessionUsage{
+			IngressID:   info.IngressId,
+			ResourceID:  resourceID,
+			InputType:   info.InputType,
+			Transcoding: info.GetEnableTranscoding(),
+		}
+		m.usage[resourceID] = u
+	}
+	m.handlers[pid] = &handlerRun{usage: u, startedAt: time.Now()}
+}
+
+// HandlerExited adds the run of the exited handler pid to its session's usage.
+func (m *Monitor) HandlerExited(pid int, state *os.ProcessState) {
+	m.usageLock.Lock()
+	defer m.usageLock.Unlock()
+
+	h := m.handlers[pid]
+	if h == nil {
+		return
+	}
+	delete(m.handlers, pid)
+
+	h.usage.Duration += time.Since(h.startedAt)
+	if state != nil {
+		h.usage.CPUTime += state.UserTime() + state.SystemTime()
+	}
+}
+
+// SessionEnded returns the session's handler usage, or nil if no handler ran for it.
+func (m *Monitor) SessionEnded(resourceID string) *SessionUsage {
+	m.usageLock.Lock()
+	defer m.usageLock.Unlock()
+
+	u := m.usage[resourceID]
+	if u == nil {
+		return nil
+	}
+	delete(m.usage, resourceID)
+
+	ret := *u
+	return &ret
+}
+
+func (m *Monitor) updateHandlerStats(stats *hwstats.ProcStats) {
+	m.usageLock.Lock()
+	defer m.usageLock.Unlock()
+
+	for pid, h := range m.handlers {
+		if cpu := stats.Cpu[pid]; cpu > h.usage.MaxCPU {
+			h.usage.MaxCPU = cpu
+		}
+		if gm := stats.Memory[pid]; gm != nil && gm.Total > h.usage.MaxMemory {
+			h.usage.MaxMemory = gm.Total
+		}
 	}
 }
 
