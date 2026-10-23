@@ -35,27 +35,51 @@ type sessionRecord struct {
 	localStatsGatherer *stats.LocalMediaStatsGatherer
 }
 
+// endedTracked is how many recently ended resource ids are kept so that a start
+// still in flight can be matched to its own end. They are released together
+// rather than one by one, so the number held sits between endedTracked and twice
+// that.
+const endedTracked = 4096
+
 type SessionManager struct {
 	monitor *stats.Monitor
 	rpcSrv  rpc.IngressInternalServer
 
-	lock     sync.Mutex
-	sessions map[string]*sessionRecord // resourceId -> sessionRecord
+	lock       sync.Mutex
+	sessions   map[string]*sessionRecord // resourceId -> sessionRecord
+	ended      map[string]struct{}       // resourceIds whose end arrived first
+	endedOlder map[string]struct{}       // the ids held before ended started filling
 }
 
 func NewSessionManager(monitor *stats.Monitor, rpcSrv rpc.IngressInternalServer) *SessionManager {
 	return &SessionManager{
-		monitor:  monitor,
-		rpcSrv:   rpcSrv,
-		sessions: make(map[string]*sessionRecord),
+		monitor:    monitor,
+		rpcSrv:     rpcSrv,
+		sessions:   make(map[string]*sessionRecord),
+		ended:      make(map[string]struct{}),
+		endedOlder: make(map[string]struct{}),
 	}
 }
 
 func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI types.SessionAPI) {
-	logger.Infow("ingress started", "ingressID", info.IngressId, "resourceID", info.State.ResourceId)
+	if sm.registerSession(info, sessionAPI) {
+		logger.Infow("ingress started", "ingressID", info.IngressId, "resourceID", info.State.ResourceId)
+		return
+	}
 
+	logger.Infow("ignoring start of a session that already ended",
+		"ingressID", info.IngressId, "resourceID", info.State.ResourceId)
+}
+
+// registerSession records the session unless its end has already been seen, and
+// reports whether it was recorded.
+func (sm *SessionManager) registerSession(info *livekit.IngressInfo, sessionAPI types.SessionAPI) bool {
 	sm.lock.Lock()
 	defer sm.lock.Unlock()
+
+	if sm.takeEnded(info.State.ResourceId) {
+		return false
+	}
 
 	r := &sessionRecord{
 		info:               info,
@@ -70,6 +94,8 @@ func (sm *SessionManager) IngressStarted(info *livekit.IngressInfo, sessionAPI t
 	sm.sessions[info.State.ResourceId] = r
 
 	sm.monitor.IngressStarted(info)
+
+	return true
 }
 
 // HandlerStarted attributes the handler process pid to the session in info.
@@ -101,14 +127,49 @@ func (sm *SessionManager) IngressEnded(resourceID string) {
 	defer sm.lock.Unlock()
 
 	p := sm.sessions[resourceID]
-	if p != nil {
-		logger.Infow("ingress ended", "ingressID", p.info.IngressId, "resourceID", resourceID)
-
-		delete(sm.sessions, p.info.State.ResourceId)
-		p.sessionAPI.CloseSession(context.Background())
-		p.mediaStats.Close()
-		sm.monitor.IngressEnded(p.info)
+	if p == nil {
+		// A session can be ended before its start has been recorded, so the id
+		// is held until that start discards itself. Dropping this leaves the
+		// late start registered with nothing left to end it.
+		sm.recordEnded(resourceID)
+		return
 	}
+
+	logger.Infow("ingress ended", "ingressID", p.info.IngressId, "resourceID", resourceID)
+
+	delete(sm.sessions, p.info.State.ResourceId)
+	p.sessionAPI.CloseSession(context.Background())
+	p.mediaStats.Close()
+	sm.monitor.IngressEnded(p.info)
+}
+
+// recordEnded notes a resource id that ended without a session, so that a start
+// still in flight can discard itself. The caller holds sm.lock.
+func (sm *SessionManager) recordEnded(resourceID string) {
+	// Moved aside rather than released, so an id is kept until at least
+	// endedTracked further ids have been recorded.
+	if len(sm.ended) >= endedTracked {
+		sm.endedOlder = sm.ended
+		sm.ended = make(map[string]struct{}, endedTracked)
+	}
+
+	sm.ended[resourceID] = struct{}{}
+}
+
+// takeEnded removes resourceID from the ids held by recordEnded and reports
+// whether it was there. The caller holds sm.lock.
+func (sm *SessionManager) takeEnded(resourceID string) bool {
+	if _, ok := sm.ended[resourceID]; ok {
+		delete(sm.ended, resourceID)
+		return true
+	}
+
+	if _, ok := sm.endedOlder[resourceID]; ok {
+		delete(sm.endedOlder, resourceID)
+		return true
+	}
+
+	return false
 }
 
 func (sm *SessionManager) GetIngressSessionAPI(resourceId string) (types.SessionAPI, error) {
