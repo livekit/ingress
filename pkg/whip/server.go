@@ -61,6 +61,9 @@ type WHIPServer struct {
 	handlersLock sync.Mutex
 	handlers     map[string]WHIPHandler
 
+	// newHandler builds the handler for a new session. Tests replace it.
+	newHandler func(p *params.Params, streamKey, resourceId, ua string) (WHIPHandler, error)
+
 	monitor *stats.Monitor
 }
 
@@ -90,11 +93,14 @@ func NewWHIPServer(bus psrpc.MessageBus) (*WHIPServer, error) {
 		return nil, err
 	}
 
-	return &WHIPServer{
+	s := &WHIPServer{
 		bus:       bus,
 		rpcClient: psrpcWHIPClient,
 		handlers:  make(map[string]WHIPHandler),
-	}, nil
+	}
+	s.newHandler = s.createHandler
+
+	return s, nil
 }
 
 func (s *WHIPServer) Start(
@@ -372,19 +378,12 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) 
 		return "", nil, err
 	}
 
-	var h WHIPHandler
-	if *p.EnableTranscoding {
-		logger.Infow("Using native WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
-		h = newWHIPHandler(p, s.webRTCConfig)
-	} else {
-		logger.Infow("Using proxied WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
-		h, err = NewProxyWHIPHandler(p, s.bus, ua)
-		if err != nil {
-			// The caller is handed ready and ended together and expects one of
-			// them; returning without either strands whatever it set up.
-			ready(nil, err)
-			return "", nil, err
-		}
+	h, err := s.newHandler(p, streamKey, resourceId, ua)
+	if err != nil {
+		// The caller is handed ready and ended together and expects one of
+		// them; returning without either strands whatever it set up.
+		ready(nil, err)
+		return "", nil, err
 	}
 
 	sdpResponse, err := h.Init(ctx, sdpOffer)
@@ -399,31 +398,30 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) 
 		ctx, done := context.WithTimeout(s.ctx, sessionStartTimeout)
 		defer done()
 
-		var err error
-		var mimeTypes map[types.StreamKind]string
-		if ready != nil {
-			defer func() {
-				stats := ready(mimeTypes, err)
-				if stats != nil {
-					h.SetMediaStatsGatherer(stats)
-				}
-
-				if err != nil {
-					h.Close()
-
-					s.handlersLock.Lock()
-					delete(s.handlers, resourceId)
-					s.handlersLock.Unlock()
-				}
-			}()
-		}
-
 		s.handlersLock.Lock()
 		s.handlers[resourceId] = h
 		s.handlersLock.Unlock()
 
-		mimeTypes, err = h.Start(ctx)
+		mimeTypes, err := h.Start(ctx)
+
+		// Call ready here rather than on the way out. The goroutine below
+		// calls ended, and a session whose done channel is already broken
+		// reaches ended without blocking, so deferring ready lets ended
+		// overtake it -- ready sends a state update, and the round trip is
+		// long enough for the whole of ended to run in the middle of it.
+		if ready != nil {
+			if stats := ready(mimeTypes, err); stats != nil {
+				h.SetMediaStatsGatherer(stats)
+			}
+		}
+
 		if err != nil {
+			h.Close()
+
+			s.handlersLock.Lock()
+			delete(s.handlers, resourceId)
+			s.handlersLock.Unlock()
+
 			return
 		}
 
@@ -451,6 +449,16 @@ func (s *WHIPServer) createStream(streamKey string, sdpOffer string, ua string) 
 	}()
 
 	return resourceId, sdpResponse, nil
+}
+
+func (s *WHIPServer) createHandler(p *params.Params, streamKey, resourceId, ua string) (WHIPHandler, error) {
+	if *p.EnableTranscoding {
+		logger.Infow("Using native WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
+		return newWHIPHandler(p, s.webRTCConfig), nil
+	}
+
+	logger.Infow("Using proxied WHIP handler", "ingressID", p.IngressId, "resourceID", resourceId, "streamKey", streamKey)
+	return NewProxyWHIPHandler(p, s.bus, ua)
 }
 
 func setCORSHeaders(w http.ResponseWriter, _ *http.Request, resourceEndpoint bool) {
