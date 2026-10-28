@@ -20,13 +20,14 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/go-gst/go-gst/gst"
-	"github.com/go-gst/go-gst/gst/app"
+	"github.com/go-gst/go-gst/pkg/gst"
+	"github.com/go-gst/go-gst/pkg/gstapp"
 	"go.uber.org/atomic"
 
 	"go.opentelemetry.io/otel"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/gstutil"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/protocol/logger"
 )
@@ -40,7 +41,7 @@ const (
 type RTMPRelaySource struct {
 	params *params.Params
 
-	flvSrc *app.Source
+	flvSrc gstapp.AppSrc
 	writer *appSrcWriter
 	result chan error
 }
@@ -53,20 +54,15 @@ func NewRTMPRelaySource(ctx context.Context, p *params.Params) (*RTMPRelaySource
 		params: p,
 	}
 
-	elem, err := gst.NewElementWithName("appsrc", FlvAppSource)
+	elem, err := gstutil.NewElementWithName("appsrc", FlvAppSource)
 	if err != nil {
 		logger.Errorw("could not create appsrc", err)
 		return nil, err
 	}
-	if err = elem.SetProperty("caps", gst.NewCapsFromString("video/x-flv")); err != nil {
-		return nil, err
-	}
-	if err = elem.SetProperty("is-live", true); err != nil {
-		return nil, err
-	}
-	elem.SetArg("format", "time")
-
-	s.flvSrc = app.SrcFromElement(elem)
+	s.flvSrc = elem.(gstapp.AppSrc)
+	s.flvSrc.AppSrcSetCaps(gst.CapsFromString("video/x-flv"))
+	s.flvSrc.SetObjectProperty("is-live", true)
+	gst.UtilSetObjectArg(s.flvSrc, "format", "time")
 	s.writer = newAppSrcWriter(s.flvSrc)
 
 	return s, nil
@@ -106,7 +102,7 @@ func (s *RTMPRelaySource) Start(ctx context.Context, onClose func()) error {
 
 		logger.Debugw("flv http relay reached end of stream")
 
-		s.flvSrc.EndStream()
+		s.flvSrc.EndOfStream()
 		if onClose != nil {
 			onClose()
 		}
@@ -126,8 +122,8 @@ func (s *RTMPRelaySource) Close() error {
 	return <-s.result
 }
 
-func (s *RTMPRelaySource) GetSources() []*gst.Element {
-	return []*gst.Element{s.flvSrc.Element}
+func (s *RTMPRelaySource) GetSources() []gst.Element {
+	return []gst.Element{s.flvSrc}
 }
 
 func (s *RTMPRelaySource) ValidateCaps(caps *gst.Caps) error {
@@ -135,12 +131,12 @@ func (s *RTMPRelaySource) ValidateCaps(caps *gst.Caps) error {
 		return errors.ErrUnsupportedDecodeFormat
 	}
 
-	str := caps.GetStructureAt(0)
+	str := caps.GetStructure(0)
 	if str == nil {
 		return errors.ErrUnsupportedDecodeFormat
 	}
 
-	if str.Name() != "video/x-flv" {
+	if str.GetName() != "video/x-flv" {
 		return errors.ErrUnsupportedDecodeFormat
 	}
 
@@ -148,11 +144,11 @@ func (s *RTMPRelaySource) ValidateCaps(caps *gst.Caps) error {
 }
 
 type appSrcWriter struct {
-	appSrc *app.Source
+	appSrc gstapp.AppSrc
 	eos    *atomic.Bool
 }
 
-func newAppSrcWriter(flvSrc *app.Source) *appSrcWriter {
+func newAppSrcWriter(flvSrc gstapp.AppSrc) *appSrcWriter {
 	return &appSrcWriter{
 		appSrc: flvSrc,
 		eos:    atomic.NewBool(false),
@@ -164,7 +160,7 @@ func (w *appSrcWriter) Write(p []byte) (int, error) {
 		return 0, io.EOF
 	}
 
-	b := gst.NewBufferFromBytes(p)
+	b := gstutil.NewBufferFromBytes(p)
 
 	ret := w.appSrc.PushBuffer(b)
 	switch ret {
@@ -182,7 +178,7 @@ func (w *appSrcWriter) Write(p []byte) (int, error) {
 func (w *appSrcWriter) Close() error {
 	w.eos.Store(true)
 
-	w.appSrc.EndStream()
+	w.appSrc.EndOfStream()
 
 	return nil
 }

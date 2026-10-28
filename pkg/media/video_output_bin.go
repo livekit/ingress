@@ -15,85 +15,83 @@
 package media
 
 import (
-	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/pkg/gst"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/gstutil"
 	"github.com/livekit/protocol/livekit"
 )
 
 type VideoOutputBin struct {
-	bin                  *gst.Bin
-	preProcessorElements []*gst.Element
-	tee                  *gst.Element
+	bin                  gst.Bin
+	preProcessorElements []gst.Element
+	tee                  gst.Element
 }
 
 func NewVideoOutputBin(options *livekit.IngressVideoEncodingOptions, outputs []*Output) (*VideoOutputBin, error) {
 	o := &VideoOutputBin{}
 
-	o.bin = gst.NewBin("video output bin")
+	o.bin = gstutil.NewBin("video output bin")
 
 	if options.FrameRate > 0 {
-		videoRate, err := gst.NewElement("videorate")
+		videoRate, err := gstutil.NewElement("videorate")
 		if err != nil {
 			return nil, err
 		}
-		if err = videoRate.SetProperty("max-rate", int(options.FrameRate)); err != nil {
-			return nil, err
-		}
+		videoRate.SetObjectProperty("max-rate", int32(options.FrameRate))
 		o.preProcessorElements = append(o.preProcessorElements, videoRate)
 	}
 
-	videoConvert, err := gst.NewElement("videoconvert")
+	videoConvert, err := gstutil.NewElement("videoconvert")
 	if err != nil {
 		return nil, err
 	}
 	o.preProcessorElements = append(o.preProcessorElements, videoConvert)
 
-	err = o.bin.AddMany(o.preProcessorElements...)
+	err = gstutil.AddMany(o.bin, o.preProcessorElements...)
 	if err != nil {
 		return nil, err
 	}
 
-	err = gst.ElementLinkMany(o.preProcessorElements...)
+	err = gstutil.LinkMany(o.preProcessorElements...)
 	if err != nil {
 		return nil, err
 	}
 
-	o.tee, err = gst.NewElement("tee")
+	o.tee, err = gstutil.NewElement("tee")
 	if err != nil {
 		return nil, err
 	}
 
-	err = o.bin.Add(o.tee)
+	err = gstutil.Add(o.bin, o.tee)
 	if err != nil {
 		return nil, err
 	}
 
-	err = o.preProcessorElements[len(o.preProcessorElements)-1].Link(o.tee)
+	err = gstutil.Link(o.preProcessorElements[len(o.preProcessorElements)-1], o.tee)
 	if err != nil {
 		return nil, err
 	}
 
 	for _, output := range outputs {
-		err := o.bin.Add(output.bin.Element)
+		err := gstutil.Add(o.bin, output.bin)
 		if err != nil {
 			return nil, err
 		}
 
-		err = gst.ElementLinkMany(o.tee, output.bin.Element)
+		err = gstutil.Link(o.tee, output.bin)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	binSink := gst.NewGhostPad("sink", o.preProcessorElements[0].GetStaticPad("sink"))
-	if !o.bin.AddPad(binSink.Pad) {
+	if !o.bin.AddPad(gst.NewGhostPad("sink", o.preProcessorElements[0].GetStaticPad("sink"))) {
 		return nil, errors.ErrUnableToAddPad
 	}
 
 	return o, nil
 }
 
-func (o *VideoOutputBin) GetBin() *gst.Bin {
+func (o *VideoOutputBin) GetBin() gst.Bin {
 	return o.bin
 }

@@ -3,7 +3,9 @@ package media
 import (
 	"time"
 
-	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/pkg/gst"
+
+	"github.com/livekit/ingress/pkg/gstutil"
 	"github.com/livekit/protocol/logger"
 	"go.uber.org/atomic"
 )
@@ -38,14 +40,14 @@ type padTimingState struct {
 	segmentStart atomic.Duration
 }
 
-func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState) {
-	pad.AddProbe(gst.PadProbeTypeBuffer, func(_ *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+func (i *Input) addGateProbe(pad gst.Pad, padName string, state *padTimingState) {
+	pad.AddProbe(gst.PadProbeTypeBuffer, func(_ gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
 		ok, pts, duration := extractBufferTiming(info, state)
 		if !ok {
 			return gst.PadProbeDrop
 		}
 
-		buffer := info.GetBuffer()
+		buffer := gstutil.ProbeBuffer(info)
 
 		if state.gateCompleted.Load() {
 			if state.skipOffset.Load() {
@@ -102,10 +104,10 @@ func (i *Input) addGateProbe(pad *gst.Pad, padName string, state *padTimingState
 	})
 }
 
-func (i *Input) addSegmentEventProbe(pad *gst.Pad, padName string, state *padTimingState) {
-	pad.AddProbe(gst.PadProbeTypeEventDownstream, func(_ *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+func (i *Input) addSegmentEventProbe(pad gst.Pad, padName string, state *padTimingState) {
+	pad.AddProbe(gst.PadProbeTypeEventDownstream, func(_ gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
 		event := info.GetEvent()
-		if event == nil || event.Type() != gst.EventTypeSegment {
+		if event == nil || event.GetType() != gst.EventSegment {
 			return gst.PadProbeOK
 		}
 
@@ -115,15 +117,15 @@ func (i *Input) addSegmentEventProbe(pad *gst.Pad, padName string, state *padTim
 			return gst.PadProbeOK
 		}
 
-		state.segmentStart.Store(time.Duration(seg.GetStart()))
+		state.segmentStart.Store(time.Duration(seg.Start()))
 		logger.Debugw("segment event received",
 			"pad", padName,
-			"format", seg.GetFormat(),
-			"start", seg.GetStart(),
-			"startDur", time.Duration(seg.GetStart()),
-			"time", seg.GetTime(),
-			"timeDur", time.Duration(seg.GetTime()),
-			"rate", seg.GetRate(),
+			"format", seg.Format(),
+			"start", seg.Start(),
+			"startDur", time.Duration(seg.Start()),
+			"time", seg.Time(),
+			"timeDur", time.Duration(seg.Time()),
+			"rate", seg.Rate(),
 		)
 		return gst.PadProbeOK
 	})
@@ -226,30 +228,25 @@ func extractBufferTiming(info *gst.PadProbeInfo, state *padTimingState) (ok bool
 	if info == nil {
 		return
 	}
-	if info.Type()&gst.PadProbeTypeBuffer == 0 {
-		return
-	}
-
-	buffer := info.GetBuffer()
+	buffer := gstutil.ProbeBuffer(info)
 	if buffer == nil {
 		return
 	}
 
-	bufPTS := buffer.PresentationTimestamp().AsDuration()
-	if bufPTS == nil {
+	bufPTS, ok := gstutil.DurationOf(buffer.PTS())
+	if !ok {
 		return
 	}
 
-	bufDuration := buffer.Duration().AsDuration()
-	if bufDuration == nil {
+	bufDuration, ok := gstutil.DurationOf(buffer.Duration())
+	if !ok {
 		if state.lastBufferPTS == 0 {
-			return true, *bufPTS, 0
+			return true, bufPTS, 0
 		}
-		duration = *bufPTS - state.lastBufferPTS
-		bufDuration = &duration
+		bufDuration = bufPTS - state.lastBufferPTS
 	}
 
-	return true, *bufPTS, *bufDuration
+	return true, bufPTS, bufDuration
 }
 
 func streamSteady(now time.Time, elapsed, streamTime time.Duration, state *padTimingState) bool {
@@ -286,6 +283,6 @@ func applyPadOffset(buffer *gst.Buffer, state *padTimingState, pts time.Duration
 	// By the time buffers are processed, the segment start time will be set.
 	adj += state.segmentStart.Load()
 
-	buffer.SetPresentationTimestamp(gst.ClockTime(adj))
+	buffer.SetPTS(gst.ClockTime(adj))
 	return true
 }

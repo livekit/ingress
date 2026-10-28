@@ -28,8 +28,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/pkg/gst"
 	"github.com/stretchr/testify/require"
+
+	"github.com/livekit/ingress/pkg/gstutil"
 
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
@@ -45,25 +47,25 @@ const (
 func writeHLSFixture(t *testing.T, segments int) string {
 	t.Helper()
 
-	gst.Init(nil)
+	gst.Init()
 
 	dir := t.TempDir()
 
 	// One buffer per second at the default rate, so num-buffers is roughly the
 	// segment count. max-files=0 keeps every segment; the default prunes them.
-	enc, err := gst.NewPipelineFromString(fmt.Sprintf(
+	enc, err := gstutil.ParseLaunch(fmt.Sprintf(
 		"audiotestsrc num-buffers=%d samplesperbuffer=44100 ! audioconvert ! avenc_aac ! aacparse "+
 			"! hlssink2 location=%s/seg%%05d.ts playlist-location=%s/playlist.m3u8 "+
 			"target-duration=1 playlist-length=0 max-files=0",
 		segments, dir, dir))
 	require.NoError(t, err)
-	require.NoError(t, enc.BlockSetState(gst.StatePlaying))
+	require.NoError(t, gstutil.SetStateBlocking(enc, gst.StatePlaying))
 
-	msg := enc.GetPipelineBus().TimedPopFiltered(
+	msg := enc.GetBus().TimedPopFiltered(
 		gst.ClockTime(60*time.Second), gst.MessageEOS|gst.MessageError)
 	require.NotNil(t, msg, "writing the fixture timed out")
 	require.Equal(t, gst.MessageEOS, msg.Type(), msg.String())
-	require.NoError(t, enc.BlockSetState(gst.StateNull))
+	require.NoError(t, gstutil.SetStateBlocking(enc, gst.StateNull))
 
 	playlist, err := os.ReadFile(filepath.Join(dir, "playlist.m3u8"))
 	require.NoError(t, err)

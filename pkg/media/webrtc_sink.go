@@ -22,7 +22,7 @@ import (
 	"time"
 
 	"github.com/frostbyte73/core"
-	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/pkg/gst"
 
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/lksdk_output"
@@ -246,8 +246,8 @@ func (s *WebRTCSink) addVideoTrack(w, h int) ([]*Output, error) {
 	return outputs, nil
 }
 
-func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps) (*gst.Bin, error) {
-	var bin *gst.Bin
+func (s *WebRTCSink) AddTrack(kind types.StreamKind, caps *gst.Caps) (gst.Bin, error) {
+	var bin gst.Bin
 
 	switch kind {
 	case types.Audio:
@@ -319,30 +319,30 @@ func getResolution(caps *gst.Caps) (w int, h int, err error) {
 		return 0, 0, errors.ErrUnsupportedDecodeFormat
 	}
 
-	str := caps.GetStructureAt(0)
+	str := caps.GetStructure(0)
 
-	wObj, err := str.GetValue("width")
-	if err != nil {
-		return 0, 0, err
+	w32, ok := str.GetInt("width")
+	if !ok {
+		return 0, 0, errors.ErrUnsupportedDecodeFormat
 	}
 
-	hObj, err := str.GetValue("height")
-	if err != nil {
-		return 0, 0, err
+	h32, ok := str.GetInt("height")
+	if !ok {
+		return 0, 0, errors.ErrUnsupportedDecodeFormat
 	}
 
-	return wObj.(int), hObj.(int), nil
+	return int(w32), int(h32), nil
 }
 
-func (s *WebRTCSink) addSpliceProbe(bin *gst.Bin) {
+func (s *WebRTCSink) addSpliceProbe(bin gst.Bin) {
 	pad := bin.GetStaticPad("sink")
 	if pad == nil {
 		logger.Infow("No sink pad on output bin")
 		return
 	}
 
-	pad.SetEventFunction(func(_ *gst.Pad, parent *gst.Object, event *gst.Event) bool {
-		if event.HasName("scte-sit") {
+	pad.AddProbe(gst.PadProbeTypeEventDownstream, func(_ gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+		if event := info.GetEvent(); event != nil && event.HasName("scte-sit") {
 			s.lock.Lock()
 			p := s.spliceProcessor
 			s.lock.Unlock()
@@ -358,7 +358,7 @@ func (s *WebRTCSink) addSpliceProbe(bin *gst.Bin) {
 			}
 		}
 
-		return pad.EventDefault(parent, event)
+		return gst.PadProbeOK
 	})
 
 	s.spliceProbeAdded = true

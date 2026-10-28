@@ -21,9 +21,10 @@ import (
 	"time"
 
 	"github.com/frostbyte73/core"
-	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/pkg/gst"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/gstutil"
 	"github.com/livekit/ingress/pkg/media/rtmp"
 	"github.com/livekit/ingress/pkg/media/urlpull"
 	"github.com/livekit/ingress/pkg/media/whip"
@@ -40,7 +41,7 @@ const (
 )
 
 type Source interface {
-	GetSources() []*gst.Element
+	GetSources() []gst.Element
 	ValidateCaps(*gst.Caps) error
 	Start(ctx context.Context, onClose func()) error
 	Close() error
@@ -51,11 +52,11 @@ type Input struct {
 
 	trackStatsGatherer map[types.StreamKind]*stats.MediaTrackStatGatherer
 
-	bin    *gst.Bin
+	bin    gst.Bin
 	source Source
 
-	audioOutput *gst.Pad
-	videoOutput *gst.Pad
+	audioOutput gst.Pad
+	videoOutput gst.Pad
 
 	onOutputReady OutputReadyFunc
 	closeFuse     core.Fuse
@@ -75,7 +76,7 @@ type Input struct {
 	onEOS func()
 }
 
-type OutputReadyFunc func(pad *gst.Pad, kind types.StreamKind)
+type OutputReadyFunc func(pad gst.Pad, kind types.StreamKind)
 
 func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGatherer) (*Input, error) {
 	src, err := CreateSource(ctx, p)
@@ -83,7 +84,7 @@ func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGat
 		return nil, err
 	}
 
-	bin := gst.NewBin("input")
+	bin := gstutil.NewBin("input")
 
 	i := &Input{
 		bin:                          bin,
@@ -92,7 +93,7 @@ func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGat
 		enableStreamLatencyReduction: shouldEnableStreamLatencyReduction(p),
 		padTiming:                    make(map[string]*padTimingState),
 		gateReady:                    make(map[string]bool),
-		latencyCaps:                  gst.NewCapsFromString(packetLatencyCaps),
+		latencyCaps:                  gst.CapsFromString(packetLatencyCaps),
 	}
 
 	if p.InputType == livekit.IngressInput_URL_INPUT {
@@ -107,20 +108,18 @@ func NewInput(ctx context.Context, p *params.Params, g *stats.LocalMediaStatsGat
 	}
 
 	for _, src := range srcs {
-		decodeBin, err := gst.NewElement("decodebin3")
+		decodeBin, err := gstutil.NewElement("decodebin3")
 		if err != nil {
 			return nil, err
 		}
 
-		if err := bin.AddMany(decodeBin, src); err != nil {
+		if err := gstutil.AddMany(bin, decodeBin, src); err != nil {
 			return nil, err
 		}
 
-		if _, err = decodeBin.Connect("pad-added", i.onPadAdded); err != nil {
-			return nil, err
-		}
+		decodeBin.Connect("pad-added", i.onPadAdded)
 
-		if err = src.Link(decodeBin); err != nil {
+		if err = gstutil.Link(src, decodeBin); err != nil {
 			return nil, err
 		}
 	}
@@ -179,22 +178,18 @@ func (i *Input) Close() error {
 	return i.closeErr
 }
 
-func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
+func (i *Input) onPadAdded(_ gst.Element, pad gst.Pad) {
 	var err error
 
 	defer func() {
 		if err != nil {
-			msg := gst.NewErrorMessage(i.bin.Element, err, err.Error(), nil)
-			i.bin.Element.GetBus().Post(msg)
+			i.bin.PostMessage(gst.NewMessageError(i.bin, err.Error(), err))
 		}
 	}()
 
-	typefind, err := i.bin.GetElementByName("typefind")
-	if err == nil && typefind != nil {
-		var caps interface{}
-		caps, err = typefind.GetProperty("caps")
-		if err == nil && caps != nil {
-			err = i.source.ValidateCaps(caps.(*gst.Caps))
+	if typefind := i.bin.GetByName("typefind"); typefind != nil {
+		if caps := gstutil.Caps(typefind); caps != nil {
+			err = i.source.ValidateCaps(caps)
 			if err != nil {
 				logger.Infow("input caps validation failed", "error", err)
 				return
@@ -203,26 +198,22 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 	}
 
 	// Make sure we emit scte35 markers if available
-	tsparser, _ := i.bin.GetElementByName("tsdemux0")
-	if tsparser != nil {
-		err := tsparser.SetProperty("send-scte35-events", true)
-		if err != nil {
-			logger.Errorw("failed setting `send-scte35-events` property", err)
-		}
+	if tsparser := i.bin.GetByName("tsdemux0"); tsparser != nil {
+		tsparser.SetObjectProperty("send-scte35-events", true)
 	}
 
 	// surface callback for first audio and video pads, plug in fakesink on the rest
 	i.lock.Lock()
 	newPad := false
 	var kind types.StreamKind
-	var ghostPad *gst.GhostPad
+	var ghostPad gst.GhostPad
 	var timingState *padTimingState
 	if strings.HasPrefix(pad.GetName(), "audio") {
 		if i.audioOutput == nil {
 			newPad = true
 			kind = types.Audio
 			i.audioOutput = pad
-			ghostPad = gst.NewGhostPad("audio", pad)
+			ghostPad = gst.NewGhostPad("audio", pad).(gst.GhostPad)
 			timingState = &padTimingState{}
 		}
 	} else if strings.HasPrefix(pad.GetName(), "video") {
@@ -230,7 +221,7 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 			newPad = true
 			kind = types.Video
 			i.videoOutput = pad
-			ghostPad = gst.NewGhostPad("video", pad)
+			ghostPad = gst.NewGhostPad("video", pad).(gst.GhostPad)
 			timingState = &padTimingState{}
 		}
 	}
@@ -238,25 +229,22 @@ func (i *Input) onPadAdded(_ *gst.Element, pad *gst.Pad) {
 
 	// don't need this pad, link to fakesink
 	if !newPad {
-		var sink *gst.Element
+		var sink gst.Element
 
-		sink, err = gst.NewElement("fakesink")
+		sink, err = gstutil.NewElement("fakesink")
 		if err != nil {
 			logger.Errorw("failed to create fakesink", err)
 			return
 		}
-		var pads []*gst.Pad
-
-		pads, err = sink.GetSinkPads()
-		pad.Link(pads[0])
+		pad.Link(sink.GetStaticPad("sink"))
 		return
 	}
 
-	if !i.bin.AddPad(ghostPad.Pad) {
+	if !i.bin.AddPad(ghostPad) {
 		logger.Errorw("failed to add ghost pad", nil)
 		return
 	}
-	pad = ghostPad.Pad
+	pad = ghostPad
 	padName := pad.GetName()
 
 	logger.Debugw("input ghost pad added", "padName", padName)
@@ -280,24 +268,19 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 	// Do a best effort to add probe to retrieve bitrate and ingest time metadata.
 	// Time metadata would be best ingested at the source but flv muxer doesn't support carrying it through.
 	// The multiqueue is generally created in the pipeline before the decoders
-	mq, err := i.bin.GetElementByName("multiqueue0")
-
-	if err != nil {
+	mq := i.bin.GetByName("multiqueue0")
+	if mq == nil {
 		// No multiqueue in that pipeline
-		logger.Debugw("could not retrieve multiqueue element from pipeline", "error", err)
+		logger.Debugw("could not retrieve multiqueue element from pipeline")
 		return
 	}
 
-	pads, err := mq.GetSinkPads()
-	if err != nil {
-		logger.Errorw("failed retrieving multiqueue sink pads", err)
-		return
-	}
+	pads := gstutil.SinkPads(mq)
 
 	for _, pad := range pads {
 		caps := pad.GetCurrentCaps()
 		if caps != nil && caps.GetSize() > 0 {
-			gstStruct := caps.GetStructureAt(0)
+			gstStruct := caps.GetStructure(0)
 			padKind := getKindFromGstMimeType(gstStruct)
 
 			g := i.trackStatsGatherer[kind]
@@ -305,20 +288,20 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 			if padKind == kind {
 				var lastAttached time.Time
 
-				pad.AddProbe(gst.PadProbeTypeBuffer, func(_ *gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
-					buffer := info.GetBuffer()
+				pad.AddProbe(gst.PadProbeTypeBuffer, func(_ gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+					buffer := gstutil.ProbeBuffer(info)
 					if buffer == nil {
 						return gst.PadProbeOK
 					}
 
 					size := buffer.GetSize()
 					if g != nil {
-						g.MediaReceived(size)
+						g.MediaReceived(int64(size))
 					}
 
 					// mark the packet with the current time to be able to calculate packet processing latency at output stage
 					now := time.Now()
-					if now.Sub(lastAttached) >= latencySampleInterval && buffer.IsWritable() {
+					if now.Sub(lastAttached) >= latencySampleInterval && gstutil.BufferIsWritable(buffer) {
 						buffer.AddReferenceTimestampMeta(i.latencyCaps, gst.ClockTime(uint64(now.UnixNano())), gst.ClockTime(0))
 						lastAttached = now
 					}
@@ -329,7 +312,7 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 				return
 			}
 		} else {
-			logger.Debugw("could not retrieve multiqueue pad caps", "error", err)
+			logger.Debugw("could not retrieve multiqueue pad caps")
 		}
 	}
 

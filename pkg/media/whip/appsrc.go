@@ -23,12 +23,13 @@ import (
 	"time"
 
 	"github.com/frostbyte73/core"
-	"github.com/go-gst/go-gst/gst"
-	"github.com/go-gst/go-gst/gst/app"
+	"github.com/go-gst/go-gst/pkg/gst"
+	"github.com/go-gst/go-gst/pkg/gstapp"
 	"github.com/pion/webrtc/v4"
 	"go.opentelemetry.io/otel"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/gstutil"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/logger"
@@ -37,7 +38,7 @@ import (
 var tracer = otel.Tracer("github.com/livekit/ingress/pkg/media/whip")
 
 type whipAppSource struct {
-	appSrc     *app.Source
+	appSrc     gstapp.AppSrc
 	trackKind  types.StreamKind
 	relayUrl   string
 	resourceId string
@@ -63,7 +64,7 @@ func newWHIPAppSource(ctx context.Context, resourceId string, trackKind types.St
 		result:     make(chan error, 1),
 	}
 
-	elem, err := gst.NewElementWithName("appsrc", fmt.Sprintf("%s_%s", WHIPAppSourceLabel, trackKind))
+	elem, err := gstutil.NewElementWithName("appsrc", fmt.Sprintf("%s_%s", WHIPAppSourceLabel, trackKind))
 	if err != nil {
 		logger.Errorw("could not create appsrc", err, "resourceID", w.resourceId, "kind", w.trackKind)
 		return nil, err
@@ -72,15 +73,10 @@ func newWHIPAppSource(ctx context.Context, resourceId string, trackKind types.St
 	if err != nil {
 		return nil, err
 	}
-	if err = elem.SetProperty("caps", caps); err != nil {
-		return nil, err
-	}
-	if err = elem.SetProperty("is-live", true); err != nil {
-		return nil, err
-	}
-	elem.SetArg("format", "time")
-
-	w.appSrc = app.SrcFromElement(elem)
+	w.appSrc = elem.(gstapp.AppSrc)
+	w.appSrc.AppSrcSetCaps(caps)
+	w.appSrc.SetObjectProperty("is-live", true)
+	gst.UtilSetObjectArg(w.appSrc, "format", "time")
 
 	return w, nil
 }
@@ -105,7 +101,7 @@ func (w *whipAppSource) Start(ctx context.Context, getCorrectedTs func(time.Dura
 		err := w.copyRelayedData(resp.Body, getCorrectedTs)
 		logger.Debugw("WHIP app source relay stopped", "error", err, "resourceID", w.resourceId, "kind", w.trackKind)
 
-		w.appSrc.EndStream()
+		w.appSrc.EndOfStream()
 
 		if onClose != nil {
 			onClose()
@@ -125,12 +121,12 @@ func (w *whipAppSource) Close() <-chan error {
 	logger.Debugw("WHIP app source relay Close called", "resourceID", w.resourceId, "kind", w.trackKind)
 	w.fuse.Break()
 
-	w.appSrc.EndStream()
+	w.appSrc.EndOfStream()
 
 	return w.result
 }
 
-func (w *whipAppSource) GetAppSource() *app.Source {
+func (w *whipAppSource) GetAppSource() gstapp.AppSrc {
 	return w.appSrc
 }
 
@@ -183,8 +179,8 @@ func (w *whipAppSource) copyRelayedData(r io.Reader, getCorrectedTs func(time.Du
 
 		ts := getCorrectedTs(re.ts)
 
-		b := gst.NewBufferFromBytes(re.data)
-		b.SetPresentationTimestamp(gst.ClockTime(ts))
+		b := gstutil.NewBufferFromBytes(re.data)
+		b.SetPTS(gst.ClockTime(ts))
 
 		ret := w.appSrc.PushBuffer(b)
 		switch ret {
@@ -203,11 +199,11 @@ func getCapsForCodec(mimeType string) (*gst.Caps, error) {
 
 	switch mt {
 	case strings.ToLower(webrtc.MimeTypeH264):
-		return gst.NewCapsFromString("video/x-h264,stream-format=byte-stream,alignment=au"), nil
+		return gst.CapsFromString("video/x-h264,stream-format=byte-stream,alignment=au"), nil
 	case strings.ToLower(webrtc.MimeTypeVP8):
-		return gst.NewCapsFromString("video/x-vp8"), nil
+		return gst.CapsFromString("video/x-vp8"), nil
 	case strings.ToLower(webrtc.MimeTypeOpus):
-		return gst.NewCapsFromString("audio/x-opus,channel-mapping-family=0"), nil
+		return gst.CapsFromString("audio/x-opus,channel-mapping-family=0"), nil
 	}
 
 	return nil, errors.ErrUnsupportedDecodeMimeType(mimeType)
