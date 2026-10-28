@@ -302,7 +302,7 @@ func (i *Input) addStatsCollectionProbe(kind types.StreamKind) {
 					// mark the packet with the current time to be able to calculate packet processing latency at output stage
 					now := time.Now()
 					if now.Sub(lastAttached) >= latencySampleInterval && gstutil.BufferIsWritable(buffer) {
-						buffer.AddReferenceTimestampMeta(i.latencyCaps, gst.ClockTime(uint64(now.UnixNano())), gst.ClockTime(0))
+						gstutil.AddReferenceTimestamp(buffer, i.latencyCaps, gst.ClockTime(uint64(now.UnixNano())))
 						lastAttached = now
 					}
 

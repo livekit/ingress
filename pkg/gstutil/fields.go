@@ -34,14 +34,29 @@ import (
 // ReferenceTimestamp returns the timestamp of the buffer's reference timestamp meta
 // for reference, or false when the buffer has none.
 func ReferenceTimestamp(buffer *gst.Buffer, reference *gst.Caps) (gst.ClockTime, bool) {
-	meta := buffer.GetReferenceTimestampMeta(reference)
-	if meta == nil {
+	m := C.gst_buffer_get_reference_timestamp_meta(
+		(*C.GstBuffer)(gst.UnsafeBufferToGlibNone(buffer)),
+		(*C.GstCaps)(gst.UnsafeCapsToGlibNone(reference)),
+	)
+	if m == nil {
 		return 0, false
 	}
-	m := (*C.GstReferenceTimestampMeta)(gst.UnsafeReferenceTimestampMetaToGlibNone(meta))
 	ts := gst.ClockTime(m.timestamp)
 	runtime.KeepAlive(buffer)
+	runtime.KeepAlive(reference)
 	return ts, true
+}
+
+// AddReferenceTimestamp attaches a reference timestamp meta for reference to the buffer.
+func AddReferenceTimestamp(buffer *gst.Buffer, reference *gst.Caps, timestamp gst.ClockTime) {
+	C.gst_buffer_add_reference_timestamp_meta(
+		(*C.GstBuffer)(gst.UnsafeBufferToGlibNone(buffer)),
+		(*C.GstCaps)(gst.UnsafeCapsToGlibNone(reference)),
+		C.GstClockTime(timestamp),
+		0,
+	)
+	runtime.KeepAlive(buffer)
+	runtime.KeepAlive(reference)
 }
 
 type SpliceInsert struct {
@@ -68,14 +83,12 @@ func ParseSpliceInsert(event *gst.Event) *SpliceInsert {
 		return nil
 	}
 
-	sit := section.GetScteSit()
-	if sit == nil {
+	defer runtime.KeepAlive(section)
+
+	c := C.gst_mpegts_section_get_scte_sit(s)
+	if c == nil {
 		return nil
 	}
-	defer runtime.KeepAlive(section)
-	defer runtime.KeepAlive(sit)
-
-	c := (*C.GstMpegtsSCTESIT)(gstmpegts.UnsafeSCTESITToGlibNone(sit))
 	if gstmpegts.SCTESpliceCommandType(c.splice_command_type) != gstmpegts.GstMtsScteSpliceCommandInsert {
 		return nil
 	}
