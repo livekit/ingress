@@ -24,6 +24,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/livekit/ingress/pkg/ipc"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/testutil"
@@ -108,4 +109,42 @@ func TestStartIngressFailsCleanlyWhenTmpDirCannotBeCreated(t *testing.T) {
 	require.Error(t, err)
 
 	requireNoResidue(t, pm, bus, tmpDir)
+}
+
+// recordingStateNotifier keeps the last state update it was asked to forward.
+type recordingStateNotifier struct {
+	utils.StateNotifier
+	projectID string
+	info      *livekit.IngressInfo
+}
+
+func (n *recordingStateNotifier) UpdateIngressState(_ context.Context, projectID string, info *livekit.IngressInfo) error {
+	n.projectID = projectID
+	n.info = info
+	return nil
+}
+
+func TestUpdateIngressStateRecordsTracksAndForwards(t *testing.T) {
+	notifier := &recordingStateNotifier{StateNotifier: utils.NewNoopStateNotifier()}
+	monitor := stats.NewMonitor()
+	sm := NewSessionManager(monitor, nil)
+	pm, err := NewProcessManager(sm, notifier, psrpc.NewLocalMessageBus(), nil)
+	require.NoError(t, err)
+
+	info := newTestParams("").IngressInfo
+	monitor.HandlerStarted(info, 1)
+	info.State.Audio = &livekit.InputAudioState{MimeType: "audio/opus"}
+	info.State.Video = &livekit.InputVideoState{MimeType: "video/VP8"}
+
+	_, err = pm.UpdateIngressState(context.Background(), &ipc.UpdateIngressStateRequest{ProjectId: "p_test", Info: info})
+	require.NoError(t, err)
+
+	require.Equal(t, "p_test", notifier.projectID)
+	require.Same(t, info, notifier.info, "the update is forwarded as received")
+
+	u := monitor.SessionEnded(testResourceID)
+	require.NotNil(t, u)
+	require.Equal(t, "in_test", u.IngressID)
+	require.Equal(t, "audio/opus", u.AudioMimeType)
+	require.Equal(t, "video/VP8", u.VideoMimeType)
 }

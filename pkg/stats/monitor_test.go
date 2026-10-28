@@ -156,3 +156,53 @@ cpu_cost:
 
 	require.Nil(t, m.SessionEnded("res_test"), "usage is reported once")
 }
+
+func TestSessionUsageTracks(t *testing.T) {
+	m := NewMonitor()
+
+	info := &livekit.IngressInfo{
+		IngressId:         "IN_test",
+		InputType:         livekit.IngressInput_URL_INPUT,
+		EnableTranscoding: proto.Bool(true),
+		State:             &livekit.IngressState{ResourceId: "res_test"},
+	}
+
+	// an update for a session with no usage record does not create one
+	update := proto.Clone(info).(*livekit.IngressInfo)
+	update.State.Audio = &livekit.InputAudioState{MimeType: "audio/aac"}
+	m.HandlerStateUpdated(update)
+	require.Nil(t, m.SessionEnded("res_test"))
+
+	m.HandlerStarted(info, 1)
+	m.HandlerStateUpdated(update)
+	m.HandlerExited(1, nil)
+
+	u := m.SessionEnded("res_test")
+	require.NotNil(t, u)
+	require.Equal(t, "IN_test", u.IngressID)
+	require.Equal(t, livekit.IngressInput_URL_INPUT, u.InputType)
+	require.True(t, u.Transcoding)
+	require.Equal(t, "audio/aac", u.AudioMimeType)
+	require.Empty(t, u.VideoMimeType, "no video track was reported")
+
+	// a later update adds video and keeps the audio type
+	m.HandlerStarted(info, 2)
+	update.State.Video = &livekit.InputVideoState{MimeType: "video/H264"}
+	m.HandlerStateUpdated(update)
+	update.State.Video = nil
+	m.HandlerStateUpdated(update)
+	m.HandlerExited(2, nil)
+
+	u = m.SessionEnded("res_test")
+	require.NotNil(t, u)
+	require.Equal(t, "audio/aac", u.AudioMimeType)
+	require.Equal(t, "video/H264", u.VideoMimeType, "a reported track stays recorded")
+
+	// a session that ends before the source is parsed reports no tracks
+	m.HandlerStarted(info, 3)
+	m.HandlerExited(3, nil)
+	u = m.SessionEnded("res_test")
+	require.NotNil(t, u)
+	require.Empty(t, u.AudioMimeType)
+	require.Empty(t, u.VideoMimeType)
+}

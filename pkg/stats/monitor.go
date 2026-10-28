@@ -82,6 +82,12 @@ type SessionUsage struct {
 	InputType   livekit.IngressInput
 	Transcoding bool
 
+	// Mime types of the input tracks the handler reported, empty until the
+	// source has been parsed. A session that ends before then leaves both
+	// empty, which is distinct from an audio-only source.
+	AudioMimeType string
+	VideoMimeType string
+
 	CPUTime   time.Duration // user + system time, from the exited handlers' rusage
 	Duration  time.Duration // wall time the handlers ran
 	MaxCPU    float64       // highest 1s sample, in cores
@@ -455,6 +461,31 @@ func (m *Monitor) HandlerStarted(info *livekit.IngressInfo, pid int) {
 		m.usage[resourceID] = u
 	}
 	m.handlers[pid] = &handlerRun{usage: u, startedAt: time.Now()}
+}
+
+// HandlerStateUpdated records the input track mime types from a state update
+// the handler sent for the session in info. An update for a session without a
+// usage record is ignored: the record exists from HandlerStarted until
+// SessionEnded, and a late update must not recreate it.
+func (m *Monitor) HandlerStateUpdated(info *livekit.IngressInfo) {
+	state := info.GetState()
+	if state == nil {
+		return
+	}
+
+	m.usageLock.Lock()
+	defer m.usageLock.Unlock()
+
+	u := m.usage[state.GetResourceId()]
+	if u == nil {
+		return
+	}
+	if mime := state.GetAudio().GetMimeType(); mime != "" {
+		u.AudioMimeType = mime
+	}
+	if mime := state.GetVideo().GetMimeType(); mime != "" {
+		u.VideoMimeType = mime
+	}
 }
 
 // HandlerExited adds the run of the exited handler pid to its session's usage.
