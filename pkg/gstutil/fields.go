@@ -20,6 +20,8 @@ package gstutil
 // #cgo CFLAGS: -DGST_USE_UNSTABLE_API
 // #include <gst/gst.h>
 // #include <gst/mpegts/mpegts.h>
+//
+// static void section_unref(GstMpegtsSection *s) { gst_mpegts_section_unref(s); }
 import "C"
 
 import (
@@ -74,16 +76,17 @@ type SpliceEvent struct {
 // ParseSpliceInsert returns the splice_insert command carried by an SCTE-35 section
 // event, or nil for any other event or command.
 func ParseSpliceInsert(event *gst.Event) *SpliceInsert {
-	section := gstmpegts.EventParseMpegtsSection(event)
-	if section == nil {
+	// The generated EventParseMpegtsSection frees the returned reference with C.free.
+	s := C.gst_event_parse_mpegts_section((*C.GstEvent)(gst.UnsafeEventToGlibNone(event)))
+	runtime.KeepAlive(event)
+	if s == nil {
 		return nil
 	}
-	s := (*C.GstMpegtsSection)(gstmpegts.UnsafeSectionToGlibNone(section))
+	defer C.section_unref(s)
+
 	if gstmpegts.SectionType(s.section_type) != gstmpegts.SectionScteSit {
 		return nil
 	}
-
-	defer runtime.KeepAlive(section)
 
 	c := C.gst_mpegts_section_get_scte_sit(s)
 	if c == nil {

@@ -68,12 +68,8 @@ func TestReferenceTimestampOtherReference(t *testing.T) {
 	require.False(t, ok)
 }
 
-func spliceEvent(sit *gstmpegts.SCTESIT) *gst.Event {
-	return gstmpegts.EventNewMpegtsSection(gstmpegts.SectionFromScteSit(sit, 500))
-}
-
 func TestParseSpliceInsertOut(t *testing.T) {
-	ev := spliceEvent(gstmpegts.NewScteSpliceOut(7, gst.ClockTime(5*time.Second), gst.ClockTime(30*time.Second)))
+	ev := newSpliceOutEvent(7, gst.ClockTime(5*time.Second), gst.ClockTime(30*time.Second))
 
 	var insert *SpliceInsert
 	logged := captureLog(t, func() {
@@ -89,7 +85,7 @@ func TestParseSpliceInsertOut(t *testing.T) {
 }
 
 func TestParseSpliceInsertImmediateIn(t *testing.T) {
-	insert := ParseSpliceInsert(spliceEvent(gstmpegts.NewScteSpliceIn(8, gst.ClockTimeNone)))
+	insert := ParseSpliceInsert(newSpliceInEvent(8, gst.ClockTimeNone))
 
 	require.NotNil(t, insert)
 	require.Equal(t, []SpliceEvent{{
@@ -99,7 +95,21 @@ func TestParseSpliceInsertImmediateIn(t *testing.T) {
 }
 
 func TestParseSpliceInsertIgnoresOtherCommands(t *testing.T) {
-	require.Nil(t, ParseSpliceInsert(spliceEvent(gstmpegts.NewScteNull())))
+	require.Nil(t, ParseSpliceInsert(newNullSpliceEvent()))
+}
+
+// The event's section must be left with the reference the event holds.
+func TestParseSpliceInsertReleasesSection(t *testing.T) {
+	for name, ev := range map[string]*gst.Event{
+		"insert": newSpliceOutEvent(9, gst.ClockTime(time.Second), gst.ClockTime(10*time.Second)),
+		"null":   newNullSpliceEvent(),
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, 1, sectionRefCount(ev))
+			ParseSpliceInsert(ev)
+			require.Equal(t, 1, sectionRefCount(ev))
+		})
+	}
 }
 
 func TestParseSpliceInsertIgnoresOtherEvents(t *testing.T) {
