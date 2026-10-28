@@ -267,6 +267,7 @@ func (s *ProcessManager) killAll() {
 }
 
 func (s *ProcessManager) UpdateIngressState(ctx context.Context, req *ipc.UpdateIngressStateRequest) (*emptypb.Empty, error) {
+	s.sm.HandlerStateUpdated(req.Info)
 	return &emptypb.Empty{}, s.stateNotifier.UpdateIngressState(ctx, req.ProjectId, req.Info)
 }
 
