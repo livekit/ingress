@@ -10,6 +10,7 @@ linters:
     - dupl
     - errname
     - fatcontext
+    - forbidigo
     - goconst
     - govet
     - misspell
@@ -17,6 +18,24 @@ linters:
     - revive
     - staticcheck
   settings:
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: ^gst\.PadProbeInfo\.GetBuffer$
+          pkg: ^github\.com/go-gst/go-gst/pkg/gst$
+          msg: holds a reference until the next GC, which leaves the buffer unwritable; use gstutil.ProbeBuffer
+        - pattern: ^gst\.PadProbeInfo\.GetEvent$
+          pkg: ^github\.com/go-gst/go-gst/pkg/gst$
+          msg: holds a reference until the next GC; use gstutil.ProbeEvent
+        - pattern: ^gst\.Buffer\.(Add|Get)ReferenceTimestampMeta$
+          pkg: ^github\.com/go-gst/go-gst/pkg/gst$
+          msg: logs a warning on every call; use gstutil.AddReferenceTimestamp or gstutil.ReferenceTimestamp
+        - pattern: ^gstmpegts\.(Event|Message)ParseMpegtsSection$
+          pkg: ^github\.com/go-gst/go-gst/pkg/gstmpegts$
+          msg: frees the section with C.free instead of unreffing it; use gstutil.ParseSpliceInsert
+        - pattern: ^gstmpegts\.Section\.GetScteSit$
+          pkg: ^github\.com/go-gst/go-gst/pkg/gstmpegts$
+          msg: logs a warning on every call; use gstutil.ParseSpliceInsert
     staticcheck:
       checks:
         - "all"

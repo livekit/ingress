@@ -25,6 +25,7 @@ import (
 	"github.com/go-gst/go-gst/pkg/gst"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/gstutil"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
@@ -342,7 +343,7 @@ func (s *WebRTCSink) addSpliceProbe(bin gst.Bin) {
 	}
 
 	pad.AddProbe(gst.PadProbeTypeEventDownstream, func(_ gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
-		if event := info.GetEvent(); event != nil && event.HasName("scte-sit") {
+		if event := gstutil.ProbeEvent(info); event != nil && event.HasName("scte-sit") {
 			s.lock.Lock()
 			p := s.spliceProcessor
 			s.lock.Unlock()

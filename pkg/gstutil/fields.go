@@ -135,6 +135,21 @@ func ProbeBuffer(info *gst.PadProbeInfo) *gst.Buffer {
 	return gst.UnsafeBufferFromGlibBorrow(unsafe.Pointer(b))
 }
 
+// ProbeEvent returns the event a pad probe is called with, without taking a reference
+// on it, or nil when the probe is not for an event. The event is only valid until the
+// probe returns.
+func ProbeEvent(info *gst.PadProbeInfo) *gst.Event {
+	i := (*C.GstPadProbeInfo)(gst.UnsafePadProbeInfoToGlibNone(info))
+	if i._type&C.GST_PAD_PROBE_TYPE_EVENT_BOTH == 0 {
+		return nil
+	}
+	e := C.gst_pad_probe_info_get_event(i)
+	if e == nil {
+		return nil
+	}
+	return gst.UnsafeEventFromGlibBorrow(unsafe.Pointer(e))
+}
+
 func BufferIsWritable(buffer *gst.Buffer) bool {
 	return gst.UnsafeMiniObjectFromGlibBorrow(gst.UnsafeBufferToGlibNone(buffer)).IsWritable()
 }

@@ -106,7 +106,7 @@ func (i *Input) addGateProbe(pad gst.Pad, padName string, state *padTimingState)
 
 func (i *Input) addSegmentEventProbe(pad gst.Pad, padName string, state *padTimingState) {
 	pad.AddProbe(gst.PadProbeTypeEventDownstream, func(_ gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
-		event := info.GetEvent()
+		event := gstutil.ProbeEvent(info)
 		if event == nil || event.GetType() != gst.EventSegment {
 			return gst.PadProbeOK
 		}
