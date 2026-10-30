@@ -21,7 +21,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/pkg/gst"
 	"google.golang.org/grpc/status"
 
 	"github.com/livekit/psrpc"

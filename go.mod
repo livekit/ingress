@@ -2,13 +2,11 @@ module github.com/livekit/ingress
 
 go 1.26.8
 
-replace github.com/go-gst/go-gst => github.com/livekit/gst-go v0.0.0-20261015120717-e0fc4e6af2ac
-
 require (
 	github.com/aclements/go-moremath v0.0.0-20241023150245-c8bbc672ef66
 	github.com/frostbyte73/core v0.1.1
-	github.com/go-gst/go-glib v1.4.1-0.20250303082535-35ebad1471fd
-	github.com/go-gst/go-gst v1.4.0
+	github.com/go-gst/go-glib v0.0.4
+	github.com/go-gst/go-gst v0.0.3-0.20261014140714-34ab949f28e4
 	github.com/google/go-cmp v0.7.0
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20261019042323-a9bd9ffaba6f
@@ -64,7 +62,6 @@ require (
 	github.com/dennwc/iters v1.2.2 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect
 	github.com/gammazero/deque v1.2.1 // indirect
-	github.com/go-gst/go-pointer v0.0.0-20241127163939-ba766f075b4c // indirect
 	github.com/go-logr/logr v1.4.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/google/cel-go v0.29.0 // indirect
