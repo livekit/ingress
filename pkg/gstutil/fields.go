@@ -120,9 +120,14 @@ func DurationOf(t gst.ClockTime) (time.Duration, bool) {
 	return time.Duration(t), true
 }
 
-// ProbeBuffer returns the buffer a pad probe is called with, without taking a reference
-// on it, or nil when the probe is not for a buffer. The buffer is only valid until the
-// probe returns.
+// ProbeBuffer returns the buffer a pad probe is called with, or nil when the probe is
+// not for a buffer. The buffer is only valid until the probe returns.
+//
+// It borrows the buffer, since the pad owns it, so it adds no reference and the buffer
+// stays writable when the pad holds the only one. PadProbeInfo.GetBuffer takes an extra
+// reference that only a Go finalizer drops, which causes two problems:
+//  1. The buffer is not writable in the probe, because its refcount is 2.
+//  2. The buffer is not released until the next GC, so a buffer pool can run dry.
 func ProbeBuffer(info *gst.PadProbeInfo) *gst.Buffer {
 	i := (*C.GstPadProbeInfo)(gst.UnsafePadProbeInfoToGlibNone(info))
 	if i._type&C.GST_PAD_PROBE_TYPE_BUFFER == 0 {
@@ -151,5 +156,7 @@ func ProbeEvent(info *gst.PadProbeInfo) *gst.Event {
 }
 
 func BufferIsWritable(buffer *gst.Buffer) bool {
-	return gst.UnsafeMiniObjectFromGlibBorrow(gst.UnsafeBufferToGlibNone(buffer)).IsWritable()
+	writable := gst.UnsafeMiniObjectFromGlibBorrow(gst.UnsafeBufferToGlibNone(buffer)).IsWritable()
+	runtime.KeepAlive(buffer)
+	return writable
 }
