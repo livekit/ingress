@@ -47,8 +47,6 @@ func (i *Input) addGateProbe(pad gst.Pad, padName string, state *padTimingState)
 			return gst.PadProbeDrop
 		}
 
-		buffer := gstutil.ProbeBuffer(info)
-
 		if state.gateCompleted.Load() {
 			if state.skipOffset.Load() {
 				return gst.PadProbeOK
@@ -56,7 +54,7 @@ func (i *Input) addGateProbe(pad gst.Pad, padName string, state *padTimingState)
 			if !state.offsetReady.Load() {
 				return gst.PadProbeDrop
 			}
-			applied := applyPadOffset(buffer, state, pts)
+			applied := applyPadOffset(gstutil.ProbeWritableBuffer(info), state, pts)
 			if !applied {
 				return gst.PadProbeDrop
 			}

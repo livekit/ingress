@@ -38,7 +38,9 @@ func NewVideoOutputBin(options *livekit.IngressVideoEncodingOptions, outputs []*
 		if err != nil {
 			return nil, err
 		}
-		videoRate.SetObjectProperty("max-rate", int32(options.FrameRate))
+		if err = gstutil.SetProperty(videoRate, "max-rate", int32(options.FrameRate)); err != nil {
+			return nil, err
+		}
 		o.preProcessorElements = append(o.preProcessorElements, videoRate)
 	}
 

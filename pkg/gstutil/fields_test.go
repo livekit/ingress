@@ -119,6 +119,47 @@ func TestParseSpliceInsertIgnoresOtherEvents(t *testing.T) {
 	require.Nil(t, gstutil.ParseSpliceInsert(gst.NewEventEOS()))
 }
 
+func TestProbeWritableBuffer(t *testing.T) {
+	for name, shared := range map[string]bool{"shared": true, "unshared": false} {
+		t.Run(name, func(t *testing.T) {
+			pad := gst.NewPad("src", gst.PadSrc)
+			require.True(t, pad.SetActive(true))
+			pad.PushEvent(gst.NewEventStreamStart("test"))
+			segment := gst.NewSegment()
+			segment.Init(gst.FormatTime)
+			pad.PushEvent(gst.NewEventSegment(segment))
+
+			copied := false
+			var downstream gst.ClockTime
+			pad.AddProbe(gst.PadProbeTypeBuffer, func(_ gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+				before := gst.UnsafeBufferToGlibNone(gstutil.ProbeBuffer(info))
+				buffer := gstutil.ProbeWritableBuffer(info)
+				copied = gst.UnsafeBufferToGlibNone(buffer) != before
+				buffer.SetPTS(2)
+				return gst.PadProbeOK
+			})
+			pad.AddProbe(gst.PadProbeTypeBuffer, func(_ gst.Pad, info *gst.PadProbeInfo) gst.PadProbeReturn {
+				downstream = gstutil.ProbeBuffer(info).PTS()
+				return gst.PadProbeOK
+			})
+
+			held := gst.NewBuffer()
+			held.SetPTS(1)
+			pushed := held
+			if shared {
+				pushed = gst.UnsafeBufferFromGlibNone(gst.UnsafeBufferToGlibNone(held))
+			}
+			pad.Push(pushed)
+
+			require.Equal(t, gst.ClockTime(2), downstream, "the modified buffer did not replace the probe data")
+			require.Equal(t, shared, copied)
+			if shared {
+				require.Equal(t, gst.ClockTime(1), held.PTS(), "a shared buffer was modified in place")
+			}
+		})
+	}
+}
+
 // ProbeEvent must not add a reference: one held by the Go wrapper is only dropped by a finalizer.
 func TestProbeEventBorrows(t *testing.T) {
 	pad := gst.NewPad("src", gst.PadSrc)

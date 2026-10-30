@@ -107,7 +107,9 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 	if err != nil {
 		return nil, err
 	}
-	queueIn.SetObjectProperty("max-size-buffers", uint32(1))
+	if err = gstutil.SetProperty(queueIn, "max-size-buffers", uint32(1)); err != nil {
+		return nil, err
+	}
 
 	pads := gstutil.SinkPads(queueIn)
 	if len(pads) == 0 {
@@ -129,19 +131,23 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 	if err != nil {
 		return nil, err
 	}
-	inputCaps.SetObjectProperty("caps", gst.CapsFromString(
+	if err = gstutil.SetProperty(inputCaps, "caps", gst.CapsFromString(
 		fmt.Sprintf(
 			"video/x-raw,width=%d,height=%d",
 			layer.Width,
 			layer.Height,
 		),
-	))
+	)); err != nil {
+		return nil, err
+	}
 
 	queueEnc, err := gstutil.NewElementWithName("queue", fmt.Sprintf("video_%s_enc", layer.Quality.String()))
 	if err != nil {
 		return nil, err
 	}
-	queueEnc.SetObjectProperty("max-size-buffers", uint32(1))
+	if err = gstutil.SetProperty(queueEnc, "max-size-buffers", uint32(1)); err != nil {
+		return nil, err
+	}
 
 	e.elements = []gst.Element{
 		queueIn, videoScale, inputCaps, queueEnc,
@@ -154,11 +160,19 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 			return nil, err
 		}
 
-		e.enc.SetObjectProperty("bitrate", uint32(layer.Bitrate/1000))
+		if err = gstutil.SetProperty(e.enc, "bitrate", uint32(layer.Bitrate/1000)); err != nil {
+			return nil, err
+		}
 		// 1s VBV buffer size
-		e.enc.SetObjectProperty("vbv-buf-capacity", uint32(1000))
-		e.enc.SetObjectProperty("byte-stream", true)
-		e.enc.SetObjectProperty("threads", uint32(threadCount))
+		if err = gstutil.SetProperty(e.enc, "vbv-buf-capacity", uint32(1000)); err != nil {
+			return nil, err
+		}
+		if err = gstutil.SetProperty(e.enc, "byte-stream", true); err != nil {
+			return nil, err
+		}
+		if err = gstutil.SetProperty(e.enc, "threads", uint32(threadCount)); err != nil {
+			return nil, err
+		}
 
 		gst.UtilSetObjectArg(e.enc, "tune", "zerolatency")
 		gst.UtilSetObjectArg(e.enc, "speed-preset", "veryfast")
@@ -167,9 +181,11 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 		if err != nil {
 			return nil, err
 		}
-		profileCaps.SetObjectProperty("caps", gst.CapsFromString(
+		if err = gstutil.SetProperty(profileCaps, "caps", gst.CapsFromString(
 			"video/x-h264,stream-format=byte-stream,profile=baseline",
-		))
+		)); err != nil {
+			return nil, err
+		}
 
 		e.elements = append(e.elements, e.enc, profileCaps)
 		if err != nil {
@@ -181,14 +197,30 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 		if err != nil {
 			return nil, err
 		}
-		e.enc.SetObjectProperty("target-bitrate", int32(layer.Bitrate))
-		e.enc.SetObjectProperty("keyframe-max-dist", int32(100))
-		e.enc.SetObjectProperty("threads", int32(threadCount))
-		e.enc.SetObjectProperty("cpu-used", int32(-6))
-		e.enc.SetObjectProperty("deadline", int64(1))
-		e.enc.SetObjectProperty("buffer-initial-size", int32(500))
-		e.enc.SetObjectProperty("buffer-optimal-size", int32(600))
-		e.enc.SetObjectProperty("buffer-size", int32(1000))
+		if err = gstutil.SetProperty(e.enc, "target-bitrate", int32(layer.Bitrate)); err != nil {
+			return nil, err
+		}
+		if err = gstutil.SetProperty(e.enc, "keyframe-max-dist", int32(100)); err != nil {
+			return nil, err
+		}
+		if err = gstutil.SetProperty(e.enc, "threads", int32(threadCount)); err != nil {
+			return nil, err
+		}
+		if err = gstutil.SetProperty(e.enc, "cpu-used", int32(-6)); err != nil {
+			return nil, err
+		}
+		if err = gstutil.SetProperty(e.enc, "deadline", int64(1)); err != nil {
+			return nil, err
+		}
+		if err = gstutil.SetProperty(e.enc, "buffer-initial-size", int32(500)); err != nil {
+			return nil, err
+		}
+		if err = gstutil.SetProperty(e.enc, "buffer-optimal-size", int32(600)); err != nil {
+			return nil, err
+		}
+		if err = gstutil.SetProperty(e.enc, "buffer-size", int32(1000)); err != nil {
+			return nil, err
+		}
 		gst.UtilSetObjectArg(e.enc, "end-usage", "cbr")
 
 		e.elements = append(e.elements, e.enc)
@@ -201,7 +233,9 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 	if err != nil {
 		return nil, err
 	}
-	queueOut.SetObjectProperty("max-size-buffers", uint32(2))
+	if err = gstutil.SetProperty(queueOut, "max-size-buffers", uint32(2)); err != nil {
+		return nil, err
+	}
 
 	e.elements = append(e.elements, queueOut, e.sink)
 
@@ -241,15 +275,19 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 	if err != nil {
 		return nil, err
 	}
-	capsFilter.SetObjectProperty("caps", gst.CapsFromString(
+	if err = gstutil.SetProperty(capsFilter, "caps", gst.CapsFromString(
 		fmt.Sprintf("audio/x-raw,format=S16LE,layout=interleaved,rate=48000,channels=%d", channels),
-	))
+	)); err != nil {
+		return nil, err
+	}
 
 	queueEnc, err := gstutil.NewElementWithName("queue", "audio_enc")
 	if err != nil {
 		return nil, err
 	}
-	queueEnc.SetObjectProperty("max-size-buffers", uint32(1))
+	if err = gstutil.SetProperty(queueEnc, "max-size-buffers", uint32(1)); err != nil {
+		return nil, err
+	}
 
 	pads := gstutil.SinkPads(queueEnc)
 	if len(pads) == 0 {
@@ -271,9 +309,13 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 		}
 
 		if options.Bitrate != 0 {
-			e.enc.SetObjectProperty("bitrate", int32(options.Bitrate))
+			if err = gstutil.SetProperty(e.enc, "bitrate", int32(options.Bitrate)); err != nil {
+				return nil, err
+			}
 		}
-		e.enc.SetObjectProperty("dtx", !options.DisableDtx)
+		if err = gstutil.SetProperty(e.enc, "dtx", !options.DisableDtx); err != nil {
+			return nil, err
+		}
 		// TODO: FEC?
 		// if err = e.enc.SetProperty("inband-fec", true); err != nil {
 		// 	return nil, err
@@ -288,7 +330,9 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 	if err != nil {
 		return nil, err
 	}
-	queueOut.SetObjectProperty("max-size-time", uint64(5e7))
+	if err = gstutil.SetProperty(queueOut, "max-size-time", uint64(5e7)); err != nil {
+		return nil, err
+	}
 
 	e.elements = []gst.Element{
 		audioConvert, audioResample, capsFilter, queueEnc, e.enc, queueOut, e.sink,

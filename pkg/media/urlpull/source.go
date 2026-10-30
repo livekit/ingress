@@ -64,14 +64,18 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 			return nil, err
 		}
 
-		elem.SetObjectProperty("location", p.Url)
+		if err = gstutil.SetProperty(elem, "location", p.Url); err != nil {
+			return nil, err
+		}
 
 	} else if strings.HasPrefix(p.Url, "srt://") {
 		elem, err = gstutil.NewElement("srtclientsrc")
 		if err != nil {
 			return nil, err
 		}
-		elem.SetObjectProperty("uri", p.Url)
+		if err = gstutil.SetProperty(elem, "uri", p.Url); err != nil {
+			return nil, err
+		}
 
 		printStats = func() {
 			if v, ok := elem.ObjectProperty("stats").(*gst.Structure); ok && v != nil {
@@ -83,10 +87,14 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 		if err != nil {
 			return nil, err
 		}
-		elem.SetObjectProperty("uri", p.Url)
+		if err = gstutil.SetProperty(elem, "uri", p.Url); err != nil {
+			return nil, err
+		}
 
 		if p.MulticastInterface != "" {
-			elem.SetObjectProperty("multicast-iface", p.MulticastInterface)
+			if err = gstutil.SetProperty(elem, "multicast-iface", p.MulticastInterface); err != nil {
+				return nil, err
+			}
 		}
 
 		// udpsrc doesn't expose a stats property, so leave printStats unset
@@ -100,10 +108,14 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 	}
 
 	// Disable buffer count limit and rely on bytes and time limits
-	queue.SetObjectProperty("max-size-buffers", uint32(0))
+	if err = gstutil.SetProperty(queue, "max-size-buffers", uint32(0)); err != nil {
+		return nil, err
+	}
 
 	if strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://") {
-		queue.SetObjectProperty("use-buffering", true)
+		if err = gstutil.SetProperty(queue, "use-buffering", true); err != nil {
+			return nil, err
+		}
 	}
 
 	err = gstutil.AddMany(bin, elem, queue)

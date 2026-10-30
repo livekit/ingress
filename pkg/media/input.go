@@ -199,7 +199,9 @@ func (i *Input) onPadAdded(_ gst.Element, pad gst.Pad) {
 
 	// Make sure we emit scte35 markers if available
 	if tsparser := i.bin.GetByName("tsdemux0"); tsparser != nil {
-		tsparser.SetObjectProperty("send-scte35-events", true)
+		if err := gstutil.SetProperty(tsparser, "send-scte35-events", true); err != nil {
+			logger.Errorw("failed setting `send-scte35-events` property", err)
+		}
 	}
 
 	// surface callback for first audio and video pads, plug in fakesink on the rest

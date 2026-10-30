@@ -22,6 +22,12 @@ package gstutil
 // #include <gst/mpegts/mpegts.h>
 //
 // static void section_unref(GstMpegtsSection *s) { gst_mpegts_section_unref(s); }
+//
+// static GstBuffer *probe_writable_buffer(GstPadProbeInfo *info) {
+//   GstBuffer *b = gst_buffer_make_writable(GST_PAD_PROBE_INFO_BUFFER(info));
+//   GST_PAD_PROBE_INFO_DATA(info) = b;
+//   return b;
+// }
 import "C"
 
 import (
@@ -138,6 +144,16 @@ func ProbeBuffer(info *gst.PadProbeInfo) *gst.Buffer {
 		return nil
 	}
 	return gst.UnsafeBufferFromGlibBorrow(unsafe.Pointer(b))
+}
+
+// ProbeWritableBuffer is like ProbeBuffer, but returns a buffer that can be modified. A
+// shared buffer is copied, and the copy replaces it in the probe info.
+func ProbeWritableBuffer(info *gst.PadProbeInfo) *gst.Buffer {
+	i := (*C.GstPadProbeInfo)(gst.UnsafePadProbeInfoToGlibNone(info))
+	if i._type&C.GST_PAD_PROBE_TYPE_BUFFER == 0 || C.gst_pad_probe_info_get_buffer(i) == nil {
+		return nil
+	}
+	return gst.UnsafeBufferFromGlibBorrow(unsafe.Pointer(C.probe_writable_buffer(i)))
 }
 
 // ProbeEvent returns the event a pad probe is called with, without taking a reference

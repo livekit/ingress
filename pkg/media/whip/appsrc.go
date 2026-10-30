@@ -75,7 +75,9 @@ func newWHIPAppSource(ctx context.Context, resourceId string, trackKind types.St
 	}
 	w.appSrc = elem.(gstapp.AppSrc)
 	w.appSrc.AppSrcSetCaps(caps)
-	w.appSrc.SetObjectProperty("is-live", true)
+	if err = gstutil.SetProperty(w.appSrc, "is-live", true); err != nil {
+		return nil, err
+	}
 	gst.UtilSetObjectArg(w.appSrc, "format", "time")
 
 	return w, nil

@@ -61,7 +61,9 @@ func NewRTMPRelaySource(ctx context.Context, p *params.Params) (*RTMPRelaySource
 	}
 	s.flvSrc = elem.(gstapp.AppSrc)
 	s.flvSrc.AppSrcSetCaps(gst.CapsFromString("video/x-flv"))
-	s.flvSrc.SetObjectProperty("is-live", true)
+	if err = gstutil.SetProperty(s.flvSrc, "is-live", true); err != nil {
+		return nil, err
+	}
 	gst.UtilSetObjectArg(s.flvSrc, "format", "time")
 	s.writer = newAppSrcWriter(s.flvSrc)
 
