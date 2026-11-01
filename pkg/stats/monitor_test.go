@@ -223,7 +223,7 @@ func TestSessionUsageLabels(t *testing.T) {
 		{"rtmp video only", SessionUsage{InputType: livekit.IngressInput_RTMP_INPUT, Transcoding: true, VideoMimeType: testVideoMime}, typeLabelRTMP, mediaLabelVideo},
 		{"whip transcoding, no tracks yet", SessionUsage{InputType: livekit.IngressInput_WHIP_INPUT, Transcoding: true}, typeLabelWHIP, labelUnknown},
 		{"whip bypass is not distinguished", SessionUsage{InputType: livekit.IngressInput_WHIP_INPUT, Transcoding: false, AudioMimeType: "audio/opus", VideoMimeType: "video/VP8"}, typeLabelWHIP, mediaLabelAV},
-		{"unset input type", SessionUsage{}, labelUnknown, labelUnknown},
+		{"unrecognized input type", SessionUsage{InputType: livekit.IngressInput(99)}, labelUnknown, labelUnknown},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
