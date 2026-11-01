@@ -45,13 +45,21 @@ const (
 	promLabelTranscoding = "transcoding"
 	promLabelMedia       = "media"
 
+	typeLabelRTMP   = "rtmp"
+	typeLabelWHIP   = "whip"
+	typeLabelURL    = "url"
+	mediaLabelAudio = "audio"
+	mediaLabelVideo = "video"
+	mediaLabelAV    = "av"
+	labelUnknown    = "unknown"
+
 	publicationStatusSuccess  = "success"
 	publicationStatus4xx      = "4xx"
 	publicationStatus5xx      = "5xx"
 	publicationStatusInternal = "internal"
 )
 
-// promSessionCPUBuckets has edges at the default admission costs (0.1, 2 and 4
+// promSessionCPUBuckets has edges at the default admission costs (2 and 4
 // cores), so the share of sessions above a cost reads from one bucket.
 var promSessionCPUBuckets = []float64{0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16}
 
@@ -65,7 +73,7 @@ type Monitor struct {
 	promNodeAvailable      prometheus.GaugeFunc
 	promPublicationCounter *prometheus.CounterVec
 
-	// session metrics are observed once per session when it ends, labelled by
+	// session metrics are observed once per session when it ends, labeled by
 	// input kind and the media the source carried
 	promSessionMaxCPU  *prometheus.HistogramVec
 	promSessionAvgCPU  *prometheus.HistogramVec
@@ -114,21 +122,20 @@ func (u *SessionUsage) AvgCPU() float64 {
 	return u.CPUTime.Seconds() / u.Duration.Seconds()
 }
 
-// TypeLabel is the session's input kind as a metric label: rtmp, whip,
-// whip_bypass, url, or unknown.
+// TypeLabel is the session's input kind as a metric label: rtmp, whip, url,
+// or unknown. WHIP sessions that bypass transcoding run in the service
+// process without a handler, so they have no usage record and are never
+// observed; whip therefore only covers transcoding sessions.
 func (u *SessionUsage) TypeLabel() string {
 	switch u.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		return "rtmp"
+		return typeLabelRTMP
 	case livekit.IngressInput_WHIP_INPUT:
-		if u.Transcoding {
-			return "whip"
-		}
-		return "whip_bypass"
+		return typeLabelWHIP
 	case livekit.IngressInput_URL_INPUT:
-		return "url"
+		return typeLabelURL
 	}
-	return "unknown"
+	return labelUnknown
 }
 
 // MediaLabel is the media the source carried as a metric label: audio, video,
@@ -136,13 +143,13 @@ func (u *SessionUsage) TypeLabel() string {
 func (u *SessionUsage) MediaLabel() string {
 	switch {
 	case u.AudioMimeType != "" && u.VideoMimeType != "":
-		return "av"
+		return mediaLabelAV
 	case u.AudioMimeType != "":
-		return "audio"
+		return mediaLabelAudio
 	case u.VideoMimeType != "":
-		return "video"
+		return mediaLabelVideo
 	}
-	return "unknown"
+	return labelUnknown
 }
 
 type handlerRun struct {
@@ -503,11 +510,11 @@ func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		m.requestGauge.With(prometheus.Labels{promLabelType: "rtmp", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: typeLabelRTMP, promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
 	case livekit.IngressInput_WHIP_INPUT:
-		m.requestGauge.With(prometheus.Labels{promLabelType: "whip", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: typeLabelWHIP, promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
 	case livekit.IngressInput_URL_INPUT:
-		m.requestGauge.With(prometheus.Labels{promLabelType: "url", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: typeLabelURL, promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
 
 	}
 }
@@ -515,11 +522,11 @@ func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
 func (m *Monitor) IngressEnded(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		m.requestGauge.With(prometheus.Labels{promLabelType: "rtmp", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: typeLabelRTMP, promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	case livekit.IngressInput_WHIP_INPUT:
-		m.requestGauge.With(prometheus.Labels{promLabelType: "whip", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: typeLabelWHIP, promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	case livekit.IngressInput_URL_INPUT:
-		m.requestGauge.With(prometheus.Labels{promLabelType: "url", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: typeLabelURL, promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	}
 }
 

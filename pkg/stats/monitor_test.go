@@ -96,6 +96,8 @@ func TestPublicationStatus(t *testing.T) {
 }
 
 const (
+	testVideoMime = "video/H264"
+
 	burnCPUEnv = "INGRESS_TEST_BURN_CPU"
 	// burnCPU spans at least one tick of the 1s per-process sampler
 	burnCPU = 2 * time.Second
@@ -189,7 +191,7 @@ func TestSessionUsageTracks(t *testing.T) {
 
 	// a later update adds video and keeps the audio type
 	m.HandlerStarted(info, 2)
-	update.State.Video = &livekit.InputVideoState{MimeType: "video/H264"}
+	update.State.Video = &livekit.InputVideoState{MimeType: testVideoMime}
 	m.HandlerStateUpdated(update)
 	update.State.Video = nil
 	m.HandlerStateUpdated(update)
@@ -198,7 +200,7 @@ func TestSessionUsageTracks(t *testing.T) {
 	u = m.SessionEnded("res_test")
 	require.NotNil(t, u)
 	require.Equal(t, "audio/aac", u.AudioMimeType)
-	require.Equal(t, "video/H264", u.VideoMimeType, "a reported track stays recorded")
+	require.Equal(t, testVideoMime, u.VideoMimeType, "a reported track stays recorded")
 
 	// a session that ends before the source is parsed reports no tracks
 	m.HandlerStarted(info, 3)
@@ -216,12 +218,12 @@ func TestSessionUsageLabels(t *testing.T) {
 		kind  string
 		media string
 	}{
-		{"rtmp with both tracks", SessionUsage{InputType: livekit.IngressInput_RTMP_INPUT, Transcoding: true, AudioMimeType: "audio/aac", VideoMimeType: "video/H264"}, "rtmp", "av"},
-		{"url audio only", SessionUsage{InputType: livekit.IngressInput_URL_INPUT, Transcoding: true, AudioMimeType: "audio/mpeg"}, "url", "audio"},
-		{"rtmp video only", SessionUsage{InputType: livekit.IngressInput_RTMP_INPUT, Transcoding: true, VideoMimeType: "video/H264"}, "rtmp", "video"},
-		{"whip transcoding, no tracks yet", SessionUsage{InputType: livekit.IngressInput_WHIP_INPUT, Transcoding: true}, "whip", "unknown"},
-		{"whip bypass", SessionUsage{InputType: livekit.IngressInput_WHIP_INPUT, Transcoding: false, AudioMimeType: "audio/opus", VideoMimeType: "video/VP8"}, "whip_bypass", "av"},
-		{"unset input type", SessionUsage{}, "unknown", "unknown"},
+		{"rtmp with both tracks", SessionUsage{InputType: livekit.IngressInput_RTMP_INPUT, Transcoding: true, AudioMimeType: "audio/aac", VideoMimeType: testVideoMime}, typeLabelRTMP, mediaLabelAV},
+		{"url audio only", SessionUsage{InputType: livekit.IngressInput_URL_INPUT, Transcoding: true, AudioMimeType: "audio/mpeg"}, typeLabelURL, mediaLabelAudio},
+		{"rtmp video only", SessionUsage{InputType: livekit.IngressInput_RTMP_INPUT, Transcoding: true, VideoMimeType: testVideoMime}, typeLabelRTMP, mediaLabelVideo},
+		{"whip transcoding, no tracks yet", SessionUsage{InputType: livekit.IngressInput_WHIP_INPUT, Transcoding: true}, typeLabelWHIP, labelUnknown},
+		{"whip bypass is not distinguished", SessionUsage{InputType: livekit.IngressInput_WHIP_INPUT, Transcoding: false, AudioMimeType: "audio/opus", VideoMimeType: "video/VP8"}, typeLabelWHIP, mediaLabelAV},
+		{"unset input type", SessionUsage{}, labelUnknown, labelUnknown},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -304,7 +306,7 @@ cpu_cost:
 
 	// the media label comes from the tracks reported during the session
 	require.NotNil(t, sessionMetric(t, "livekit_ingress_session_max_cpu_cores", "url", "audio"))
-	require.Nil(t, sessionMetric(t, "livekit_ingress_session_max_cpu_cores", "url", "unknown"))
+	require.Nil(t, sessionMetric(t, "livekit_ingress_session_max_cpu_cores", "url", labelUnknown))
 
 	// each ended session is one observation; the peak follows the highest
 	// MaxCPU and never drops
@@ -330,14 +332,14 @@ cpu_cost:
 	require.InDelta(t, 1.5, avg.GetHistogram().GetSampleSum(), 1e-9)
 
 	// a session that ends before any track is reported lands in unknown
-	bypass := &livekit.IngressInfo{
-		IngressId:         "IN_whip",
-		InputType:         livekit.IngressInput_WHIP_INPUT,
-		EnableTranscoding: proto.Bool(false),
-		State:             &livekit.IngressState{ResourceId: "res_whip"},
+	rtmp := &livekit.IngressInfo{
+		IngressId:         "IN_rtmp",
+		InputType:         livekit.IngressInput_RTMP_INPUT,
+		EnableTranscoding: proto.Bool(true),
+		State:             &livekit.IngressState{ResourceId: "res_rtmp"},
 	}
-	endSession(t, m, bypass, 5, 0.05, 10*time.Millisecond, 200*time.Millisecond)
-	require.NotNil(t, sessionMetric(t, "livekit_ingress_session_max_cpu_cores", "whip_bypass", "unknown"))
+	endSession(t, m, rtmp, 5, 0.05, 10*time.Millisecond, 200*time.Millisecond)
+	require.NotNil(t, sessionMetric(t, "livekit_ingress_session_max_cpu_cores", typeLabelRTMP, labelUnknown))
 
 	// nothing is observed on a monitor that has not started
 	fresh := NewMonitor()
