@@ -34,11 +34,7 @@ Audit the Go on `main`. Prioritise:
   the handler subprocess.
 
 Out of scope: generated code (`pkg/ipc/*.pb.go`), test harnesses under `test/`
-and `cmd/whiptest`, `cmd/rtmprelay`, and `magefile.go`. Out of scope also are
-bugs inside upstream dependencies: `go-rtmp`, `go-flv`, pion, GStreamer and its
-plugins. Report how this repository uses them, for example a pipeline that
-exposes a decoder to input it should not reach, but not a parser bug that
-reproduces without this code.
+and `cmd/whiptest`, `cmd/rtmprelay`, and `magefile.go`.
 
 Untrusted input:
 
@@ -111,8 +107,7 @@ the shared protocol helpers in those repositories.
 - **Low / not a finding:** behaviour that needs operator config (debug and
   Prometheus ports, `enable_udp_url_pull`, `development`) or the API secret
   used within its own project. Not a finding either: a resource limit that
-  only the API caller can exhaust, bugs in generated or test code, or an
-  upstream parser bug that reproduces without this code.
+  only the API caller can exhaust, or bugs in generated or test code.
 
 ## Testing
 
