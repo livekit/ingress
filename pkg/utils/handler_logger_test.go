@@ -15,6 +15,7 @@
 package utils
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -23,8 +24,8 @@ import (
 // Only the handler's own structured lines go to the sink.
 func TestHandlerLoggerSink(t *testing.T) {
 	var got []string
-	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line string) {
-		got = append(got, line)
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line []byte) {
+		got = append(got, string(line))
 	})
 
 	_, err := l.Write([]byte(
@@ -39,4 +40,61 @@ func TestHandlerLoggerSink(t *testing.T) {
 		`{"level":"info","msg":"started"}`,
 		`{"level":"error","msg":"failed"}`,
 	}, got)
+}
+
+func TestHandlerLoggerLineSplitAcrossWrites(t *testing.T) {
+	var got []string
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line []byte) {
+		got = append(got, string(line))
+	})
+
+	for _, chunk := range []string{
+		`{"level":"info","msg":"first"}` + "\n" + `{"level":"debug","ts":`,
+		`1.5,"msg":"second"}` + "\n",
+	} {
+		_, err := l.Write([]byte(chunk))
+		require.NoError(t, err)
+	}
+
+	require.Equal(t, []string{
+		`{"level":"info","msg":"first"}`,
+		`{"level":"debug","ts":1.5,"msg":"second"}`,
+	}, got)
+}
+
+func TestHandlerLoggerCloseFlushesTrailingLine(t *testing.T) {
+	var got []string
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line []byte) {
+		got = append(got, string(line))
+	})
+
+	_, err := l.Write([]byte(`{"level":"info","msg":"last"}`))
+	require.NoError(t, err)
+	require.Empty(t, got)
+
+	require.NoError(t, l.Close())
+	require.Equal(t, []string{`{"level":"info","msg":"last"}`}, got)
+}
+
+func TestHandlerLoggerCapsHeldLine(t *testing.T) {
+	var got []string
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line []byte) {
+		got = append(got, string(line))
+	})
+
+	long := strings.Repeat("a", maxLineLength-1) + "}"
+	_, err := l.Write([]byte(long))
+	require.NoError(t, err)
+	require.Equal(t, []string{long}, got)
+}
+
+func TestHandlerLoggerSinkAppendKeepsNextLine(t *testing.T) {
+	var got []string
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line []byte) {
+		got = append(got, string(append(line, 'X', 'Y')))
+	})
+
+	_, err := l.Write([]byte("{\"a\":1}\n{\"b\":2}\n"))
+	require.NoError(t, err)
+	require.Equal(t, []string{`{"a":1}XY`, `{"b":2}XY`}, got)
 }

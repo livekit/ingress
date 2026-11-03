@@ -16,6 +16,7 @@ package service
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/exec"
 	"sync"
@@ -226,6 +227,12 @@ func (s *ProcessManager) runHandlerTry(ctx context.Context, h *process, p *param
 		pid := h.cmd.Process.Pid
 		s.sm.HandlerStarted(h.params.IngressInfo, pid)
 		err = h.cmd.Wait()
+		// Wait returns only after the output copy has finished.
+		for _, w := range []io.Writer{h.cmd.Stdout, h.cmd.Stderr} {
+			if l, ok := w.(*utils.HandlerLogger); ok {
+				_ = l.Close()
+			}
+		}
 		s.sm.HandlerExited(pid, h.cmd.ProcessState)
 	}
 	switch {
