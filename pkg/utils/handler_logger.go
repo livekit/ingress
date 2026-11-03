@@ -93,7 +93,7 @@ func (h *HandlerLogger) processLine(line []byte) {
 	}
 	if bytes.HasSuffix(line, []byte("}")) {
 		if h.sink != nil {
-			h.sink(line)
+			h.sink(line[:len(line):len(line)])
 		} else {
 			fmt.Printf("%s\n", line)
 		}

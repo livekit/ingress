@@ -87,3 +87,14 @@ func TestHandlerLoggerCapsHeldLine(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{long}, got)
 }
+
+func TestHandlerLoggerSinkAppendKeepsNextLine(t *testing.T) {
+	var got []string
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line []byte) {
+		got = append(got, string(append(line, 'X', 'Y')))
+	})
+
+	_, err := l.Write([]byte("{\"a\":1}\n{\"b\":2}\n"))
+	require.NoError(t, err)
+	require.Equal(t, []string{`{"a":1}XY`, `{"b":2}XY`}, got)
+}
