@@ -15,6 +15,7 @@
 package utils
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -39,4 +40,50 @@ func TestHandlerLoggerSink(t *testing.T) {
 		`{"level":"info","msg":"started"}`,
 		`{"level":"error","msg":"failed"}`,
 	}, got)
+}
+
+func TestHandlerLoggerLineSplitAcrossWrites(t *testing.T) {
+	var got []string
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line string) {
+		got = append(got, line)
+	})
+
+	for _, chunk := range []string{
+		`{"level":"info","msg":"first"}` + "\n" + `{"level":"debug","ts":`,
+		`1.5,"msg":"second"}` + "\n",
+	} {
+		_, err := l.Write([]byte(chunk))
+		require.NoError(t, err)
+	}
+
+	require.Equal(t, []string{
+		`{"level":"info","msg":"first"}`,
+		`{"level":"debug","ts":1.5,"msg":"second"}`,
+	}, got)
+}
+
+func TestHandlerLoggerCloseFlushesTrailingLine(t *testing.T) {
+	var got []string
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line string) {
+		got = append(got, line)
+	})
+
+	_, err := l.Write([]byte(`{"level":"info","msg":"last"}`))
+	require.NoError(t, err)
+	require.Empty(t, got)
+
+	require.NoError(t, l.Close())
+	require.Equal(t, []string{`{"level":"info","msg":"last"}`}, got)
+}
+
+func TestHandlerLoggerCapsHeldLine(t *testing.T) {
+	var got []string
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line string) {
+		got = append(got, line)
+	})
+
+	long := strings.Repeat("a", maxLineLength-1) + "}"
+	_, err := l.Write([]byte(long))
+	require.NoError(t, err)
+	require.Equal(t, []string{long}, got)
 }
