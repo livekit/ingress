@@ -3,7 +3,6 @@ package utils
 import (
 	"bytes"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/livekit/protocol/logger"
@@ -29,7 +28,7 @@ var actions = map[string]int{
 // across Write calls is held until its newline arrives or Close is called.
 type HandlerLogger struct {
 	l    logger.Logger
-	sink func(line string)
+	sink func(line []byte)
 
 	mu  sync.Mutex
 	buf []byte
@@ -40,8 +39,8 @@ func NewHandlerLogger(resourceID, ingressID string) *HandlerLogger {
 }
 
 // NewHandlerLoggerWithSink sends the handler's own structured lines to sink. A
-// nil sink writes them to stdout.
-func NewHandlerLoggerWithSink(resourceID, ingressID string, sink func(line string)) *HandlerLogger {
+// nil sink writes them to stdout. line is only valid until sink returns.
+func NewHandlerLoggerWithSink(resourceID, ingressID string, sink func(line []byte)) *HandlerLogger {
 	return &HandlerLogger{
 		l:    logger.GetLogger().WithValues("resourceID", resourceID, "ingressID", ingressID),
 		sink: sink,
@@ -61,13 +60,13 @@ func (h *HandlerLogger) Write(p []byte) (int, error) {
 			break
 		}
 		idx += off
-		h.processLine(string(h.buf[:idx]))
+		h.processLine(h.buf[:idx])
 		h.buf = h.buf[idx+1:]
 		off = 0
 	}
 	if len(h.buf) >= maxLineLength {
 		h.l.Warnw("handler output line too long, splitting it", nil, "bytes", len(h.buf))
-		h.processLine(string(h.buf))
+		h.processLine(h.buf)
 		h.buf = nil
 	}
 	if len(h.buf) == 0 {
@@ -82,36 +81,36 @@ func (h *HandlerLogger) Close() error {
 	defer h.mu.Unlock()
 
 	if len(h.buf) > 0 {
-		h.processLine(string(h.buf))
+		h.processLine(h.buf)
 		h.buf = nil
 	}
 	return nil
 }
 
-func (h *HandlerLogger) processLine(line string) {
-	if line == "" {
+func (h *HandlerLogger) processLine(line []byte) {
+	if len(line) == 0 {
 		return
 	}
-	if strings.HasSuffix(line, "}") {
+	if bytes.HasSuffix(line, []byte("}")) {
 		if h.sink != nil {
 			h.sink(line)
 		} else {
-			fmt.Println(line)
+			fmt.Printf("%s\n", line)
 		}
 		return
 	}
 
 	action := logError
 	if len(line) > 5 {
-		action = actions[line[:5]]
+		action = actions[string(line[:5])]
 	}
 	switch action {
 	case ignore:
 	case logInfo:
-		h.l.Infow(line)
+		h.l.Infow(string(line))
 	case logWarn:
-		h.l.Warnw(line, nil)
+		h.l.Warnw(string(line), nil)
 	case logError:
-		h.l.Errorw(line, nil)
+		h.l.Errorw(string(line), nil)
 	}
 }

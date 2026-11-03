@@ -24,8 +24,8 @@ import (
 // Only the handler's own structured lines go to the sink.
 func TestHandlerLoggerSink(t *testing.T) {
 	var got []string
-	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line string) {
-		got = append(got, line)
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line []byte) {
+		got = append(got, string(line))
 	})
 
 	_, err := l.Write([]byte(
@@ -44,8 +44,8 @@ func TestHandlerLoggerSink(t *testing.T) {
 
 func TestHandlerLoggerLineSplitAcrossWrites(t *testing.T) {
 	var got []string
-	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line string) {
-		got = append(got, line)
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line []byte) {
+		got = append(got, string(line))
 	})
 
 	for _, chunk := range []string{
@@ -64,8 +64,8 @@ func TestHandlerLoggerLineSplitAcrossWrites(t *testing.T) {
 
 func TestHandlerLoggerCloseFlushesTrailingLine(t *testing.T) {
 	var got []string
-	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line string) {
-		got = append(got, line)
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line []byte) {
+		got = append(got, string(line))
 	})
 
 	_, err := l.Write([]byte(`{"level":"info","msg":"last"}`))
@@ -78,8 +78,8 @@ func TestHandlerLoggerCloseFlushesTrailingLine(t *testing.T) {
 
 func TestHandlerLoggerCapsHeldLine(t *testing.T) {
 	var got []string
-	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line string) {
-		got = append(got, line)
+	l := NewHandlerLoggerWithSink("RES_abc", "IN_123", func(line []byte) {
+		got = append(got, string(line))
 	})
 
 	long := strings.Repeat("a", maxLineLength-1) + "}"
