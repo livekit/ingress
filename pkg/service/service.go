@@ -339,6 +339,10 @@ func (s *Service) handleRequest(ctx context.Context, req requestParams) (p *para
 		return nil, errors.ErrServerShuttingDown
 	}
 
+	if req.info == nil && req.streamKey == "" {
+		return nil, errors.ErrMissingStreamKey
+	}
+
 	res := make(chan publishResponse)
 
 	go func() {
