@@ -130,16 +130,19 @@ func (w *whipAppSource) Close() <-chan error {
 // so a canceled body read does not turn a clean stop into an error.
 func connectRelay(ctx context.Context, url string) (*http.Response, func(), error) {
 	reqCtx, cancel := context.WithCancel(context.Background())
-	stop := context.AfterFunc(ctx, cancel)
-	defer stop()
-
 	req, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
 	if err != nil {
 		cancel()
 		return nil, nil, err
 	}
 
+	stop := context.AfterFunc(ctx, cancel)
 	resp, err := http.DefaultClient.Do(req)
+	// A shutdown racing the response would cancel reqCtx under the body read.
+	if !stop() && err == nil {
+		resp.Body.Close()
+		err = ctx.Err()
+	}
 	switch {
 	case err != nil:
 		cancel()
