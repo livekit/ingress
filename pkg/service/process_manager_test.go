@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 	"time"
@@ -147,4 +148,26 @@ func TestUpdateIngressStateRecordsTracksAndForwards(t *testing.T) {
 	require.Equal(t, "in_test", u.IngressID)
 	require.Equal(t, "audio/opus", u.AudioMimeType)
 	require.Equal(t, "video/VP8", u.VideoMimeType)
+}
+
+// A handler that ignores KillIngress would otherwise keep its session open
+// until the pod dies.
+func TestKillAfterKillsHandlerStillRunning(t *testing.T) {
+	cmd := exec.Command("sleep", "60")
+	require.NoError(t, cmd.Start())
+
+	p := &process{params: newTestParams("")}
+	p.proc.Store(cmd.Process)
+	p.killAfter(50 * time.Millisecond)
+
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
+
+	select {
+	case err := <-exited:
+		require.EqualError(t, err, "signal: killed")
+	case <-time.After(5 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatal("handler was not killed")
+	}
 }

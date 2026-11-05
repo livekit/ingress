@@ -41,6 +41,11 @@ import (
 
 const (
 	maxRetries = 3
+
+	// KillIngress waits for the pipeline to finish, so a healthy handler is long
+	// gone by then. One still running is hung and would otherwise keep its
+	// session open until the pod dies.
+	killGracePeriod = 30 * time.Second
 )
 
 type process struct {
@@ -54,6 +59,8 @@ type process struct {
 	ipcServiceServer *grpc.Server
 	rpcServer        rpc.IngressHandlerServer
 	closed           core.Fuse
+	proc             atomic.Pointer[os.Process]
+	killArmed        core.Fuse
 }
 
 type ProcessManager struct {
@@ -224,6 +231,7 @@ func (s *ProcessManager) runHandlerTry(ctx context.Context, h *process, p *param
 
 	err = h.cmd.Start()
 	if err == nil {
+		h.proc.Store(h.cmd.Process)
 		pid := h.cmd.Process.Pid
 		s.sm.HandlerStarted(h.params.IngressInfo, pid)
 		err = h.cmd.Wait()
@@ -278,7 +286,29 @@ func (s *ProcessManager) UpdateIngressState(ctx context.Context, req *ipc.Update
 	return &emptypb.Empty{}, s.stateNotifier.UpdateIngressState(ctx, req.ProjectId, req.Info)
 }
 
+// killAfter SIGKILLs the handler if it is still running d after termination was
+// requested. Only the first request arms it.
+func (p *process) killAfter(d time.Duration) {
+	if !p.killArmed.Break() {
+		return
+	}
+
+	time.AfterFunc(d, func() {
+		proc := p.proc.Load()
+		if p.closed.IsBroken() || proc == nil {
+			return
+		}
+		logger.Warnw("killing handler still running after termination was requested", nil,
+			"ingressID", p.params.IngressId, "resourceID", p.params.State.ResourceId, "gracePeriod", d)
+		if err := proc.Signal(syscall.SIGKILL); err != nil {
+			logger.Infow("failed to kill process", "error", err, "ingressID", p.params.IngressId)
+		}
+	})
+}
+
 func (p *process) UpdateIngress(ctx context.Context, _ *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
+	p.killAfter(killGracePeriod)
+
 	grpcClient := p.grpcClient.Load()
 	if grpcClient == nil {
 		return nil, errors.ErrIngressNotFound
@@ -294,6 +324,8 @@ func (p *process) UpdateIngress(ctx context.Context, _ *livekit.UpdateIngressReq
 }
 
 func (p *process) DeleteIngress(ctx context.Context, _ *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
+	p.killAfter(killGracePeriod)
+
 	grpcClient := p.grpcClient.Load()
 	if grpcClient == nil {
 		return nil, errors.ErrIngressNotFound
@@ -309,6 +341,8 @@ func (p *process) DeleteIngress(ctx context.Context, _ *livekit.DeleteIngressReq
 }
 
 func (p *process) DeleteWHIPResource(ctx context.Context, _ *rpc.DeleteWHIPResourceRequest) (*emptypb.Empty, error) {
+	p.killAfter(killGracePeriod)
+
 	grpcClient := p.grpcClient.Load()
 	if grpcClient == nil {
 		return nil, errors.ErrIngressNotFound
