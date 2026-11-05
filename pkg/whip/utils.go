@@ -1,6 +1,7 @@
 package whip
 
 import (
+	"bytes"
 	"strings"
 	"time"
 
@@ -65,6 +66,10 @@ func createJitterBuffer(
 	return jb, nil
 }
 
+// sdpfragSessionHeader is the minimal session header the SDP parser needs
+// before the lines of a trickle-ice-sdpfrag body.
+const sdpfragSessionHeader = "v=0\r\no=- 0 0 IN IP4 0.0.0.0\r\ns=-\r\nt=0 0\r\n"
+
 func extractICEDetails(in []byte) (ufrag string, pwd string, err error) {
 	scanAttributes := func(attributes []sdp.Attribute) {
 		for _, a := range attributes {
@@ -75,6 +80,12 @@ func extractICEDetails(in []byte) (ufrag string, pwd string, err error) {
 				pwd = a.Value
 			}
 		}
+	}
+
+	// A trickle-ice-sdpfrag body (RFC 8840) has no session header, which the
+	// SDP parser requires. Some clients send a complete session description.
+	if !bytes.HasPrefix(in, []byte("v=")) {
+		in = append([]byte(sdpfragSessionHeader), in...)
 	}
 
 	var parsed sdp.SessionDescription

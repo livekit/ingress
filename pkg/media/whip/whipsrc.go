@@ -21,7 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/pkg/gst"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/types"
 	"github.com/livekit/protocol/logger"
@@ -99,11 +99,11 @@ func (s *WHIPSource) Close() error {
 	return errs.ToError()
 }
 
-func (s *WHIPSource) GetSources() []*gst.Element {
-	ret := make([]*gst.Element, 0, len(s.trackSrc))
+func (s *WHIPSource) GetSources() []gst.Element {
+	ret := make([]gst.Element, 0, len(s.trackSrc))
 
 	for _, t := range s.trackSrc {
-		ret = append(ret, t.GetAppSource().Element)
+		ret = append(ret, t.GetAppSource())
 	}
 
 	return ret

@@ -50,10 +50,10 @@ github.com/fsnotify/fsnotify v1.10.1 h1:b0/UzAf9yR5rhf3RPm9gf3ehBPpf0oZKIjtpKrx5
 github.com/fsnotify/fsnotify v1.10.1/go.mod h1:TLheqan6HD6GBK6PrDWyDPBaEV8LspOxvPSjC+bVfgo=
 github.com/gammazero/deque v1.2.1 h1:9fnQVFCCZ9/NOc7ccTNqzoKd1tCWOqeI05/lPqFPMGQ=
 github.com/gammazero/deque v1.2.1/go.mod h1:5nSFkzVm+afG9+gy0VIowlqVAW4N8zNcMne+CMQVD2g=
-github.com/go-gst/go-glib v1.4.1-0.20250303082535-35ebad1471fd h1:mKnu0UUFvvDMEeK4HXxmX+haP6+qppIvCW0HgUOfwmk=
-github.com/go-gst/go-glib v1.4.1-0.20250303082535-35ebad1471fd/go.mod h1:ZWT4LXOO2PH8lSNu/dR5O2yoNQJKEgmijNa2d7nByK8=
-github.com/go-gst/go-pointer v0.0.0-20241127163939-ba766f075b4c h1:x8kKRVDmz5BRlolmDZGcsuZ1l+js6TRL3QWBJjGVctM=
-github.com/go-gst/go-pointer v0.0.0-20241127163939-ba766f075b4c/go.mod h1:qKw5ZZ0U58W6PU/7F/Lopv+14nKYmdXlOd7VnAZ17Mk=
+github.com/go-gst/go-glib v0.0.4 h1:pvjoOmi2pmyyfidL2ksU95GvEUHo0Nv45Vw5JWKZp7k=
+github.com/go-gst/go-glib v0.0.4/go.mod h1:cHWRWZCiwhx4CmW92T0/+cxn69AquI7aj2mIk96WgEI=
+github.com/go-gst/go-gst v0.0.3-0.20261014140714-34ab949f28e4 h1:fEBTDNskLMc/zL0Gq3wsOsValAGFPneX13bCbA4wF94=
+github.com/go-gst/go-gst v0.0.3-0.20261014140714-34ab949f28e4/go.mod h1:Db8xOdAikb3oAa2Cs/ACQVnL5+IAbNif9MsSeTCSpac=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-logr/logr v1.4.4 h1:tG4xh9yMsRCAiodLVTxyrkzSZ9+o0L1Kg/+cPVcbP/8=
 github.com/go-logr/logr v1.4.4/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
@@ -94,8 +94,6 @@ github.com/lithammer/shortuuid/v4 v4.3.0 h1:XRr80OYPOlqxgnCv2/iuElkl/ZtXtPtLKk2A
 github.com/lithammer/shortuuid/v4 v4.3.0/go.mod h1:D5noHZ2oFw/YaKCfGy0YxyE7M0wMbezmMjPdhyEFe6Y=
 github.com/livekit/go-rtmp v0.0.0-20261019042323-a9bd9ffaba6f h1:igbuTeDot+LQjDOIdYcPChMlwXEU7kutNsfxUwYGOo8=
 github.com/livekit/go-rtmp v0.0.0-20261019042323-a9bd9ffaba6f/go.mod h1:IAjKY5+PtlxtGZr6czNviPUhqj+h/Jf6MOUVX351W+8=
-github.com/livekit/gst-go v0.0.0-20261015120717-e0fc4e6af2ac h1:CaX3/bqcpcj39BCzymYexShY7EPoqvhXeKt0o+f5JwM=
-github.com/livekit/gst-go v0.0.0-20261015120717-e0fc4e6af2ac/go.mod h1:pyCgY9XFSG0CAnJzoJ84R5XWn8rEj849EYJOwnAdB8k=
 github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731 h1:9x+U2HGLrSw5ATTo469PQPkqzdoU7be46ryiCDO3boc=
 github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731/go.mod h1:Rs3MhFwutWhGwmY1VQsygw28z5bWcnEYmS1OG9OxjOQ=
 github.com/livekit/media-sdk v0.1.1 h1:d0glitmWU5ncIgsW/6wG4Q4iOEcpwINGl85mQjwnKuM=

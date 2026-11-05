@@ -20,11 +20,12 @@ import (
 	"time"
 
 	"github.com/frostbyte73/core"
-	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/pkg/gst"
 
 	"github.com/livekit/protocol/logger"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/gstutil"
 	"github.com/livekit/ingress/pkg/params"
 )
 
@@ -44,8 +45,8 @@ var (
 
 type URLSource struct {
 	params     *params.Params
-	src        *gst.Element
-	pad        *gst.Pad
+	src        gst.Element
+	pad        gst.Pad
 	printStats func()
 
 	done core.Fuse
@@ -53,52 +54,45 @@ type URLSource struct {
 
 func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 	var printStats func()
-	bin := gst.NewBin("input")
+	bin := gstutil.NewBin("input")
 
-	var elem *gst.Element
+	var elem gst.Element
 	var err error
 	if strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://") {
-		elem, err = gst.NewElement("souphttpsrc")
+		elem, err = gstutil.NewElement("souphttpsrc")
 		if err != nil {
 			return nil, err
 		}
 
-		err = elem.SetProperty("location", p.Url)
-		if err != nil {
+		if err = gstutil.SetProperty(elem, "location", p.Url); err != nil {
 			return nil, err
 		}
 
 	} else if strings.HasPrefix(p.Url, "srt://") {
-		elem, err = gst.NewElement("srtclientsrc")
+		elem, err = gstutil.NewElement("srtclientsrc")
 		if err != nil {
 			return nil, err
 		}
-		err = elem.SetProperty("uri", p.Url)
-		if err != nil {
+		if err = gstutil.SetProperty(elem, "uri", p.Url); err != nil {
 			return nil, err
 		}
 
 		printStats = func() {
-			str, _ := elem.GetProperty("stats")
-			if str != nil {
-				if v, ok := str.(*gst.Structure); ok {
-					logger.Infow("SRT input stats", "stats", v.String())
-				}
+			if v, ok := elem.ObjectProperty("stats").(*gst.Structure); ok && v != nil {
+				logger.Infow("SRT input stats", "stats", v.String())
 			}
 		}
 	} else if p.EnableUDPURLPull && strings.HasPrefix(p.Url, "udp://") {
-		elem, err = gst.NewElement("udpsrc")
+		elem, err = gstutil.NewElement("udpsrc")
 		if err != nil {
 			return nil, err
 		}
-		err = elem.SetProperty("uri", p.Url)
-		if err != nil {
+		if err = gstutil.SetProperty(elem, "uri", p.Url); err != nil {
 			return nil, err
 		}
 
 		if p.MulticastInterface != "" {
-			err = elem.SetProperty("multicast-iface", p.MulticastInterface)
-			if err != nil {
+			if err = gstutil.SetProperty(elem, "multicast-iface", p.MulticastInterface); err != nil {
 				return nil, err
 			}
 		}
@@ -108,29 +102,28 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 		return nil, errors.ErrUnsupportedURLFormat
 	}
 
-	queue, err := gst.NewElement("queue2")
+	queue, err := gstutil.NewElement("queue2")
 	if err != nil {
 		return nil, err
 	}
 
 	// Disable buffer count limit and rely on bytes and time limits
-	if err := queue.SetProperty("max-size-buffers", uint(0)); err != nil {
+	if err = gstutil.SetProperty(queue, "max-size-buffers", uint32(0)); err != nil {
 		return nil, err
 	}
 
 	if strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://") {
-		err = queue.SetProperty("use-buffering", true)
-		if err != nil {
+		if err = gstutil.SetProperty(queue, "use-buffering", true); err != nil {
 			return nil, err
 		}
 	}
 
-	err = bin.AddMany(elem, queue)
+	err = gstutil.AddMany(bin, elem, queue)
 	if err != nil {
 		return nil, err
 	}
 
-	err = elem.Link(queue)
+	err = gstutil.Link(elem, queue)
 	if err != nil {
 		return nil, err
 	}
@@ -140,21 +133,20 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 		return nil, errors.ErrUnableToAddPad
 	}
 
-	ghostPad := gst.NewGhostPad("src", pad)
-	if !bin.AddPad(ghostPad.Pad) {
+	if !bin.AddPad(gst.NewGhostPad("src", pad)) {
 		return nil, errors.ErrUnableToAddPad
 	}
 
 	return &URLSource{
 		params:     p,
-		src:        bin.Element,
+		src:        bin,
 		pad:        pad,
 		printStats: printStats,
 	}, nil
 }
 
-func (u *URLSource) GetSources() []*gst.Element {
-	return []*gst.Element{
+func (u *URLSource) GetSources() []gst.Element {
+	return []gst.Element{
 		u.src,
 	}
 }
@@ -164,18 +156,18 @@ func (u *URLSource) ValidateCaps(caps *gst.Caps) error {
 		return errors.ErrUnsupportedDecodeFormat
 	}
 
-	str := caps.GetStructureAt(0)
+	str := caps.GetStructure(0)
 	if str == nil {
 		return errors.ErrUnsupportedDecodeFormat
 	}
 
 	for _, mime := range supportedMimeTypes {
-		if str.Name() == mime {
+		if str.GetName() == mime {
 			return nil
 		}
 	}
 
-	return errors.ErrUnsupportedDecodeMimeType(str.Name())
+	return errors.ErrUnsupportedDecodeMimeType(str.GetName())
 }
 
 func (u *URLSource) Start(_ context.Context, _ func()) error {

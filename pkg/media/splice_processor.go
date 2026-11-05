@@ -19,7 +19,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/pkg/gst"
+
+	"github.com/livekit/ingress/pkg/gstutil"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/utils"
 	"github.com/livekit/protocol/livekit"
@@ -58,56 +60,38 @@ func (su *SpliceProcessor) Close() {
 }
 
 func (su *SpliceProcessor) ProcessSpliceEvent(ev *gst.Event) error {
-	ts := ev.ParseMpegtsSection()
-	if ts == nil {
-		return nil
-	}
-	if ts.SectionType() != gst.MpegtsSectionSCTESIT {
-		return nil
-	}
-
-	scteSit := ts.GetSCTESIT()
+	scteSit := gstutil.ParseSpliceInsert(ev)
 	if scteSit == nil {
 		return nil
 	}
 
-	if scteSit.SpliceCommandType() != gst.MpegtsSCTESpliceCommandInsert {
+	rMap, ok := ev.GetStructure().GetValue("running-time-map").(*gst.Structure)
+	if !ok || rMap == nil {
 		return nil
 	}
 
-	str, _ := ev.GetStructure().GetValue("running-time-map")
-	if str == nil {
-		return nil
-	}
-	rMap, ok := str.(*gst.Structure)
-	if !ok {
-		return nil
-	}
-
-	splices := scteSit.Splices()
+	splices := scteSit.Splices
 	for _, sp := range splices {
 		var rTime time.Duration
 
-		if !sp.SpliceImmediateFlag() {
+		if !sp.SpliceImmediateFlag {
 			if rMap != nil {
-				val, _ := rMap.GetValue(fmt.Sprintf("event-%d-splice-time", sp.SpliceEventId()))
-				if val != nil {
-					rTime = time.Duration(val.(uint64))
+				if val, ok := rMap.GetUint64(fmt.Sprintf("event-%d-splice-time", sp.EventID)); ok {
+					rTime = time.Duration(val)
 				}
 			}
-			if rTime == 0 && scteSit.SpliceTimeSpecified() {
-				val, _ := rMap.GetValue("splice-time")
-				if val != nil {
-					rTime = time.Duration(val.(uint64))
+			if rTime == 0 && scteSit.SpliceTimeSpecified {
+				if val, ok := rMap.GetUint64("splice-time"); ok {
+					rTime = time.Duration(val)
 				}
 			}
 		}
 
 		sp := &Splice{
-			Immediate:             sp.SpliceImmediateFlag(),
-			OutOfNetworkIndicator: sp.OutOfNetworkIndicator(),
-			EventId:               sp.SpliceEventId(),
-			EventCancelIndicator:  sp.SpliceEventCancelIndicator(),
+			Immediate:             sp.SpliceImmediateFlag,
+			OutOfNetworkIndicator: sp.OutOfNetworkIndicator,
+			EventId:               sp.EventID,
+			EventCancelIndicator:  sp.EventCancelIndicator,
 			RunningTime:           time.Duration(rTime),
 		}
 
