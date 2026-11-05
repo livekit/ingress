@@ -91,16 +91,13 @@ func (w *whipAppSource) Start(ctx context.Context, getCorrectedTs func(time.Dura
 
 	logger.Debugw("starting WHIP app source", "resourceID", w.resourceId, "kind", w.trackKind)
 
-	resp, err := http.Get(w.relayUrl)
-	switch {
-	case err != nil:
+	resp, closeRelay, err := connectRelay(ctx, w.relayUrl)
+	if err != nil {
 		return err
-	case resp != nil && (resp.StatusCode < 200 || resp.StatusCode >= 400):
-		return errors.ErrHttpRelayFailure(resp.StatusCode)
 	}
 
 	go func() {
-		defer resp.Body.Close()
+		defer closeRelay()
 
 		err := w.copyRelayedData(resp.Body, getCorrectedTs)
 		logger.Debugw("WHIP app source relay stopped", "error", err, "resourceID", w.resourceId, "kind", w.trackKind)
@@ -128,6 +125,36 @@ func (w *whipAppSource) Close() <-chan error {
 	w.appSrc.EndStream()
 
 	return w.result
+}
+
+// connectRelay waits for the relay to answer, or for ctx to be canceled by a
+// shutdown. Once it has answered, ctx no longer applies: Close ends the stream,
+// so a canceled body read does not turn a clean stop into an error.
+func connectRelay(ctx context.Context, url string) (*http.Response, func(), error) {
+	reqCtx, cancel := context.WithCancel(context.Background())
+	stop := context.AfterFunc(ctx, cancel)
+	defer stop()
+
+	req, err := http.NewRequestWithContext(reqCtx, "GET", url, nil)
+	if err != nil {
+		cancel()
+		return nil, nil, err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	switch {
+	case err != nil:
+		cancel()
+		return nil, nil, err
+	case resp.StatusCode < 200 || resp.StatusCode >= 400:
+		cancel()
+		return nil, nil, errors.ErrHttpRelayFailure(resp.StatusCode)
+	}
+
+	return resp, func() {
+		resp.Body.Close()
+		cancel()
+	}, nil
 }
 
 func (w *whipAppSource) GetAppSource() *app.Source {

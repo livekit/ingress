@@ -15,12 +15,48 @@
 package whip
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/go-gst/go-gst/gst"
 	"github.com/pion/webrtc/v4"
 	"github.com/stretchr/testify/require"
+
+	"github.com/livekit/ingress/pkg/types"
 )
+
+// A relay that never answers left Start blocked forever, so pipeline shutdown
+// could not end the handler process.
+func TestStartReturnsWhenCanceledBeforeRelayAnswers(t *testing.T) {
+	gst.Init(nil)
+
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		<-release
+	}))
+	defer srv.Close()
+	defer close(release)
+
+	w, err := newWHIPAppSource(context.Background(), "WH_test", types.Audio, webrtc.MimeTypeOpus, srv.URL)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- w.Start(ctx, func(ts time.Duration) time.Duration { return ts }, nil) }()
+
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("Start did not return after cancellation")
+	}
+}
 
 func TestGetCapsForCodecH264UsesAccessUnitAlignment(t *testing.T) {
 	gst.Init(nil)
