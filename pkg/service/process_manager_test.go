@@ -166,6 +166,7 @@ func TestKillAfterKillsHandlerStillRunning(t *testing.T) {
 	select {
 	case err := <-exited:
 		require.EqualError(t, err, "signal: killed")
+		require.True(t, p.forceKilled.Load(), "the final ERROR update depends on this")
 	case <-time.After(5 * time.Second):
 		_ = cmd.Process.Kill()
 		t.Fatal("handler was not killed")

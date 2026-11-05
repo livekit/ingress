@@ -61,6 +61,7 @@ type process struct {
 	closed           core.Fuse
 	proc             atomic.Pointer[os.Process]
 	killArmed        core.Fuse
+	forceKilled      atomic.Bool
 }
 
 type ProcessManager struct {
@@ -188,6 +189,9 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 
 	defer func() {
 		h.closed.Break()
+		if h.forceKilled.Load() {
+			s.publishKilledState(context.WithoutCancel(ctx), p)
+		}
 		// Release before the session leaves the session manager. Shutdown waits
 		// on IsIdle, which IngressEnded satisfies, and these two calls are not
 		// atomic -- releasing afterwards lets the process exit in between.
@@ -213,6 +217,14 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 			return
 		}
 
+	}
+}
+
+// publishKilledState sends the final update that a killed handler could not.
+func (s *ProcessManager) publishKilledState(ctx context.Context, p *params.Params) {
+	p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, errors.ErrHandlerKilled)
+	if err := s.stateNotifier.UpdateIngressState(ctx, p.ProjectID, p.CopyInfo()); err != nil {
+		logger.Errorw("failed to send update", err, "ingressID", p.IngressId)
 	}
 }
 
@@ -300,7 +312,9 @@ func (p *process) killAfter(d time.Duration) {
 		}
 		logger.Warnw("killing handler still running after termination was requested", nil,
 			"ingressID", p.params.IngressId, "resourceID", p.params.State.ResourceId, "gracePeriod", d)
+		p.forceKilled.Store(true)
 		if err := proc.Signal(syscall.SIGKILL); err != nil {
+			p.forceKilled.Store(false)
 			logger.Infow("failed to kill process", "error", err, "ingressID", p.params.IngressId)
 		}
 	})
