@@ -35,11 +35,13 @@ func TestSetProperty(t *testing.T) {
 	require.NoError(t, gstutil.SetProperty(queue, "max-size-buffers", int32(4)))
 	require.Equal(t, uint32(4), queue.ObjectProperty("max-size-buffers"))
 
+	require.NoError(t, gstutil.SetProperty(fakesrc, "num-buffers", int32(-5)))
+	require.Equal(t, int32(-1), fakesrc.ObjectProperty("num-buffers"), "an out of range value was set")
+
 	for name, set := range map[string]func() error{
 		"missing":      func() error { return gstutil.SetProperty(queue, "no-such-property", uint32(1)) },
 		"not writable": func() error { return gstutil.SetProperty(queue, "current-level-buffers", uint32(1)) },
 		"wrong type":   func() error { return gstutil.SetProperty(queue, "max-size-buffers", "five") },
-		"out of range": func() error { return gstutil.SetProperty(fakesrc, "num-buffers", int32(-5)) },
 		"go int":       func() error { return gstutil.SetProperty(queue, "max-size-buffers", 5) },
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -47,5 +49,4 @@ func TestSetProperty(t *testing.T) {
 		})
 	}
 	require.Equal(t, uint32(4), queue.ObjectProperty("max-size-buffers"), "a rejected value was set")
-	require.Equal(t, int32(-1), fakesrc.ObjectProperty("num-buffers"), "a rejected value was set")
 }

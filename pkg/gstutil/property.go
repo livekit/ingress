@@ -56,11 +56,13 @@ import (
 
 	"github.com/go-gst/go-glib/pkg/gobject/v2"
 	"github.com/go-gst/go-gst/pkg/gst"
+	"github.com/livekit/protocol/logger"
 	"github.com/livekit/psrpc"
 )
 
 // SetProperty sets a property on an element, returning an error in the cases where
-// SetObjectProperty would only log a GLib critical.
+// SetObjectProperty would only log a GLib critical. A value out of the property's range
+// is logged and not set, so the property keeps its current value.
 func SetProperty(elem gst.Element, name string, value any) error {
 	v, err := newValue(value)
 	if err != nil {
@@ -92,7 +94,8 @@ func SetProperty(elem gst.Element, name string, value any) error {
 	case C.PROPERTY_WRONG_TYPE:
 		return psrpc.NewErrorf(psrpc.Internal, "property %s of %s takes %s, not %s", name, elem.GetName(), gobject.Type(want).Name(), v.Type().Name())
 	default:
-		return psrpc.NewErrorf(psrpc.Internal, "value %v is out of range for property %s of %s", value, name, elem.GetName())
+		logger.Warnw("ignoring out of range property value", nil, "element", elem.GetName(), "property", name, "value", value)
+		return nil
 	}
 }
 
