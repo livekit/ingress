@@ -17,27 +17,23 @@ package whip
 import (
 	"testing"
 
-	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/pkg/gst"
 	"github.com/pion/webrtc/v4"
 	"github.com/stretchr/testify/require"
 )
 
 func TestGetCapsForCodecH264UsesAccessUnitAlignment(t *testing.T) {
-	gst.Init(nil)
+	gst.Init()
 
 	caps, err := getCapsForCodec(webrtc.MimeTypeH264)
 	require.NoError(t, err)
 	require.NotNil(t, caps)
 
-	structure := caps.GetStructureAt(0)
+	structure := caps.GetStructure(0)
 	require.NotNil(t, structure)
-	require.Equal(t, "video/x-h264", structure.Name())
+	require.Equal(t, "video/x-h264", structure.GetName())
 
-	streamFormat, err := structure.GetValue("stream-format")
-	require.NoError(t, err)
-	require.Equal(t, "byte-stream", streamFormat)
+	require.Equal(t, "byte-stream", structure.GetString("stream-format"))
 
-	alignment, err := structure.GetValue("alignment")
-	require.NoError(t, err)
-	require.Equal(t, "au", alignment)
+	require.Equal(t, "au", structure.GetString("alignment"))
 }

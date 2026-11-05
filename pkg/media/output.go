@@ -15,17 +15,19 @@
 package media
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"sync/atomic"
 	"time"
 
 	"github.com/frostbyte73/core"
-	"github.com/go-gst/go-gst/gst"
-	"github.com/go-gst/go-gst/gst/app"
+	"github.com/go-gst/go-gst/pkg/gst"
+	"github.com/go-gst/go-gst/pkg/gstapp"
 	"github.com/pion/webrtc/v4/pkg/media"
 
 	"github.com/livekit/ingress/pkg/errors"
+	"github.com/livekit/ingress/pkg/gstutil"
 	"github.com/livekit/ingress/pkg/lksdk_output"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/utils"
@@ -47,12 +49,12 @@ const (
 // Output manages GStreamer elements that converts & encodes video to the specification that's
 // suitable for WebRTC
 type Output struct {
-	bin    *gst.Bin
+	bin    gst.Bin
 	logger logger.Logger
 
-	elements           []*gst.Element
-	enc                *gst.Element
-	sink               *app.Sink
+	elements           []gst.Element
+	enc                gst.Element
+	sink               gstapp.AppSink
 	outputSync         *utils.TrackOutputSynchronizer
 	isPlayingTooSlow   func() bool
 	trackStatsGatherer *stats.MediaTrackStatGatherer
@@ -95,95 +97,91 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 
 	e.trackStatsGatherer = statsGatherer.RegisterTrackStats(fmt.Sprintf("%s.%s", stats.OutputVideo, layer.Quality.String()))
 
-	e.latencyCaps = gst.NewCapsFromString(packetLatencyCaps)
+	e.latencyCaps = gst.CapsFromString(packetLatencyCaps)
 
 	threadCount := getVideoEncoderThreadCount(layer)
 
 	e.logger.Infow("video layer", "width", layer.Width, "height", layer.Height, "threads", threadCount)
 
-	queueIn, err := gst.NewElementWithName("queue", fmt.Sprintf("video_%s_in", layer.Quality.String()))
+	queueIn, err := gstutil.NewElementWithName("queue", fmt.Sprintf("video_%s_in", layer.Quality.String()))
 	if err != nil {
 		return nil, err
 	}
-	if err = queueIn.SetProperty("max-size-buffers", uint(1)); err != nil {
+	if err = gstutil.SetProperty(queueIn, "max-size-buffers", uint32(1)); err != nil {
 		return nil, err
 	}
 
-	pads, err := queueIn.GetSinkPads()
-	if err != nil {
-		return nil, err
-	}
+	pads := gstutil.SinkPads(queueIn)
 	if len(pads) == 0 {
 		return nil, psrpc.NewErrorf(psrpc.Internal, "no sink pad on queue")
 	}
 	pad := pads[0]
-	id := pad.AddProbe(gst.PadProbeTypeBuffer, func(_ *gst.Pad, _ *gst.PadProbeInfo) gst.PadProbeReturn {
+	id := pad.AddProbe(gst.PadProbeTypeBuffer, func(gst.Pad, *gst.PadProbeInfo) gst.PadProbeReturn {
 		return gst.PadProbeDrop
 	})
 	e.stopDropping = func() {
 		pad.RemoveProbe(id)
 	}
 
-	videoScale, err := gst.NewElement("videoscale")
+	videoScale, err := gstutil.NewElement("videoscale")
 	if err != nil {
 		return nil, err
 	}
-	inputCaps, err := gst.NewElement("capsfilter")
+	inputCaps, err := gstutil.NewElement("capsfilter")
 	if err != nil {
 		return nil, err
 	}
-	err = inputCaps.SetProperty("caps", gst.NewCapsFromString(
+	if err = gstutil.SetProperty(inputCaps, "caps", gst.CapsFromString(
 		fmt.Sprintf(
 			"video/x-raw,width=%d,height=%d",
 			layer.Width,
 			layer.Height,
 		),
-	))
-	if err != nil {
+	)); err != nil {
 		return nil, err
 	}
 
-	queueEnc, err := gst.NewElementWithName("queue", fmt.Sprintf("video_%s_enc", layer.Quality.String()))
+	queueEnc, err := gstutil.NewElementWithName("queue", fmt.Sprintf("video_%s_enc", layer.Quality.String()))
 	if err != nil {
 		return nil, err
 	}
-	if err = queueEnc.SetProperty("max-size-buffers", uint(1)); err != nil {
+	if err = gstutil.SetProperty(queueEnc, "max-size-buffers", uint32(1)); err != nil {
 		return nil, err
 	}
 
-	e.elements = []*gst.Element{
+	e.elements = []gst.Element{
 		queueIn, videoScale, inputCaps, queueEnc,
 	}
 
 	switch codec {
 	case livekit.VideoCodec_H264_BASELINE:
-		e.enc, err = gst.NewElement("x264enc")
+		e.enc, err = gstutil.NewElement("x264enc")
 		if err != nil {
 			return nil, err
 		}
 
-		if err = e.enc.SetProperty("bitrate", uint(layer.Bitrate/1000)); err != nil {
+		if err = gstutil.SetProperty(e.enc, "bitrate", uint32(layer.Bitrate/1000)); err != nil {
 			return nil, err
 		}
 		// 1s VBV buffer size
-		if err = e.enc.SetProperty("vbv-buf-capacity", uint(1000)); err != nil {
+		if err = gstutil.SetProperty(e.enc, "vbv-buf-capacity", uint32(1000)); err != nil {
 			return nil, err
 		}
-		if err = e.enc.SetProperty("byte-stream", true); err != nil {
+		if err = gstutil.SetProperty(e.enc, "byte-stream", true); err != nil {
 			return nil, err
 		}
-		if err = e.enc.SetProperty("threads", threadCount); err != nil {
+		if err = gstutil.SetProperty(e.enc, "threads", uint32(threadCount)); err != nil {
 			return nil, err
 		}
 
-		e.enc.SetArg("tune", "zerolatency")
-		e.enc.SetArg("speed-preset", "veryfast")
+		gst.UtilSetObjectArg(e.enc, "tune", "zerolatency")
+		gst.UtilSetObjectArg(e.enc, "speed-preset", "veryfast")
 
-		profileCaps, err := gst.NewElement("capsfilter")
+		profileCaps, err := gstutil.NewElement("capsfilter")
 		if err != nil {
 			return nil, err
 		}
-		if err = profileCaps.SetProperty("caps", gst.NewCapsFromString(
+		if err = gstutil.SetProperty(profileCaps, "caps", gst.CapsFromString(
 			"video/x-h264,stream-format=byte-stream,profile=baseline",
 		)); err != nil {
 			return nil, err
@@ -195,35 +193,35 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 		}
 
 	case livekit.VideoCodec_VP8:
-		e.enc, err = gst.NewElement("vp8enc")
+		e.enc, err = gstutil.NewElement("vp8enc")
 		if err != nil {
 			return nil, err
 		}
-		if err = e.enc.SetProperty("target-bitrate", int(layer.Bitrate)); err != nil {
+		if err = gstutil.SetProperty(e.enc, "target-bitrate", int32(layer.Bitrate)); err != nil {
 			return nil, err
 		}
-		if err = e.enc.SetProperty("keyframe-max-dist", 100); err != nil {
+		if err = gstutil.SetProperty(e.enc, "keyframe-max-dist", int32(100)); err != nil {
 			return nil, err
 		}
-		if err = e.enc.SetProperty("threads", int(threadCount)); err != nil {
+		if err = gstutil.SetProperty(e.enc, "threads", int32(threadCount)); err != nil {
 			return nil, err
 		}
-		if err = e.enc.SetProperty("cpu-used", -6); err != nil {
+		if err = gstutil.SetProperty(e.enc, "cpu-used", int32(-6)); err != nil {
 			return nil, err
 		}
-		if err = e.enc.SetProperty("deadline", int64(1)); err != nil {
+		if err = gstutil.SetProperty(e.enc, "deadline", int64(1)); err != nil {
 			return nil, err
 		}
-		if err = e.enc.SetProperty("buffer-initial-size", 500); err != nil {
+		if err = gstutil.SetProperty(e.enc, "buffer-initial-size", int32(500)); err != nil {
 			return nil, err
 		}
-		if err = e.enc.SetProperty("buffer-optimal-size", 600); err != nil {
+		if err = gstutil.SetProperty(e.enc, "buffer-optimal-size", int32(600)); err != nil {
 			return nil, err
 		}
-		if err = e.enc.SetProperty("buffer-size", 1000); err != nil {
+		if err = gstutil.SetProperty(e.enc, "buffer-size", int32(1000)); err != nil {
 			return nil, err
 		}
-		e.enc.SetArg("end-usage", "cbr")
+		gst.UtilSetObjectArg(e.enc, "end-usage", "cbr")
 
 		e.elements = append(e.elements, e.enc)
 
@@ -231,17 +229,17 @@ func NewVideoOutput(codec livekit.VideoCodec, layer *livekit.VideoLayer, outputS
 		return nil, errors.ErrUnsupportedEncodeFormat
 	}
 
-	queueOut, err := gst.NewElementWithName("queue", fmt.Sprintf("video_%s_out", layer.Quality.String()))
+	queueOut, err := gstutil.NewElementWithName("queue", fmt.Sprintf("video_%s_out", layer.Quality.String()))
 	if err != nil {
 		return nil, err
 	}
-	if err = queueOut.SetProperty("max-size-buffers", uint(2)); err != nil {
+	if err = gstutil.SetProperty(queueOut, "max-size-buffers", uint32(2)); err != nil {
 		return nil, err
 	}
 
-	e.elements = append(e.elements, queueOut, e.sink.Element)
+	e.elements = append(e.elements, queueOut, e.sink)
 
-	e.bin = gst.NewBin(fmt.Sprintf("video_%s", layer.Quality.String()))
+	e.bin = gstutil.NewBin(fmt.Sprintf("video_%s", layer.Quality.String()))
 	if err = e.linkElements(); err != nil {
 		return nil, err
 	}
@@ -258,7 +256,7 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 
 	e.trackStatsGatherer = statsGatherer.RegisterTrackStats(stats.OutputAudio)
 
-	audioConvert, err := gst.NewElement("audioconvert")
+	audioConvert, err := gstutil.NewElement("audioconvert")
 	if err != nil {
 		return nil, err
 	}
@@ -268,39 +266,35 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 		channels = int(options.Channels)
 	}
 
-	audioResample, err := gst.NewElement("audioresample")
+	audioResample, err := gstutil.NewElement("audioresample")
 	if err != nil {
 		return nil, err
 	}
 
-	capsFilter, err := gst.NewElement("capsfilter")
+	capsFilter, err := gstutil.NewElement("capsfilter")
 	if err != nil {
 		return nil, err
 	}
-	err = capsFilter.SetProperty("caps", gst.NewCapsFromString(
+	if err = gstutil.SetProperty(capsFilter, "caps", gst.CapsFromString(
 		fmt.Sprintf("audio/x-raw,format=S16LE,layout=interleaved,rate=48000,channels=%d", channels),
-	))
-	if err != nil {
+	)); err != nil {
 		return nil, err
 	}
 
-	queueEnc, err := gst.NewElementWithName("queue", "audio_enc")
+	queueEnc, err := gstutil.NewElementWithName("queue", "audio_enc")
 	if err != nil {
 		return nil, err
 	}
-	if err = queueEnc.SetProperty("max-size-buffers", uint(1)); err != nil {
+	if err = gstutil.SetProperty(queueEnc, "max-size-buffers", uint32(1)); err != nil {
 		return nil, err
 	}
 
-	pads, err := queueEnc.GetSinkPads()
-	if err != nil {
-		return nil, err
-	}
+	pads := gstutil.SinkPads(queueEnc)
 	if len(pads) == 0 {
 		return nil, psrpc.NewErrorf(psrpc.Internal, "no sink pad on queue")
 	}
 	pad := pads[0]
-	id := pad.AddProbe(gst.PadProbeTypeBuffer, func(_ *gst.Pad, _ *gst.PadProbeInfo) gst.PadProbeReturn {
+	id := pad.AddProbe(gst.PadProbeTypeBuffer, func(gst.Pad, *gst.PadProbeInfo) gst.PadProbeReturn {
 		return gst.PadProbeDrop
 	})
 	e.stopDropping = func() {
@@ -309,47 +303,47 @@ func NewAudioOutput(options *livekit.IngressAudioEncodingOptions, outputSync *ut
 
 	switch options.AudioCodec {
 	case livekit.AudioCodec_OPUS:
-		e.enc, err = gst.NewElement("opusenc")
+		e.enc, err = gstutil.NewElement("opusenc")
 		if err != nil {
 			return nil, err
 		}
 
 		if options.Bitrate != 0 {
-			if err = e.enc.SetProperty("bitrate", int(options.Bitrate)); err != nil {
+			if err = gstutil.SetProperty(e.enc, "bitrate", int32(options.Bitrate)); err != nil {
 				return nil, err
 			}
 		}
-		if err = e.enc.SetProperty("dtx", !options.DisableDtx); err != nil {
+		if err = gstutil.SetProperty(e.enc, "dtx", !options.DisableDtx); err != nil {
 			return nil, err
 		}
 		// TODO: FEC?
 		// if err = e.enc.SetProperty("inband-fec", true); err != nil {
 		// 	return nil, err
 		// }
-		e.enc.SetArg("frame-size", fmt.Sprint(opusFrameSize))
+		gst.UtilSetObjectArg(e.enc, "frame-size", fmt.Sprint(opusFrameSize))
 
 	default:
 		return nil, errors.ErrUnsupportedEncodeFormat
 	}
 
-	queueOut, err := gst.NewElementWithName("queue", "audio_out")
+	queueOut, err := gstutil.NewElementWithName("queue", "audio_out")
 	if err != nil {
 		return nil, err
 	}
-	if err = queueOut.SetProperty("max-size-time", uint64(5e7)); err != nil {
+	if err = gstutil.SetProperty(queueOut, "max-size-time", uint64(5e7)); err != nil {
 		return nil, err
 	}
 
-	e.elements = []*gst.Element{
-		audioConvert, audioResample, capsFilter, queueEnc, e.enc, queueOut, e.sink.Element,
+	e.elements = []gst.Element{
+		audioConvert, audioResample, capsFilter, queueEnc, e.enc, queueOut, e.sink,
 	}
 
-	e.bin = gst.NewBin("audio")
+	e.bin = gstutil.NewBin("audio")
 	if err = e.linkElements(); err != nil {
 		return nil, err
 	}
 
-	e.latencyCaps = gst.NewCapsFromString(packetLatencyCaps)
+	e.latencyCaps = gst.CapsFromString(packetLatencyCaps)
 
 	return e, nil
 }
@@ -365,9 +359,9 @@ func newVideoOutput(codec livekit.VideoCodec, outputSync *utils.TrackOutputSynch
 		codec:  codec,
 	}
 
-	o.sink.SetCallbacks(&app.SinkCallbacks{
-		EOSFunc:       o.handleEOS,
-		NewSampleFunc: o.handleSample,
+	o.sink.SetCallbacks(&gstapp.AppSinkCallbacks{
+		EOS:       o.handleEOS,
+		NewSample: o.handleSample,
 	})
 
 	return o, nil
@@ -384,19 +378,20 @@ func newAudioOutput(codec livekit.AudioCodec, outputSync *utils.TrackOutputSynch
 		codec:  codec,
 	}
 
-	o.sink.SetCallbacks(&app.SinkCallbacks{
-		EOSFunc:       o.handleEOS,
-		NewSampleFunc: o.handleSample,
+	o.sink.SetCallbacks(&gstapp.AppSinkCallbacks{
+		EOS:       o.handleEOS,
+		NewSample: o.handleSample,
 	})
 
 	return o, nil
 }
 
 func newOutput(outputSync *utils.TrackOutputSynchronizer, isPlayingTooSlow func() bool, eos *eosDispatcher, log logger.Logger) (*Output, error) {
-	sink, err := app.NewAppSink()
+	sinkElement, err := gstutil.NewElement("appsink")
 	if err != nil {
 		return nil, err
 	}
+	sink := sinkElement.(gstapp.AppSink)
 
 	if log == nil {
 		log = logger.GetLogger().WithValues("kind", "output")
@@ -429,36 +424,33 @@ func (e *Output) SinkReady(localTrack *lksdk_output.LocalTrack) {
 }
 
 func (e *Output) linkElements() error {
-	if err := e.bin.AddMany(e.elements...); err != nil {
+	if err := gstutil.AddMany(e.bin, e.elements...); err != nil {
 		return err
 	}
-	if err := gst.ElementLinkMany(e.elements...); err != nil {
+	if err := gstutil.LinkMany(e.elements...); err != nil {
 		return err
 	}
 
-	binSink := gst.NewGhostPad("sink", e.elements[0].GetStaticPad("sink"))
-	if !e.bin.AddPad(binSink.Pad) {
+	if !e.bin.AddPad(gst.NewGhostPad("sink", e.elements[0].GetStaticPad("sink"))) {
 		return errors.ErrUnableToAddPad
 	}
 	return nil
 }
 
-func (e *Output) Bin() *gst.Bin {
+func (e *Output) Bin() gst.Bin {
 	return e.bin
 }
 
 func (e *Output) ForceKeyFrame() error {
 	e.trackStatsGatherer.PLI()
 
-	keyFrame := gst.NewStructure("GstForceKeyUnit")
-	if err := keyFrame.SetValue("all-headers", true); err != nil {
-		return err
-	}
-	e.enc.SendEvent(gst.NewCustomEvent(gst.EventTypeCustomDownstream, keyFrame))
+	keyFrame := gst.NewStructureEmpty("GstForceKeyUnit")
+	keyFrame.SetValue("all-headers", true)
+	e.enc.SendEvent(gst.NewEventCustom(gst.EventCustomDownstream, keyFrame))
 	return nil
 }
 
-func (e *Output) handleEOS(_ *app.Sink) {
+func (e *Output) handleEOS(gstapp.AppSink) {
 	e.logger.Infow("app sink EOS")
 
 	e.Close()
@@ -547,7 +539,7 @@ func (e *Output) onSourceEOS() {
 	}()
 }
 
-func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
+func (e *VideoOutput) handleSample(sink gstapp.AppSink) gst.FlowReturn {
 	// Return an error if the last write failed
 	if errPtr := e.pipelineErr.Load(); errPtr != nil {
 		return errors.ErrorToGstFlowReturn(*errPtr)
@@ -571,13 +563,13 @@ func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 	}
 
 	duration := buffer.Duration()
-	pts := buffer.PresentationTimestamp()
+	pts := buffer.PTS()
 
 	ts := time.Duration(segment.ToRunningTime(gst.FormatTime, uint64(pts)))
 
 	sample := &sample{
 		s: &media.Sample{
-			Data:     buffer.Bytes(),
+			Data:     bufferBytes(buffer),
 			Duration: time.Duration(duration),
 		},
 		ts: ts,
@@ -590,7 +582,7 @@ func (e *VideoOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 	return gst.FlowOK
 }
 
-func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
+func (e *AudioOutput) handleSample(sink gstapp.AppSink) gst.FlowReturn {
 	// Return an error if the last write failed
 	if errPtr := e.pipelineErr.Load(); errPtr != nil {
 		return errors.ErrorToGstFlowReturn(*errPtr)
@@ -614,7 +606,7 @@ func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 	}
 
 	duration := buffer.Duration()
-	pts := buffer.PresentationTimestamp()
+	pts := buffer.PTS()
 
 	ts := time.Duration(segment.ToRunningTime(gst.FormatTime, uint64(pts)))
 
@@ -622,7 +614,7 @@ func (e *AudioOutput) handleSample(sink *app.Sink) gst.FlowReturn {
 	case livekit.AudioCodec_OPUS:
 		sample := &sample{
 			s: &media.Sample{
-				Data:     buffer.Bytes(),
+				Data:     bufferBytes(buffer),
 				Duration: time.Duration(duration),
 			},
 			ts: ts,
@@ -647,15 +639,11 @@ func (e *Output) observeLatency(buffer *gst.Buffer) {
 		return
 	}
 
-	meta := buffer.GetReferenceTimestampMeta(e.latencyCaps)
-	if meta == nil {
+	ts, ok := gstutil.ReferenceTimestamp(buffer, e.latencyCaps)
+	if !ok || ts == 0 || ts == gst.ClockTimeNone {
 		return
 	}
-
-	ingestedAt := meta.Timestamp.AsTimestamp()
-	if ingestedAt == nil || ingestedAt.IsZero() {
-		return
-	}
+	ingestedAt := time.Unix(0, int64(ts))
 
 	now := time.Now()
 	if !e.latencySampledAt.IsZero() {
@@ -664,7 +652,16 @@ func (e *Output) observeLatency(buffer *gst.Buffer) {
 		}
 	}
 
-	latency := now.Sub(*ingestedAt)
+	latency := now.Sub(ingestedAt)
 	e.trackStatsGatherer.ObserveLatency(latency)
 	e.latencySampledAt = now
+}
+
+func bufferBytes(buffer *gst.Buffer) []byte {
+	m, ok := buffer.Map(gst.MapRead)
+	if !ok {
+		return nil
+	}
+	defer m.Unmap()
+	return bytes.Clone(m.Data())
 }
