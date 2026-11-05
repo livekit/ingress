@@ -43,12 +43,25 @@ const (
 	promLabelNodeID      = "node_id"
 	promLabelType        = "type"
 	promLabelTranscoding = "transcoding"
+	promLabelMedia       = "media"
+
+	typeLabelRTMP   = "rtmp"
+	typeLabelWHIP   = "whip"
+	typeLabelURL    = "url"
+	mediaLabelAudio = "audio"
+	mediaLabelVideo = "video"
+	mediaLabelAV    = "av"
+	labelUnknown    = "unknown"
 
 	publicationStatusSuccess  = "success"
 	publicationStatus4xx      = "4xx"
 	publicationStatus5xx      = "5xx"
 	publicationStatusInternal = "internal"
 )
+
+// promSessionCPUBuckets has edges at the default admission costs (2 and 4
+// cores), so the share of sessions above a cost reads from one bucket.
+var promSessionCPUBuckets = []float64{0.05, 0.1, 0.2, 0.3, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16}
 
 type Monitor struct {
 	costConfigLock sync.Mutex
@@ -60,6 +73,12 @@ type Monitor struct {
 	promNodeAvailable      prometheus.GaugeFunc
 	promPublicationCounter *prometheus.CounterVec
 
+	// session metrics are observed once per session when it ends, labeled by
+	// input kind and the media the source carried
+	promSessionMaxCPU  *prometheus.HistogramVec
+	promSessionAvgCPU  *prometheus.HistogramVec
+	promSessionPeakCPU *prometheus.GaugeVec
+
 	// cpuStats (cgroup idle) drives admission; procStats only attributes usage to handler processes.
 	// TODO: use one sampler once admission is validated against per-process idle, which misses sub-second processes.
 	cpuStats  *hwstats.CPUStats
@@ -70,6 +89,7 @@ type Monitor struct {
 	usageLock sync.Mutex
 	usage     map[string]*SessionUsage // resourceID -> usage
 	handlers  map[int]*handlerRun      // live handler pid -> run
+	peaks     map[string]float64       // type|media -> highest MaxCPU observed
 
 	started  core.Fuse
 	shutdown core.Fuse
@@ -102,6 +122,36 @@ func (u *SessionUsage) AvgCPU() float64 {
 	return u.CPUTime.Seconds() / u.Duration.Seconds()
 }
 
+// TypeLabel is the session's input kind as a metric label: rtmp, whip, url,
+// or unknown. WHIP sessions that bypass transcoding run in the service
+// process without a handler, so they have no usage record and are never
+// observed; whip therefore only covers transcoding sessions.
+func (u *SessionUsage) TypeLabel() string {
+	switch u.InputType {
+	case livekit.IngressInput_RTMP_INPUT:
+		return typeLabelRTMP
+	case livekit.IngressInput_WHIP_INPUT:
+		return typeLabelWHIP
+	case livekit.IngressInput_URL_INPUT:
+		return typeLabelURL
+	}
+	return labelUnknown
+}
+
+// MediaLabel is the media the source carried as a metric label: audio, video,
+// av, or unknown while no track has been reported.
+func (u *SessionUsage) MediaLabel() string {
+	switch {
+	case u.AudioMimeType != "" && u.VideoMimeType != "":
+		return mediaLabelAV
+	case u.AudioMimeType != "":
+		return mediaLabelAudio
+	case u.VideoMimeType != "":
+		return mediaLabelVideo
+	}
+	return labelUnknown
+}
+
 type handlerRun struct {
 	usage     *SessionUsage
 	startedAt time.Time
@@ -111,6 +161,7 @@ func NewMonitor() *Monitor {
 	return &Monitor{
 		usage:    make(map[string]*SessionUsage),
 		handlers: make(map[int]*handlerRun),
+		peaks:    make(map[string]float64),
 	}
 }
 
@@ -163,7 +214,40 @@ func (m *Monitor) Start(conf *config.Config) error {
 		ConstLabels: prometheus.Labels{promLabelNodeID: conf.NodeID},
 	}, []string{promLabelType, "status"})
 
-	prometheus.MustRegister(m.promCPULoad, m.promNodeAvailable, m.requestGauge, m.promPublicationCounter)
+	promSessionLabels := []string{promLabelType, promLabelMedia}
+	promSessionConstLabels := prometheus.Labels{promLabelNodeID: conf.NodeID}
+	m.promSessionMaxCPU = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace:                       promNamespace,
+		Subsystem:                       promSubsystemIngress,
+		Name:                            "session_max_cpu_cores",
+		Help:                            "Highest 1s CPU sample of a session's handler processes, in cores, observed when the session ends",
+		ConstLabels:                     promSessionConstLabels,
+		Buckets:                         promSessionCPUBuckets,
+		NativeHistogramBucketFactor:     1.1,
+		NativeHistogramMaxBucketNumber:  100,
+		NativeHistogramMinResetDuration: time.Hour,
+	}, promSessionLabels)
+	m.promSessionAvgCPU = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Namespace:                       promNamespace,
+		Subsystem:                       promSubsystemIngress,
+		Name:                            "session_avg_cpu_cores",
+		Help:                            "Average CPU of a session's handler processes while they ran, in cores, observed when the session ends",
+		ConstLabels:                     promSessionConstLabels,
+		Buckets:                         promSessionCPUBuckets,
+		NativeHistogramBucketFactor:     1.1,
+		NativeHistogramMaxBucketNumber:  100,
+		NativeHistogramMinResetDuration: time.Hour,
+	}, promSessionLabels)
+	m.promSessionPeakCPU = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Namespace:   promNamespace,
+		Subsystem:   promSubsystemIngress,
+		Name:        "session_max_cpu_cores_peak",
+		Help:        "Highest session_max_cpu_cores observed since the process started",
+		ConstLabels: promSessionConstLabels,
+	}, promSessionLabels)
+
+	prometheus.MustRegister(m.promCPULoad, m.promNodeAvailable, m.requestGauge, m.promPublicationCounter,
+		m.promSessionMaxCPU, m.promSessionAvgCPU, m.promSessionPeakCPU)
 
 	// handler usage is diagnostic only, so a failure here does not stop admission
 	procStats, err := hwstats.NewProcMonitor(m.updateHandlerStats)
@@ -211,6 +295,9 @@ func (m *Monitor) Stop() {
 	prometheus.Unregister(m.requestGauge)
 	prometheus.Unregister(m.promNodeAvailable)
 	prometheus.Unregister(m.promPublicationCounter)
+	prometheus.Unregister(m.promSessionMaxCPU)
+	prometheus.Unregister(m.promSessionAvgCPU)
+	prometheus.Unregister(m.promSessionPeakCPU)
 }
 
 // RecordPublicationResult records the outcome of a stream publication attempt,
@@ -423,11 +510,11 @@ func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		m.requestGauge.With(prometheus.Labels{promLabelType: "rtmp", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: typeLabelRTMP, promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
 	case livekit.IngressInput_WHIP_INPUT:
-		m.requestGauge.With(prometheus.Labels{promLabelType: "whip", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: typeLabelWHIP, promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
 	case livekit.IngressInput_URL_INPUT:
-		m.requestGauge.With(prometheus.Labels{promLabelType: "url", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: typeLabelURL, promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Add(1)
 
 	}
 }
@@ -435,11 +522,11 @@ func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
 func (m *Monitor) IngressEnded(info *livekit.IngressInfo) {
 	switch info.InputType {
 	case livekit.IngressInput_RTMP_INPUT:
-		m.requestGauge.With(prometheus.Labels{promLabelType: "rtmp", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: typeLabelRTMP, promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	case livekit.IngressInput_WHIP_INPUT:
-		m.requestGauge.With(prometheus.Labels{promLabelType: "whip", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: typeLabelWHIP, promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	case livekit.IngressInput_URL_INPUT:
-		m.requestGauge.With(prometheus.Labels{promLabelType: "url", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
+		m.requestGauge.With(prometheus.Labels{promLabelType: typeLabelURL, promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	}
 }
 
@@ -515,9 +602,28 @@ func (m *Monitor) SessionEnded(resourceID string) *SessionUsage {
 		return nil
 	}
 	delete(m.usage, resourceID)
+	m.observeSessionLocked(u)
 
 	ret := *u
 	return &ret
+}
+
+// observeSessionLocked records an ended session's usage in the session
+// metrics. It is a no-op before Start. The caller holds usageLock.
+func (m *Monitor) observeSessionLocked(u *SessionUsage) {
+	if m.promSessionMaxCPU == nil {
+		return
+	}
+
+	kind, media := u.TypeLabel(), u.MediaLabel()
+	m.promSessionMaxCPU.WithLabelValues(kind, media).Observe(u.MaxCPU)
+	m.promSessionAvgCPU.WithLabelValues(kind, media).Observe(u.AvgCPU())
+
+	key := kind + "|" + media
+	if peak, ok := m.peaks[key]; !ok || u.MaxCPU > peak {
+		m.peaks[key] = u.MaxCPU
+		m.promSessionPeakCPU.WithLabelValues(kind, media).Set(u.MaxCPU)
+	}
 }
 
 func (m *Monitor) updateHandlerStats(stats *hwstats.ProcStats) {
