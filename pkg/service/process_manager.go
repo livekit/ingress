@@ -307,23 +307,21 @@ func (p *process) killAfter(d time.Duration) {
 }
 
 func (p *process) UpdateIngress(ctx context.Context, _ *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
-	p.killAfter(killGracePeriod)
-
-	grpcClient := p.grpcClient.Load()
-	if grpcClient == nil {
-		return nil, errors.ErrIngressNotFound
-	}
-
-	resp, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{}, grpc.WaitForReady(true))
-
-	if err != nil {
-		return nil, err
-	}
-
-	return resp.State, nil
+	return p.killIngress(ctx)
 }
 
 func (p *process) DeleteIngress(ctx context.Context, _ *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
+	return p.killIngress(ctx)
+}
+
+func (p *process) DeleteWHIPResource(ctx context.Context, _ *rpc.DeleteWHIPResourceRequest) (*emptypb.Empty, error) {
+	if _, err := p.killIngress(ctx); err != nil {
+		return nil, err
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (p *process) killIngress(ctx context.Context) (*livekit.IngressState, error) {
 	p.killAfter(killGracePeriod)
 
 	grpcClient := p.grpcClient.Load()
@@ -332,29 +330,10 @@ func (p *process) DeleteIngress(ctx context.Context, _ *livekit.DeleteIngressReq
 	}
 
 	resp, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{}, grpc.WaitForReady(true))
-
 	if err != nil {
 		return nil, err
 	}
-
 	return resp.State, nil
-}
-
-func (p *process) DeleteWHIPResource(ctx context.Context, _ *rpc.DeleteWHIPResourceRequest) (*emptypb.Empty, error) {
-	p.killAfter(killGracePeriod)
-
-	grpcClient := p.grpcClient.Load()
-	if grpcClient == nil {
-		return nil, errors.ErrIngressNotFound
-	}
-
-	_, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{}, grpc.WaitForReady(true))
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &emptypb.Empty{}, nil
 }
 
 func (p *process) ICERestartWHIPResource(_ context.Context, _ *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {
