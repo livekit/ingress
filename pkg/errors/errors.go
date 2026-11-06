@@ -42,6 +42,7 @@ var (
 	ErrMissingResourceId            = psrpc.NewErrorf(psrpc.InvalidArgument, "missing resource ID")
 	ErrInvalidRelayToken            = psrpc.NewErrorf(psrpc.PermissionDenied, "invalid token")
 	ErrIngressNotFound              = psrpc.NewErrorf(psrpc.NotFound, "ingress not found")
+	ErrHandlerKilled                = psrpc.NewErrorf(psrpc.Internal, "handler killed after it did not stop")
 	ErrServerCapacityExceeded       = psrpc.NewErrorf(psrpc.ResourceExhausted, "server capacity exceeded")
 	ErrServerShuttingDown           = psrpc.NewErrorf(psrpc.Unavailable, "server shutting down")
 	ErrIngressClosing               = psrpc.NewErrorf(psrpc.Unavailable, "ingress closing")
