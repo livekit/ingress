@@ -133,15 +133,24 @@ func TestUpdateIngressStateRecordsTracksAndForwards(t *testing.T) {
 	require.NoError(t, err)
 
 	info := newTestParams("").IngressInfo
+	h := &process{params: newTestParams("")}
+	pm.activeHandlers[testResourceID] = h
 	monitor.HandlerStarted(info, 1)
 	info.State.Audio = &livekit.InputAudioState{MimeType: "audio/opus"}
 	info.State.Video = &livekit.InputVideoState{MimeType: "video/VP8"}
+	info.State.UpdatedAt = time.Now().Add(-time.Second).UnixNano()
 
 	_, err = pm.UpdateIngressState(context.Background(), &ipc.UpdateIngressStateRequest{ProjectId: "p_test", Info: info})
 	require.NoError(t, err)
 
 	require.Equal(t, "p_test", notifier.projectID)
 	require.Same(t, info, notifier.info, "the update is forwarded as received")
+
+	// a killed handler's final update keeps what it last reported
+	pm.publishKilledState(context.Background(), h)
+	require.Equal(t, livekit.IngressState_ENDPOINT_ERROR, notifier.info.State.Status)
+	require.Equal(t, "audio/opus", notifier.info.State.Audio.MimeType)
+	require.Greater(t, notifier.info.State.UpdatedAt, info.State.UpdatedAt)
 
 	u := monitor.SessionEnded(testResourceID)
 	require.NotNil(t, u)

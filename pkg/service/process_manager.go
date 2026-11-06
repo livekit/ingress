@@ -31,6 +31,7 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
+	protoutils "github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 
 	"github.com/livekit/ingress/pkg/errors"
@@ -62,6 +63,7 @@ type process struct {
 	proc             atomic.Pointer[os.Process]
 	killArmed        core.Fuse
 	forceKilled      atomic.Bool
+	lastInfo         atomic.Pointer[livekit.IngressInfo]
 }
 
 type ProcessManager struct {
@@ -190,7 +192,7 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 	defer func() {
 		h.closed.Break()
 		if h.forceKilled.Load() {
-			s.publishKilledState(context.WithoutCancel(ctx), p)
+			s.publishKilledState(context.WithoutCancel(ctx), h)
 		}
 		// Release before the session leaves the session manager. Shutdown waits
 		// on IsIdle, which IngressEnded satisfies, and these two calls are not
@@ -221,10 +223,22 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 }
 
 // publishKilledState sends the final update that a killed handler could not.
-func (s *ProcessManager) publishKilledState(ctx context.Context, p *params.Params) {
-	p.SetStatus(livekit.IngressState_ENDPOINT_ERROR, errors.ErrHandlerKilled)
-	if err := s.stateNotifier.UpdateIngressState(ctx, p.ProjectID, p.CopyInfo()); err != nil {
-		logger.Errorw("failed to send update", err, "ingressID", p.IngressId)
+func (s *ProcessManager) publishKilledState(ctx context.Context, h *process) {
+	info := h.lastInfo.Load()
+	if info == nil {
+		info = h.params.CopyInfo()
+	}
+
+	now := time.Now().UnixNano()
+	info.State.Status = livekit.IngressState_ENDPOINT_ERROR
+	info.State.Error = errors.ErrHandlerKilled.Error()
+	if info.State.EndedAt == 0 {
+		info.State.EndedAt = now
+	}
+	info.State.UpdatedAt = now
+
+	if err := s.stateNotifier.UpdateIngressState(ctx, h.params.ProjectID, info); err != nil {
+		logger.Errorw("failed to send update", err, "ingressID", h.params.IngressId)
 	}
 }
 
@@ -295,6 +309,14 @@ func (s *ProcessManager) killAll() {
 
 func (s *ProcessManager) UpdateIngressState(ctx context.Context, req *ipc.UpdateIngressStateRequest) (*emptypb.Empty, error) {
 	s.sm.HandlerStateUpdated(req.Info)
+
+	s.mu.RLock()
+	h := s.activeHandlers[req.Info.GetState().GetResourceId()]
+	s.mu.RUnlock()
+	if h != nil {
+		h.lastInfo.Store(protoutils.CloneProto(req.Info))
+	}
+
 	return &emptypb.Empty{}, s.stateNotifier.UpdateIngressState(ctx, req.ProjectId, req.Info)
 }
 
