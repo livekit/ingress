@@ -5,8 +5,8 @@ go 1.26.8
 require (
 	github.com/aclements/go-moremath v0.0.0-20241023150245-c8bbc672ef66
 	github.com/frostbyte73/core v0.1.1
-	github.com/go-gst/go-glib v0.0.4
-	github.com/go-gst/go-gst v0.0.3-0.20261014140714-34ab949f28e4
+	github.com/go-gst/go-glib v0.0.5
+	github.com/go-gst/go-gst v0.0.4-0.20261106142200-f6a18d774798
 	github.com/google/go-cmp v0.7.0
 	github.com/gorilla/mux v1.8.1
 	github.com/livekit/go-rtmp v0.0.0-20261019042323-a9bd9ffaba6f
