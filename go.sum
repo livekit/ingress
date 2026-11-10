@@ -50,10 +50,10 @@ github.com/fsnotify/fsnotify v1.10.1 h1:b0/UzAf9yR5rhf3RPm9gf3ehBPpf0oZKIjtpKrx5
 github.com/fsnotify/fsnotify v1.10.1/go.mod h1:TLheqan6HD6GBK6PrDWyDPBaEV8LspOxvPSjC+bVfgo=
 github.com/gammazero/deque v1.2.1 h1:9fnQVFCCZ9/NOc7ccTNqzoKd1tCWOqeI05/lPqFPMGQ=
 github.com/gammazero/deque v1.2.1/go.mod h1:5nSFkzVm+afG9+gy0VIowlqVAW4N8zNcMne+CMQVD2g=
-github.com/go-gst/go-glib v0.0.4 h1:pvjoOmi2pmyyfidL2ksU95GvEUHo0Nv45Vw5JWKZp7k=
-github.com/go-gst/go-glib v0.0.4/go.mod h1:cHWRWZCiwhx4CmW92T0/+cxn69AquI7aj2mIk96WgEI=
-github.com/go-gst/go-gst v0.0.3-0.20261014140714-34ab949f28e4 h1:fEBTDNskLMc/zL0Gq3wsOsValAGFPneX13bCbA4wF94=
-github.com/go-gst/go-gst v0.0.3-0.20261014140714-34ab949f28e4/go.mod h1:Db8xOdAikb3oAa2Cs/ACQVnL5+IAbNif9MsSeTCSpac=
+github.com/go-gst/go-glib v0.0.5 h1:ymJ3io8/lnaSwOox1HibSLqak1R+0QgtI9LmcSMwp+0=
+github.com/go-gst/go-glib v0.0.5/go.mod h1:cHWRWZCiwhx4CmW92T0/+cxn69AquI7aj2mIk96WgEI=
+github.com/go-gst/go-gst v0.0.4-0.20261106142200-f6a18d774798 h1:LbGWK/AyECzIDubLpHfoo9V1j4yRup9IamDEiuxxFs4=
+github.com/go-gst/go-gst v0.0.4-0.20261106142200-f6a18d774798/go.mod h1:1L2gyNBJAJf96pFqBzwbb7Ir5okPcj3O0egbqUDShkk=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=
 github.com/go-logr/logr v1.4.4 h1:tG4xh9yMsRCAiodLVTxyrkzSZ9+o0L1Kg/+cPVcbP/8=
 github.com/go-logr/logr v1.4.4/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
