@@ -17,6 +17,7 @@ package params
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"path"
 	"strings"
@@ -452,4 +453,26 @@ func CopyRedactedIngressInfo(info *livekit.IngressInfo) *livekit.IngressInfo {
 	infoCopy.StreamKey = protoutils.RedactIdentifier(infoCopy.StreamKey)
 
 	return infoCopy
+}
+
+// URLPullProxyEnv returns the proxy environment for an http(s) URL pull handler process.
+// hlsdemux2 takes its proxy only from these variables; signaling reads them too, so its host is exempt.
+func (p *Params) URLPullProxyEnv() []string {
+	if p.Config == nil || p.URLPullProxy == "" || p.IngressInfo == nil || p.InputType != livekit.IngressInput_URL_INPUT {
+		return nil
+	}
+	if !strings.HasPrefix(p.Url, "http://") && !strings.HasPrefix(p.Url, "https://") {
+		return nil
+	}
+
+	var noProxy string
+	if u, err := url.Parse(p.WsUrl); err == nil {
+		noProxy = u.Hostname()
+	}
+
+	env := make([]string, 0, 6)
+	for _, k := range []string{"http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY"} {
+		env = append(env, k+"="+p.URLPullProxy)
+	}
+	return append(env, "no_proxy="+noProxy, "NO_PROXY="+noProxy)
 }

@@ -83,6 +83,7 @@ func NewCmd(_ context.Context, p *params.Params) (*exec.Cmd, error) {
 		"INGRESS_HANDLER_FEATURE_FLAGS="+featureFlags,
 		"INGRESS_HANDLER_LOGGING_FIELDS="+loggingFields,
 	)
+	cmd.Env = append(cmd.Env, p.URLPullProxyEnv()...)
 
 	l := utils.NewHandlerLogger(p.State.ResourceId, p.IngressId)
 	cmd.Stdout = l

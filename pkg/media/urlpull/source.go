@@ -68,6 +68,12 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 			return nil, err
 		}
 
+		if p.URLPullProxy != "" {
+			if err = gstutil.SetProperty(elem, "proxy", p.URLPullProxy); err != nil {
+				return nil, err
+			}
+		}
+
 	} else if strings.HasPrefix(p.Url, "srt://") {
 		elem, err = gstutil.NewElement("srtclientsrc")
 		if err != nil {
