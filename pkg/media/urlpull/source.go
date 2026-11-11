@@ -17,6 +17,7 @@ package urlpull
 import (
 	"context"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -213,5 +214,12 @@ func (u *URLSource) Close() error {
 // souphttpsrc ignores a proxy it cannot parse and fetches directly, so reject one here.
 func isValidProxyURL(proxy string) bool {
 	u, err := url.Parse(proxy)
-	return err == nil && u.Scheme == "http" && u.Hostname() != ""
+	if err != nil || u.Scheme != "http" || u.Hostname() == "" {
+		return false
+	}
+	if port := u.Port(); port != "" {
+		n, err := strconv.Atoi(port)
+		return err == nil && n >= 1 && n <= 65535
+	}
+	return true
 }
