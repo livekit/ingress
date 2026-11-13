@@ -47,7 +47,7 @@ func envMap(env []string) map[string]string {
 }
 
 func TestURLPullProxyEnv(t *testing.T) {
-	t.Run("http url pull is proxied, signaling included", func(t *testing.T) {
+	t.Run("every source fetch is proxied, the signaling host included", func(t *testing.T) {
 		env := envMap(newProxyTestParams(livekit.IngressInput_URL_INPUT, "https://example.com/live.m3u8", testProxy).URLPullProxyEnv())
 
 		// libproxy prefers the lowercase names and Go the uppercase ones; both must agree.

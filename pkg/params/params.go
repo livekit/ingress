@@ -454,14 +454,19 @@ func CopyRedactedIngressInfo(info *livekit.IngressInfo) *livekit.IngressInfo {
 	return infoCopy
 }
 
-// URLPullProxyEnv returns the proxy environment for an http(s) URL pull handler process.
-// hlsdemux2 takes its proxy only from these variables. Signaling reads them too and goes through the proxy:
-// no_proxy also matches subdomains, so exempting the signaling host would let a source URL bypass the proxy.
-func (p *Params) URLPullProxyEnv() []string {
+// UsesURLPullProxy reports whether this is an http(s) URL pull that fetches through URLPullProxy.
+func (p *Params) UsesURLPullProxy() bool {
 	if p.Config == nil || p.URLPullProxy == "" || p.IngressInfo == nil || p.InputType != livekit.IngressInput_URL_INPUT {
-		return nil
+		return false
 	}
-	if !strings.HasPrefix(p.Url, "http://") && !strings.HasPrefix(p.Url, "https://") {
+	return strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://")
+}
+
+// URLPullProxyEnv returns the proxy environment for an http(s) URL pull handler process.
+// hlsdemux2 takes its proxy only from these variables. no_proxy stays empty because its
+// entries also match subdomains, which would let a source URL bypass the proxy.
+func (p *Params) URLPullProxyEnv() []string {
+	if !p.UsesURLPullProxy() {
 		return nil
 	}
 
