@@ -47,7 +47,7 @@ func envMap(env []string) map[string]string {
 }
 
 func TestURLPullProxyEnv(t *testing.T) {
-	t.Run("http url pull is proxied except for signaling", func(t *testing.T) {
+	t.Run("http url pull is proxied, signaling included", func(t *testing.T) {
 		env := envMap(newProxyTestParams(livekit.IngressInput_URL_INPUT, "https://example.com/live.m3u8", testProxy).URLPullProxyEnv())
 
 		// libproxy prefers the lowercase names and Go the uppercase ones; both must agree.
@@ -55,8 +55,10 @@ func TestURLPullProxyEnv(t *testing.T) {
 			require.Equal(t, env[k], env[strings.ToUpper(k)], k)
 		}
 
-		// hlsdemux2 fetches anything matching no_proxy directly, so it must hold the signaling host alone.
-		require.Equal(t, "project.livekit.cloud", env["no_proxy"])
+		// no_proxy must be set, so an inherited value cannot exempt any host.
+		noProxy, ok := env["no_proxy"]
+		require.True(t, ok, "no_proxy must be set")
+		require.Empty(t, noProxy, "no host may bypass the proxy")
 
 		resolve := (&httpproxy.Config{
 			HTTPProxy:  env["HTTP_PROXY"],
@@ -68,6 +70,8 @@ func TestURLPullProxyEnv(t *testing.T) {
 			"http://169.254.169.254/latest/meta-data/",
 			"http://10.0.0.1:8080/",
 			"https://example.com/seg0.ts",
+			"https://project.livekit.cloud/rtc",
+			"https://sub.project.livekit.cloud:8080/seg0.ts",
 		} {
 			u, err := url.Parse(target)
 			require.NoError(t, err)
@@ -76,12 +80,6 @@ func TestURLPullProxyEnv(t *testing.T) {
 			require.NotNil(t, got, "%s must go through the proxy", target)
 			require.Equal(t, testProxy, got.String())
 		}
-
-		u, err := url.Parse("https://project.livekit.cloud/rtc")
-		require.NoError(t, err)
-		got, err := resolve(u)
-		require.NoError(t, err)
-		require.Nil(t, got, "signaling must not go through the proxy")
 	})
 
 	for _, tc := range []struct {
