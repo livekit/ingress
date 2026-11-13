@@ -55,6 +55,9 @@ func TestURLPullProxyEnv(t *testing.T) {
 			require.Equal(t, env[k], env[strings.ToUpper(k)], k)
 		}
 
+		// hlsdemux2 fetches anything matching no_proxy directly, so it must hold the signaling host alone.
+		require.Equal(t, "project.livekit.cloud", env["no_proxy"])
+
 		resolve := (&httpproxy.Config{
 			HTTPProxy:  env["HTTP_PROXY"],
 			HTTPSProxy: env["HTTPS_PROXY"],
