@@ -79,6 +79,9 @@ type ServiceConfig struct {
 	EnableUDPURLPull bool `yaml:"enable_udp_url_pull,omitempty"`
 	// Network interface to join multicast groups on for UDP url pull. Empty means let the OS decide.
 	MulticastInterface string `yaml:"multicast_interface,omitempty"`
+	// HTTP proxy that http(s) URL pull handlers fetch through, e.g. http://127.0.0.1:3128.
+	// Empty means fetch directly.
+	URLPullProxy string `yaml:"url_pull_proxy,omitempty"`
 
 	// Used for WHIP transport
 	RTCConfig rtcconfig.RTCConfig `yaml:"rtc_config"`

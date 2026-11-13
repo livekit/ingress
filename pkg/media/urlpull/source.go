@@ -16,6 +16,8 @@ package urlpull
 
 import (
 	"context"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -59,6 +61,10 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 	var elem gst.Element
 	var err error
 	if strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://") {
+		if p.URLPullProxy != "" && !isValidProxyURL(p.URLPullProxy) {
+			return nil, errors.ErrInvalidURLPullProxy
+		}
+
 		elem, err = gstutil.NewElement("souphttpsrc")
 		if err != nil {
 			return nil, err
@@ -66,6 +72,12 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 
 		if err = gstutil.SetProperty(elem, "location", p.Url); err != nil {
 			return nil, err
+		}
+
+		if p.URLPullProxy != "" {
+			if err = gstutil.SetProperty(elem, "proxy", p.URLPullProxy); err != nil {
+				return nil, err
+			}
 		}
 
 	} else if strings.HasPrefix(p.Url, "srt://") {
@@ -197,4 +209,17 @@ func (u *URLSource) Close() error {
 	u.done.Break()
 
 	return nil
+}
+
+// souphttpsrc ignores a proxy it cannot parse and fetches directly, so reject one here.
+func isValidProxyURL(proxy string) bool {
+	u, err := url.Parse(proxy)
+	if err != nil || u.Scheme != "http" || u.Hostname() == "" {
+		return false
+	}
+	if port := u.Port(); port != "" {
+		n, err := strconv.Atoi(port)
+		return err == nil && n >= 1 && n <= 65535
+	}
+	return true
 }
