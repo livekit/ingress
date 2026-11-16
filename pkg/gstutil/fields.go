@@ -16,12 +16,8 @@ package gstutil
 
 // Struct fields the go-gst bindings do not expose.
 
-// #cgo pkg-config: gstreamer-1.0 gstreamer-mpegts-1.0
-// #cgo CFLAGS: -DGST_USE_UNSTABLE_API
+// #cgo pkg-config: gstreamer-1.0
 // #include <gst/gst.h>
-// #include <gst/mpegts/mpegts.h>
-//
-// static void section_unref(GstMpegtsSection *s) { gst_mpegts_section_unref(s); }
 //
 // static GstBuffer *probe_writable_buffer(GstPadProbeInfo *info) {
 //   GstBuffer *b = gst_buffer_make_writable(GST_PAD_PROBE_INFO_BUFFER(info));
@@ -36,7 +32,6 @@ import (
 	"unsafe"
 
 	"github.com/go-gst/go-gst/pkg/gst"
-	"github.com/go-gst/go-gst/pkg/gstmpegts"
 )
 
 // ReferenceTimestamp returns the timestamp of the buffer's reference timestamp meta
@@ -65,57 +60,6 @@ func AddReferenceTimestamp(buffer *gst.Buffer, reference *gst.Caps, timestamp gs
 	)
 	runtime.KeepAlive(buffer)
 	runtime.KeepAlive(reference)
-}
-
-type SpliceInsert struct {
-	SpliceTimeSpecified bool
-	Splices             []SpliceEvent
-}
-
-type SpliceEvent struct {
-	EventID               uint32
-	EventCancelIndicator  bool
-	OutOfNetworkIndicator bool
-	SpliceImmediateFlag   bool
-}
-
-// ParseSpliceInsert returns the splice_insert command carried by an SCTE-35 section
-// event, or nil for any other event or command.
-func ParseSpliceInsert(event *gst.Event) *SpliceInsert {
-	// The generated EventParseMpegtsSection frees the returned reference with C.free.
-	s := C.gst_event_parse_mpegts_section((*C.GstEvent)(gst.UnsafeEventToGlibNone(event)))
-	runtime.KeepAlive(event)
-	if s == nil {
-		return nil
-	}
-	defer C.section_unref(s)
-
-	if gstmpegts.SectionType(s.section_type) != gstmpegts.SectionScteSit {
-		return nil
-	}
-
-	c := C.gst_mpegts_section_get_scte_sit(s)
-	if c == nil {
-		return nil
-	}
-	if gstmpegts.SCTESpliceCommandType(c.splice_command_type) != gstmpegts.GstMtsScteSpliceCommandInsert {
-		return nil
-	}
-
-	ret := &SpliceInsert{SpliceTimeSpecified: c.splice_time_specified != 0}
-	if c.splices == nil {
-		return ret
-	}
-	events := unsafe.Slice((**C.GstMpegtsSCTESpliceEvent)(unsafe.Pointer(c.splices.pdata)), c.splices.len)
-	for _, e := range events {
-		ret.Splices = append(ret.Splices, SpliceEvent{
-			EventID:               uint32(e.splice_event_id),
-			EventCancelIndicator:  e.splice_event_cancel_indicator != 0,
-			OutOfNetworkIndicator: e.out_of_network_indicator != 0,
-			SpliceImmediateFlag:   e.splice_immediate_flag != 0,
-		})
-	}
-	return ret
 }
 
 // DurationOf converts a clock time to a duration, or false for GST_CLOCK_TIME_NONE.

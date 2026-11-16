@@ -30,12 +30,6 @@ linters:
         - pattern: ^gst\.Buffer\.(Add|Get)ReferenceTimestampMeta$
           pkg: ^github\.com/go-gst/go-gst/pkg/gst$
           msg: logs a warning on every call; use gstutil.AddReferenceTimestamp or gstutil.ReferenceTimestamp
-        - pattern: ^gstmpegts\.(Event|Message)ParseMpegtsSection$
-          pkg: ^github\.com/go-gst/go-gst/pkg/gstmpegts$
-          msg: frees the section with C.free instead of unreffing it; use gstutil.ParseSpliceInsert
-        - pattern: ^gstmpegts\.Section\.GetScteSit$
-          pkg: ^github\.com/go-gst/go-gst/pkg/gstmpegts$
-          msg: logs a warning on every call; use gstutil.ParseSpliceInsert
     staticcheck:
       checks:
         - "all"
