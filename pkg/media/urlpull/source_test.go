@@ -49,6 +49,8 @@ func TestNewURLSourceRejectsInvalidProxy(t *testing.T) {
 		"http://[::1",
 		"127.0.0.1:3128",
 		"socks5://127.0.0.1:1080",
+		"http://user:pass@127.0.0.1:3128",
+		"http://user@127.0.0.1:3128",
 	} {
 		t.Run(proxy, func(t *testing.T) {
 			_, err := NewURLSource(context.Background(), newURLPullParams("https://example.com/live.m3u8", proxy))
@@ -60,8 +62,9 @@ func TestNewURLSourceRejectsInvalidProxy(t *testing.T) {
 func TestNewURLSourceAcceptsValidProxy(t *testing.T) {
 	for _, proxy := range []string{"", "http://127.0.0.1:3128", "http://127.0.0.1:65535", "http://[::1]:3128", "http://proxy.local"} {
 		t.Run(proxy, func(t *testing.T) {
-			_, err := NewURLSource(context.Background(), newURLPullParams("https://example.com/live.m3u8", proxy))
+			src, err := NewURLSource(context.Background(), newURLPullParams("https://example.com/live.m3u8", proxy))
 			require.NoError(t, err)
+			t.Cleanup(func() { _ = src.Close() })
 		})
 	}
 }

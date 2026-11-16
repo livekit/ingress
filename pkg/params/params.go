@@ -470,9 +470,10 @@ func (p *Params) URLPullProxyEnv() []string {
 		return nil
 	}
 
-	env := make([]string, 0, 6)
+	env := make([]string, 0, 7)
 	for _, k := range []string{"http_proxy", "HTTP_PROXY", "https_proxy", "HTTPS_PROXY"} {
 		env = append(env, k+"="+p.URLPullProxy)
 	}
-	return append(env, "no_proxy=", "NO_PROXY=")
+	// GLib prefers a resolver that ignores http_proxy when XDG_CURRENT_DESKTOP includes GNOME.
+	return append(env, "no_proxy=", "NO_PROXY=", "GIO_USE_PROXY_RESOLVER=libproxy")
 }

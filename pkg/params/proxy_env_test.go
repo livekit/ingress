@@ -60,6 +60,8 @@ func TestURLPullProxyEnv(t *testing.T) {
 		require.True(t, ok, "no_proxy must be set")
 		require.Empty(t, noProxy, "no host may bypass the proxy")
 
+		require.Equal(t, "libproxy", env["GIO_USE_PROXY_RESOLVER"], "hlsdemux2 must use a resolver that reads http_proxy")
+
 		resolve := (&httpproxy.Config{
 			HTTPProxy:  env["HTTP_PROXY"],
 			HTTPSProxy: env["HTTPS_PROXY"],
