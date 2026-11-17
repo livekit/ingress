@@ -16,10 +16,12 @@ package lksdk_output
 
 import (
 	"context"
+	"net/http"
 	"sync"
 	"sync/atomic"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/pion/rtcp"
 	"github.com/pion/webrtc/v4"
 	"github.com/pion/webrtc/v4/pkg/media"
@@ -180,6 +182,8 @@ func NewLKSDKOutput(ctx context.Context, onDisconnected func(), p *params.Params
 
 		p.GetLogger().Infow("enabling pacer", "bitrate", br)
 	}
+
+	bypassURLPullProxyForSignaling(p)
 
 	room := lksdk.NewRoom(cb)
 	room.SetLogger(medialogutils.NewOverrideLogger(p.GetLogger()))
@@ -365,4 +369,16 @@ func (s *LKSDKOutput) Close() error {
 	}
 
 	return err
+}
+
+// The URL pull proxy environment is for source fetches. The SDK dials signaling with
+// websocket.DefaultDialer and validates with http.DefaultClient, which both read it.
+func bypassURLPullProxyForSignaling(p *params.Params) {
+	if !p.UsesURLPullProxy() {
+		return
+	}
+	websocket.DefaultDialer.Proxy = nil
+	if t, ok := http.DefaultTransport.(*http.Transport); ok {
+		t.Proxy = nil
+	}
 }

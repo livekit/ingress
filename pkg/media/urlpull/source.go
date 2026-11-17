@@ -24,6 +24,7 @@ import (
 
 	"github.com/livekit/protocol/logger"
 
+	"github.com/livekit/ingress/pkg/config"
 	"github.com/livekit/ingress/pkg/errors"
 	"github.com/livekit/ingress/pkg/gstutil"
 	"github.com/livekit/ingress/pkg/params"
@@ -59,6 +60,10 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 	var elem gst.Element
 	var err error
 	if strings.HasPrefix(p.Url, "http://") || strings.HasPrefix(p.Url, "https://") {
+		if p.URLPullProxy != "" && !config.IsValidURLPullProxy(p.URLPullProxy) {
+			return nil, errors.ErrInvalidURLPullProxy
+		}
+
 		elem, err = gstutil.NewElement("souphttpsrc")
 		if err != nil {
 			return nil, err
@@ -66,6 +71,12 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 
 		if err = gstutil.SetProperty(elem, "location", p.Url); err != nil {
 			return nil, err
+		}
+
+		if p.URLPullProxy != "" {
+			if err = gstutil.SetProperty(elem, "proxy", p.URLPullProxy); err != nil {
+				return nil, err
+			}
 		}
 
 	} else if strings.HasPrefix(p.Url, "srt://") {

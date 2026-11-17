@@ -37,6 +37,7 @@ var (
 	ErrUnsupportedDecodeFormat      = psrpc.NewErrorf(psrpc.NotAcceptable, "unsupported format for the source media")
 	ErrUnsupportedEncodeFormat      = psrpc.NewErrorf(psrpc.InvalidArgument, "unsupported mime type for encoder")
 	ErrUnsupportedURLFormat         = psrpc.NewErrorf(psrpc.InvalidArgument, "unsupported URL type")
+	ErrInvalidURLPullProxy          = psrpc.NewErrorf(psrpc.Internal, "invalid URL pull proxy")
 	ErrDuplicateTrack               = psrpc.NewErrorf(psrpc.NotAcceptable, "more than 1 track with given media kind")
 	ErrUnableToAddPad               = psrpc.NewErrorf(psrpc.Internal, "could not add pads to bin")
 	ErrMissingResourceId            = psrpc.NewErrorf(psrpc.InvalidArgument, "missing resource ID")
