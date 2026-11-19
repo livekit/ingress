@@ -26,14 +26,16 @@ if [[ -n "${INTEGRATION}" ]]; then
 
   # Without the exit, the unit tests below run too: exec in a pipeline
   # replaces the subshell running that stage, not this script.
-  go install github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest
-  go tool test2json -p ingress ./test.test -test.v -test.timeout 20m 2>&1 | "$HOME"/go/bin/gotestfmt
+  go install github.com/mfridman/tparse@v0.18.0
+  # stderr stays out of the pipe: tparse rejects the whole stream if a
+  # non-JSON line follows the first JSON event.
+  go tool test2json -p ingress ./test.test -test.v -test.timeout 20m | "$HOME"/go/bin/tparse -progress
   exit
 fi
 
 if [[ -z "${GITHUB_WORKFLOW}" ]]; then
   exec go test -v -timeout 20m ./pkg/...
 else
-  go install github.com/gotesttools/gotestfmt/v2/cmd/gotestfmt@latest
-  exec go tool test2json -p ingress go test -test.v=true -test.timeout 20m ./pkg/... 2>&1 | "$HOME"/go/bin/gotestfmt
+  go install github.com/mfridman/tparse@v0.18.0
+  exec go test -json -timeout 20m ./pkg/... | "$HOME"/go/bin/tparse -progress
 fi
