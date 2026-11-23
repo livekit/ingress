@@ -12,10 +12,10 @@ require (
 	github.com/livekit/go-rtmp v0.0.0-20261019042323-a9bd9ffaba6f
 	github.com/livekit/mageutil v0.0.0-20250511045019-0f1ff63f7731
 	github.com/livekit/media-sdk v0.1.1
-	github.com/livekit/mediatransportutil v0.0.0-20261105133908-2cf1b1487796
+	github.com/livekit/mediatransportutil v0.0.0-20261116220501-6af81419a977
 	github.com/livekit/protocol v1.54.1
 	github.com/livekit/psrpc v0.8.2
-	github.com/livekit/server-sdk-go/v2 v2.19.0
+	github.com/livekit/server-sdk-go/v2 v2.20.0
 	github.com/pion/dtls/v3 v3.1.15
 	github.com/pion/interceptor v0.1.51
 	github.com/pion/rtcp v1.2.20
@@ -37,6 +37,7 @@ require (
 	buf.build/go/protovalidate v1.2.0 // indirect
 	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/petermattis/goid v0.0.0-20260918085751-abfca077860b // indirect
+	github.com/pion/dtls/v4 v4.0.0-rc.8 // indirect
 	github.com/pion/stun/v4 v4.0.1 // indirect
 	github.com/pion/transport/v4 v4.1.0 // indirect
 	github.com/pion/transport/v5 v5.1.4 // indirect
