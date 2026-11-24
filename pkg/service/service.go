@@ -530,6 +530,12 @@ func (s *Service) CanAccept() bool {
 	return s.monitor.CanAccept()
 }
 
+// OnCapacityChange sets f to be called after this node accepts an ingress or one ends. See
+// stats.Monitor.OnCapacityChange.
+func (s *Service) OnCapacityChange(f func()) {
+	s.monitor.OnCapacityChange(f)
+}
+
 func (s *Service) IsActive() bool {
 	return s.isActive.Load()
 }

@@ -67,6 +67,9 @@ type Monitor struct {
 
 	pendingCPUs atomic.Float64
 
+	// capacityChange is called after an ingress is accepted or ends.
+	capacityChange atomic.Pointer[func()]
+
 	usageLock sync.Mutex
 	usage     map[string]*SessionUsage // resourceID -> usage
 	handlers  map[int]*handlerRun      // live handler pid -> run
@@ -414,10 +417,24 @@ func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 	if accept {
 		m.pendingCPUs.Add(cpuHold)
 		time.AfterFunc(time.Second, func() { m.pendingCPUs.Sub(cpuHold) })
+		m.capacityChanged()
 	}
 
 	logger.Debugw("cpu request", "accepted", accept, "availableCPUs", available, "numCPUs", m.cpuStats.NumCPU())
 	return accept
+}
+
+// OnCapacityChange sets f to be called after the monitor accepts an ingress or one ends, so a
+// node can publish its available CPU at once rather than at its next poll, before schedulers
+// offer the capacity an accepted ingress took. f must not block.
+func (m *Monitor) OnCapacityChange(f func()) {
+	m.capacityChange.Store(&f)
+}
+
+func (m *Monitor) capacityChanged() {
+	if f := m.capacityChange.Load(); f != nil {
+		(*f)()
+	}
 }
 
 func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
@@ -441,6 +458,7 @@ func (m *Monitor) IngressEnded(info *livekit.IngressInfo) {
 	case livekit.IngressInput_URL_INPUT:
 		m.requestGauge.With(prometheus.Labels{promLabelType: "url", promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	}
+	m.capacityChanged()
 }
 
 // HandlerStarted attributes the handler process pid to the session in info.
