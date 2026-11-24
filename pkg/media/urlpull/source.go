@@ -53,7 +53,7 @@ type URLSource struct {
 	done core.Fuse
 }
 
-func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
+func NewURLSource(ctx context.Context, p *params.Params) (*URLSource, error) {
 	var printStats func()
 	bin := gstutil.NewBin("input")
 
@@ -80,11 +80,18 @@ func NewURLSource(_ context.Context, p *params.Params) (*URLSource, error) {
 		}
 
 	} else if strings.HasPrefix(p.Url, "srt://") {
+		srtURL := p.Url
+		if p.BlockInternalSRTPull {
+			if srtURL, err = pinSRTURL(ctx, p.Url); err != nil {
+				return nil, err
+			}
+		}
+
 		elem, err = gstutil.NewElement("srtclientsrc")
 		if err != nil {
 			return nil, err
 		}
-		if err = gstutil.SetProperty(elem, "uri", p.Url); err != nil {
+		if err = gstutil.SetProperty(elem, "uri", srtURL); err != nil {
 			return nil, err
 		}
 

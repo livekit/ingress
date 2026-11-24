@@ -66,6 +66,7 @@ http_relay_port: port used to relay data from the main service process to the pe
 rtc_config: configuration for ICE and other RTC related settings, same settings livekit-server RTC configuration. Used for WHIP.
 enable_udp_url_pull: allow URL pull ingresses to pull from udp:// urls (default false, see the security note below)
 multicast_interface: network interface to join multicast groups on for UDP url pull. Empty lets the OS decide
+block_internal_srt_pull: refuse srt:// URL pulls to internal addresses, connect to the checked address, and accept only caller mode and a fixed set of query options (default false)
 
 # optional gzip compression of psrpc bus payloads (see the compatibility note below)
 psrpc:
