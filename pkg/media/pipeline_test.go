@@ -31,11 +31,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-gst/go-glib/glib"
-	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-glib/pkg/glib/v2"
+	"github.com/go-gst/go-gst/pkg/gst"
 	"github.com/stretchr/testify/require"
 
 	"github.com/livekit/ingress/pkg/config"
+	"github.com/livekit/ingress/pkg/gstutil"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
@@ -51,13 +52,13 @@ const testCapsWithoutResolution = "video/x-raw,format=NV12"
 // newCapsHoldingGhostPad returns a src ghost pad carrying capsStr, the shape
 // Input surfaces. A pad's caps property is its sticky CAPS event, and an
 // inactive pad is flushing, so the pad is activated before the event is stored.
-func newCapsHoldingGhostPad(t *testing.T, capsStr string) *gst.GhostPad {
+func newCapsHoldingGhostPad(t *testing.T, capsStr string) gst.Pad {
 	t.Helper()
 
-	ghost := gst.NewGhostPadNoTarget("video", gst.PadDirectionSource)
+	ghost := gst.NewGhostPadNoTarget("video", gst.PadSrc)
 	require.True(t, ghost.SetActive(true))
 	require.Equal(t, gst.FlowOK,
-		ghost.StoreStickyEvent(gst.NewCapsEvent(gst.NewCapsFromString(capsStr))))
+		ghost.StoreStickyEvent(gst.NewEventCaps(gst.CapsFromString(capsStr))))
 	require.NotNil(t, ghost.GetCurrentCaps())
 
 	return ghost
@@ -71,7 +72,7 @@ func newCapsHoldingGhostPad(t *testing.T, capsStr string) *gst.GhostPad {
 // sink is deliberately left nil. Building an output dereferences it, so a
 // regression here fails loudly instead of silently rebuilding.
 func TestSecondCapsNotificationDoesNotRebuild(t *testing.T) {
-	gst.Init(nil)
+	gst.Init()
 
 	const builtCaps = "video/x-raw(memory:GLMemory),format=NV12,width=1280,height=720,texture-target=rectangle"
 
@@ -89,13 +90,13 @@ func TestSecondCapsNotificationDoesNotRebuild(t *testing.T) {
 // A notification carrying no caps is not a renegotiation and must not record
 // anything, or the real caps that follow would be treated as the second one.
 func TestCapsNotificationWithoutCapsIsIgnored(t *testing.T) {
-	gst.Init(nil)
+	gst.Init()
 
 	p := &Pipeline{
 		established: make(map[types.StreamKind]string),
 	}
 
-	p.onParamsReady(types.Video, gst.NewGhostPadNoTarget("video", gst.PadDirectionSource))
+	p.onParamsReady(types.Video, gst.NewGhostPadNoTarget("video", gst.PadSrc))
 
 	require.Empty(t, p.established)
 }
@@ -114,10 +115,9 @@ const eosChildEnv = "INGRESS_EOS_RACE_CHILD"
 func newTestPipeline(t *testing.T) *Pipeline {
 	t.Helper()
 
-	gst.Init(nil)
+	gst.Init()
 
-	pipeline, err := gst.NewPipeline("pipeline")
-	require.NoError(t, err)
+	pipeline := gstutil.NewPipeline("pipeline")
 
 	return &Pipeline{
 		pipeline:    pipeline,
@@ -177,7 +177,7 @@ type stubSource struct {
 	block   chan struct{}
 }
 
-func (s *stubSource) GetSources() []*gst.Element   { return nil }
+func (s *stubSource) GetSources() []gst.Element    { return nil }
 func (s *stubSource) ValidateCaps(*gst.Caps) error { return nil }
 func (s *stubSource) Close() error                 { return nil }
 
@@ -397,28 +397,28 @@ const testSourceLength = 20 * time.Second
 func newSeekablePipeline(t *testing.T, length time.Duration) *Pipeline {
 	t.Helper()
 
-	gst.Init(nil)
+	gst.Init()
 
 	path := filepath.Join(t.TempDir(), "tone.wav")
 
 	// One buffer per second, so num-buffers is the length in seconds.
-	enc, err := gst.NewPipelineFromString(fmt.Sprintf(
+	enc, err := gstutil.ParseLaunch(fmt.Sprintf(
 		"audiotestsrc num-buffers=%d samplesperbuffer=44100 ! audioconvert ! wavenc ! filesink location=%s",
 		int(length.Seconds()), path))
 	require.NoError(t, err)
-	require.NoError(t, enc.BlockSetState(gst.StatePlaying))
+	require.NoError(t, gstutil.SetStateBlocking(enc, gst.StatePlaying))
 
-	msg := enc.GetPipelineBus().TimedPopFiltered(
+	msg := enc.GetBus().TimedPopFiltered(
 		gst.ClockTime(30*time.Second), gst.MessageEOS|gst.MessageError)
 	require.NotNil(t, msg, "writing the fixture timed out")
 	require.Equal(t, gst.MessageEOS, msg.Type(), msg.String())
-	require.NoError(t, enc.BlockSetState(gst.StateNull))
+	require.NoError(t, gstutil.SetStateBlocking(enc, gst.StateNull))
 
-	read, err := gst.NewPipelineFromString(fmt.Sprintf(
+	read, err := gstutil.ParseLaunch(fmt.Sprintf(
 		"filesrc location=%s ! wavparse ! fakesink sync=false", path))
 	require.NoError(t, err)
-	require.NoError(t, read.BlockSetState(gst.StatePaused))
-	t.Cleanup(func() { _ = read.BlockSetState(gst.StateNull) })
+	require.NoError(t, gstutil.SetStateBlocking(read, gst.StatePaused))
+	t.Cleanup(func() { _ = gstutil.SetStateBlocking(read, gst.StateNull) })
 
 	return &Pipeline{pipeline: read, Params: pullParams(testPullURL)}
 }
@@ -444,11 +444,11 @@ func pullParams(url string) *params.Params {
 func stopAt(t *testing.T, p *Pipeline, pos time.Duration) {
 	t.Helper()
 
-	require.True(t, p.pipeline.SeekTime(pos, gst.SeekFlagFlush|gst.SeekFlagAccurate),
+	require.True(t, p.pipeline.SeekSimple(gst.FormatTime, gst.SeekFlagFlush|gst.SeekFlagAccurate, int64(pos)),
 		"seek to %s failed", pos)
-	p.pipeline.GetState(gst.StatePaused, gst.ClockTime(10*time.Second))
+	p.pipeline.GetState(gst.ClockTime(10 * time.Second))
 
-	ok, got := p.pipeline.QueryPosition(gst.FormatTime)
+	got, ok := p.pipeline.QueryPosition(gst.FormatTime)
 	require.True(t, ok, "the pipeline reported no position after seeking")
 	require.InDelta(t, pos.Seconds(), time.Duration(got).Seconds(), 0.5,
 		"seek did not land where the test needs it")
@@ -515,16 +515,16 @@ func TestToleranceIsProportionalToTheSource(t *testing.T) {
 // as a negative value, which is why the guard reads the value and not the
 // boolean. Were that to change, the whole path would shift.
 func TestLivePullWithoutDurationIsComplete(t *testing.T) {
-	gst.Init(nil)
+	gst.Init()
 
-	live, err := gst.NewPipelineFromString("audiotestsrc is-live=true ! fakesink sync=false")
+	live, err := gstutil.ParseLaunch("audiotestsrc is-live=true ! fakesink sync=false")
 	require.NoError(t, err)
-	require.NoError(t, live.BlockSetState(gst.StatePlaying))
-	t.Cleanup(func() { _ = live.BlockSetState(gst.StateNull) })
+	require.NoError(t, gstutil.SetStateBlocking(live, gst.StatePlaying))
+	t.Cleanup(func() { _ = gstutil.SetStateBlocking(live, gst.StateNull) })
 
 	p := &Pipeline{pipeline: live, Params: pullParams(testPullURL)}
 
-	ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+	d, ok := p.pipeline.QueryDuration(gst.FormatTime)
 	require.True(t, ok, "the duration query is answered even with no duration to give")
 	require.Negative(t, d, "an unknown duration is reported as a negative value")
 
@@ -554,7 +554,7 @@ func TestPushInputWithADurationIsComplete(t *testing.T) {
 
 			stopAt(t, p, 2*time.Second)
 
-			ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+			d, ok := p.pipeline.QueryDuration(gst.FormatTime)
 			require.True(t, ok)
 			require.Positive(t, d,
 				"the fixture must answer a duration, or the gate is not what keeps this complete")
@@ -579,7 +579,7 @@ func TestLiveURLSchemesAreComplete(t *testing.T) {
 
 			stopAt(t, p, 2*time.Second)
 
-			ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+			d, ok := p.pipeline.QueryDuration(gst.FormatTime)
 			require.True(t, ok)
 			require.Positive(t, d,
 				"the fixture must answer a duration, or the gate is not what keeps this complete")
@@ -599,9 +599,9 @@ func TestShortSourceIsHeldToTheToleranceFloor(t *testing.T) {
 
 	stopAt(t, p, length-750*time.Millisecond)
 
-	ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+	d, ok := p.pipeline.QueryDuration(gst.FormatTime)
 	require.True(t, ok)
-	ok, pos := p.pipeline.QueryPosition(gst.FormatTime)
+	pos, ok := p.pipeline.QueryPosition(gst.FormatTime)
 	require.True(t, ok)
 
 	shortfall := time.Duration(d - pos)
@@ -635,7 +635,7 @@ func newTruncatedPipeline(t *testing.T) *Pipeline {
 func TestEOSFromTheSourceQueuesTheTruncation(t *testing.T) {
 	p := newTruncatedPipeline(t)
 
-	p.messageWatch(gst.NewEOSMessage(p.pipeline))
+	p.messageWatch(gst.NewMessageEOS(p.pipeline))
 
 	select {
 	case err := <-p.pipelineErr:
@@ -653,7 +653,7 @@ func TestEOSAfterARequestedStopQueuesNothing(t *testing.T) {
 
 	p.closed.Break()
 
-	p.messageWatch(gst.NewEOSMessage(p.pipeline))
+	p.messageWatch(gst.NewMessageEOS(p.pipeline))
 
 	select {
 	case err := <-p.pipelineErr:
@@ -679,25 +679,25 @@ const (
 func newHLSFixture(t *testing.T, segments int) (string, time.Duration) {
 	t.Helper()
 
-	gst.Init(nil)
+	gst.Init()
 
 	dir := t.TempDir()
 
 	// One buffer per second at the default rate, so num-buffers is roughly the
 	// segment count. max-files=0 keeps every segment; the default prunes them.
-	enc, err := gst.NewPipelineFromString(fmt.Sprintf(
+	enc, err := gstutil.ParseLaunch(fmt.Sprintf(
 		"audiotestsrc num-buffers=%d samplesperbuffer=44100 ! audioconvert ! avenc_aac ! aacparse "+
 			"! hlssink2 location=%s/seg%%05d.ts playlist-location=%s/playlist.m3u8 "+
 			"target-duration=1 playlist-length=0 max-files=0",
 		segments, dir, dir))
 	require.NoError(t, err)
-	require.NoError(t, enc.BlockSetState(gst.StatePlaying))
+	require.NoError(t, gstutil.SetStateBlocking(enc, gst.StatePlaying))
 
-	msg := enc.GetPipelineBus().TimedPopFiltered(
+	msg := enc.GetBus().TimedPopFiltered(
 		gst.ClockTime(60*time.Second), gst.MessageEOS|gst.MessageError)
 	require.NotNil(t, msg, "writing the fixture timed out")
 	require.Equal(t, gst.MessageEOS, msg.Type(), msg.String())
-	require.NoError(t, enc.BlockSetState(gst.StateNull))
+	require.NoError(t, gstutil.SetStateBlocking(enc, gst.StateNull))
 
 	playlist, err := os.ReadFile(filepath.Join(dir, "playlist.m3u8"))
 	require.NoError(t, err)
@@ -746,15 +746,15 @@ func serveHLS(t *testing.T, dir string, goodSegments int) string {
 func runHLSPull(t *testing.T, url string) (*Pipeline, gst.MessageType) {
 	t.Helper()
 
-	pipeline, err := gst.NewPipelineFromString(fmt.Sprintf(
+	pipeline, err := gstutil.ParseLaunch(fmt.Sprintf(
 		"souphttpsrc location=%s ! queue2 use-buffering=true max-size-buffers=0 "+
 			"! decodebin3 ! queue ! fakesink sync=false", url))
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = pipeline.BlockSetState(gst.StateNull) })
+	t.Cleanup(func() { _ = gstutil.SetStateBlocking(pipeline, gst.StateNull) })
 
-	require.NoError(t, pipeline.Start())
+	require.NotEqual(t, gst.StateChangeFailure, pipeline.SetState(gst.StatePlaying))
 
-	msg := pipeline.GetPipelineBus().TimedPopFiltered(
+	msg := pipeline.GetBus().TimedPopFiltered(
 		gst.ClockTime(60*time.Second), gst.MessageEOS|gst.MessageError)
 	require.NotNil(t, msg, "the pull neither finished nor failed")
 
@@ -773,12 +773,12 @@ func TestTruncatedHLSPullIsAnError(t *testing.T) {
 	require.Equal(t, gst.MessageEOS, msgType,
 		"a fragment 5xx must arrive as an EOS; a bus error would mean this check is not what catches it")
 
-	ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+	d, ok := p.pipeline.QueryDuration(gst.FormatTime)
 	require.True(t, ok)
 	require.InDelta(t, advertised.Seconds(), time.Duration(d).Seconds(), 0.5,
 		"duration must be what the manifest advertises, not what arrived")
 
-	ok, pos := p.pipeline.QueryPosition(gst.FormatTime)
+	pos, ok := p.pipeline.QueryPosition(gst.FormatTime)
 	require.True(t, ok)
 	require.InDelta(t, float64(hlsGoodSegments), time.Duration(pos).Seconds(), 1,
 		"position must reflect the fragments that arrived")
@@ -795,7 +795,7 @@ func TestCompleteHLSPullIsComplete(t *testing.T) {
 
 	require.Equal(t, gst.MessageEOS, msgType)
 
-	ok, pos := p.pipeline.QueryPosition(gst.FormatTime)
+	pos, ok := p.pipeline.QueryPosition(gst.FormatTime)
 	require.True(t, ok)
 	require.InDelta(t, advertised.Seconds(), time.Duration(pos).Seconds(), 0.5,
 		"the whole playlist should have played out")
@@ -834,7 +834,7 @@ func newTestParams(t *testing.T, sn utils.StateNotifier) *params.Params {
 // caps without one reach the real failure path. A reordering there panics
 // instead of silently passing.
 func TestTrackBuildFailureStopsTheSession(t *testing.T) {
-	gst.Init(nil)
+	gst.Init()
 
 	p := newTestPipeline(t)
 	p.Params = newTestParams(t, utils.NewNoopStateNotifier())
@@ -877,7 +877,7 @@ func (n stalledNotifier) SessionEnded(context.Context, string) {}
 // fail reports on a GStreamer streaming thread, with no deadline on the update.
 // The teardown must not wait behind it.
 func TestTrackBuildFailureStopsTheSessionWhileReportingStalls(t *testing.T) {
-	gst.Init(nil)
+	gst.Init()
 
 	release := make(chan struct{})
 	defer close(release)
@@ -932,7 +932,7 @@ func TestResolveRunErrorPrefersRecordedCause(t *testing.T) {
 // A track failure ends the session even when the publisher is connected and
 // sending nothing, which leaves the relay read with no bytes to return.
 func TestTrackBuildFailureClosesAStalledInput(t *testing.T) {
-	gst.Init(nil)
+	gst.Init()
 
 	// A relay that answers, then goes quiet.
 	hold := make(chan struct{})

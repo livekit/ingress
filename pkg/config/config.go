@@ -15,7 +15,9 @@
 package config
 
 import (
+	"net/url"
 	"os"
+	"strconv"
 
 	"github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
@@ -79,6 +81,10 @@ type ServiceConfig struct {
 	EnableUDPURLPull bool `yaml:"enable_udp_url_pull,omitempty"`
 	// Network interface to join multicast groups on for UDP url pull. Empty means let the OS decide.
 	MulticastInterface string `yaml:"multicast_interface,omitempty"`
+	// HTTP proxy that http(s) URL pull handlers fetch through, e.g. http://127.0.0.1:3128.
+	// Empty means fetch directly. When set, those handlers connect to LiveKit without any proxy,
+	// including an HTTP(S)_PROXY inherited from the environment.
+	URLPullProxy string `yaml:"url_pull_proxy,omitempty"`
 
 	// Used for WHIP transport
 	RTCConfig rtcconfig.RTCConfig `yaml:"rtc_config"`
@@ -140,6 +146,10 @@ func (c *ServiceConfig) SkipClaimEnabled() bool {
 }
 
 func (c *ServiceConfig) InitDefaults() error {
+	if c.URLPullProxy != "" && !IsValidURLPullProxy(c.URLPullProxy) {
+		return errors.ErrInvalidURLPullProxy
+	}
+
 	if c.RTMPPort == 0 {
 		c.RTMPPort = DefaultRTMPPort
 	}
@@ -156,6 +166,21 @@ func (c *ServiceConfig) InitDefaults() error {
 	}
 
 	return nil
+}
+
+// IsValidURLPullProxy reports whether proxy is an http:// URL with a host, a valid port if any,
+// and no credentials. souphttpsrc ignores a proxy it cannot parse and fetches directly, and
+// takes credentials only from its proxy-id and proxy-pw properties.
+func IsValidURLPullProxy(proxy string) bool {
+	u, err := url.Parse(proxy)
+	if err != nil || u.Scheme != "http" || u.Hostname() == "" || u.User != nil {
+		return false
+	}
+	if port := u.Port(); port != "" {
+		n, err := strconv.Atoi(port)
+		return err == nil && n >= 1 && n <= 65535
+	}
+	return true
 }
 
 func (c *ServiceConfig) InitWhipConf() error {

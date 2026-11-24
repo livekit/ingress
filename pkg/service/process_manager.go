@@ -31,6 +31,7 @@ import (
 	"github.com/livekit/protocol/livekit"
 	"github.com/livekit/protocol/logger"
 	"github.com/livekit/protocol/rpc"
+	protoutils "github.com/livekit/protocol/utils"
 	"github.com/livekit/psrpc"
 
 	"github.com/livekit/ingress/pkg/errors"
@@ -41,6 +42,11 @@ import (
 
 const (
 	maxRetries = 3
+
+	// KillIngress waits for the pipeline to finish, so a healthy handler is long
+	// gone by then. One still running is hung and would otherwise keep its
+	// session open until the pod dies.
+	killGracePeriod = 30 * time.Second
 )
 
 type process struct {
@@ -54,6 +60,10 @@ type process struct {
 	ipcServiceServer *grpc.Server
 	rpcServer        rpc.IngressHandlerServer
 	closed           core.Fuse
+	proc             atomic.Pointer[os.Process]
+	killArmed        core.Fuse
+	forceKilled      atomic.Bool
+	lastInfo         atomic.Pointer[livekit.IngressInfo]
 }
 
 type ProcessManager struct {
@@ -181,6 +191,9 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 
 	defer func() {
 		h.closed.Break()
+		if h.forceKilled.Load() {
+			s.publishKilledState(context.WithoutCancel(ctx), h)
+		}
 		// Release before the session leaves the session manager. Shutdown waits
 		// on IsIdle, which IngressEnded satisfies, and these two calls are not
 		// atomic -- releasing afterwards lets the process exit in between.
@@ -209,6 +222,26 @@ func (s *ProcessManager) runHandler(ctx context.Context, h *process, p *params.P
 	}
 }
 
+// publishKilledState sends the final update that a killed handler could not.
+func (s *ProcessManager) publishKilledState(ctx context.Context, h *process) {
+	info := h.lastInfo.Load()
+	if info == nil {
+		info = h.params.CopyInfo()
+	}
+
+	now := time.Now().UnixNano()
+	info.State.Status = livekit.IngressState_ENDPOINT_ERROR
+	info.State.Error = errors.ErrHandlerKilled.Error()
+	if info.State.EndedAt == 0 {
+		info.State.EndedAt = now
+	}
+	info.State.UpdatedAt = now
+
+	if err := s.stateNotifier.UpdateIngressState(ctx, h.params.ProjectID, info); err != nil {
+		logger.Errorw("failed to send update", err, "ingressID", h.params.IngressId)
+	}
+}
+
 func (s *ProcessManager) runHandlerTry(ctx context.Context, h *process, p *params.Params) (bool, error) {
 	_, span := tracer.Start(ctx, "Service.runHandlerTry")
 	defer span.End()
@@ -224,6 +257,7 @@ func (s *ProcessManager) runHandlerTry(ctx context.Context, h *process, p *param
 
 	err = h.cmd.Start()
 	if err == nil {
+		h.proc.Store(h.cmd.Process)
 		pid := h.cmd.Process.Pid
 		s.sm.HandlerStarted(h.params.IngressInfo, pid)
 		err = h.cmd.Wait()
@@ -275,52 +309,67 @@ func (s *ProcessManager) killAll() {
 
 func (s *ProcessManager) UpdateIngressState(ctx context.Context, req *ipc.UpdateIngressStateRequest) (*emptypb.Empty, error) {
 	s.sm.HandlerStateUpdated(req.Info)
+
+	s.mu.RLock()
+	h := s.activeHandlers[req.Info.GetState().GetResourceId()]
+	s.mu.RUnlock()
+	if h != nil {
+		h.lastInfo.Store(protoutils.CloneProto(req.Info))
+	}
+
 	return &emptypb.Empty{}, s.stateNotifier.UpdateIngressState(ctx, req.ProjectId, req.Info)
 }
 
+// killAfter SIGKILLs the handler if it is still running d after termination was
+// requested. Only the first request arms it.
+func (p *process) killAfter(d time.Duration) {
+	if !p.killArmed.Break() {
+		return
+	}
+
+	time.AfterFunc(d, func() {
+		proc := p.proc.Load()
+		if p.closed.IsBroken() || proc == nil {
+			return
+		}
+		logger.Warnw("killing handler still running after termination was requested", nil,
+			"ingressID", p.params.IngressId, "resourceID", p.params.State.ResourceId, "gracePeriod", d)
+		p.forceKilled.Store(true)
+		if err := proc.Signal(syscall.SIGKILL); err != nil {
+			p.forceKilled.Store(false)
+			logger.Infow("failed to kill process", "error", err, "ingressID", p.params.IngressId)
+		}
+	})
+}
+
 func (p *process) UpdateIngress(ctx context.Context, _ *livekit.UpdateIngressRequest) (*livekit.IngressState, error) {
-	grpcClient := p.grpcClient.Load()
-	if grpcClient == nil {
-		return nil, errors.ErrIngressNotFound
-	}
-
-	resp, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{}, grpc.WaitForReady(true))
-
-	if err != nil {
-		return nil, err
-	}
-
-	return resp.State, nil
+	return p.killIngress(ctx)
 }
 
 func (p *process) DeleteIngress(ctx context.Context, _ *livekit.DeleteIngressRequest) (*livekit.IngressState, error) {
+	return p.killIngress(ctx)
+}
+
+func (p *process) DeleteWHIPResource(ctx context.Context, _ *rpc.DeleteWHIPResourceRequest) (*emptypb.Empty, error) {
+	if _, err := p.killIngress(ctx); err != nil {
+		return nil, err
+	}
+	return &emptypb.Empty{}, nil
+}
+
+func (p *process) killIngress(ctx context.Context) (*livekit.IngressState, error) {
+	p.killAfter(killGracePeriod)
+
 	grpcClient := p.grpcClient.Load()
 	if grpcClient == nil {
 		return nil, errors.ErrIngressNotFound
 	}
 
 	resp, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{}, grpc.WaitForReady(true))
-
 	if err != nil {
 		return nil, err
 	}
-
 	return resp.State, nil
-}
-
-func (p *process) DeleteWHIPResource(ctx context.Context, _ *rpc.DeleteWHIPResourceRequest) (*emptypb.Empty, error) {
-	grpcClient := p.grpcClient.Load()
-	if grpcClient == nil {
-		return nil, errors.ErrIngressNotFound
-	}
-
-	_, err := (*grpcClient).KillIngress(ctx, &ipc.KillIngressRequest{}, grpc.WaitForReady(true))
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &emptypb.Empty{}, nil
 }
 
 func (p *process) ICERestartWHIPResource(_ context.Context, _ *rpc.ICERestartWHIPResourceRequest) (*rpc.ICERestartWHIPResourceResponse, error) {

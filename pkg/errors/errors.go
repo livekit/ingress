@@ -21,7 +21,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-gst/pkg/gst"
 	"google.golang.org/grpc/status"
 
 	"github.com/livekit/psrpc"
@@ -37,11 +37,13 @@ var (
 	ErrUnsupportedDecodeFormat      = psrpc.NewErrorf(psrpc.NotAcceptable, "unsupported format for the source media")
 	ErrUnsupportedEncodeFormat      = psrpc.NewErrorf(psrpc.InvalidArgument, "unsupported mime type for encoder")
 	ErrUnsupportedURLFormat         = psrpc.NewErrorf(psrpc.InvalidArgument, "unsupported URL type")
+	ErrInvalidURLPullProxy          = psrpc.NewErrorf(psrpc.Internal, "invalid URL pull proxy")
 	ErrDuplicateTrack               = psrpc.NewErrorf(psrpc.NotAcceptable, "more than 1 track with given media kind")
 	ErrUnableToAddPad               = psrpc.NewErrorf(psrpc.Internal, "could not add pads to bin")
 	ErrMissingResourceId            = psrpc.NewErrorf(psrpc.InvalidArgument, "missing resource ID")
 	ErrInvalidRelayToken            = psrpc.NewErrorf(psrpc.PermissionDenied, "invalid token")
 	ErrIngressNotFound              = psrpc.NewErrorf(psrpc.NotFound, "ingress not found")
+	ErrHandlerKilled                = psrpc.NewErrorf(psrpc.Internal, "handler killed after it did not stop")
 	ErrServerCapacityExceeded       = psrpc.NewErrorf(psrpc.ResourceExhausted, "server capacity exceeded")
 	ErrServerShuttingDown           = psrpc.NewErrorf(psrpc.Unavailable, "server shutting down")
 	ErrIngressClosing               = psrpc.NewErrorf(psrpc.Unavailable, "ingress closing")

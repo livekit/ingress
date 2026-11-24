@@ -23,12 +23,14 @@ import (
 	"time"
 
 	"github.com/frostbyte73/core"
-	"github.com/go-gst/go-glib/glib"
-	"github.com/go-gst/go-gst/gst"
+	"github.com/go-gst/go-glib/pkg/glib/v2"
+	"github.com/go-gst/go-glib/pkg/gobject/v2"
+	"github.com/go-gst/go-gst/pkg/gst"
 	"github.com/pion/webrtc/v4"
 
 	"go.opentelemetry.io/otel"
 
+	"github.com/livekit/ingress/pkg/gstutil"
 	"github.com/livekit/ingress/pkg/params"
 	"github.com/livekit/ingress/pkg/stats"
 	"github.com/livekit/ingress/pkg/types"
@@ -57,7 +59,7 @@ type Pipeline struct {
 	*params.Params
 
 	// gstreamer
-	pipeline *gst.Pipeline
+	pipeline gst.Pipeline
 	loop     *glib.MainLoop
 	sink     *WebRTCSink
 	input    *Input
@@ -83,19 +85,15 @@ func New(ctx context.Context, params *params.Params, g *stats.LocalMediaStatsGat
 	defer done()
 
 	// initialize gst
-	gst.Init(nil)
+	gst.Init()
 
 	input, err := NewInput(ctx, params, g)
 	if err != nil {
 		return nil, err
 	}
 
-	pipeline, err := gst.NewPipeline("pipeline")
-	if err != nil {
-		return nil, err
-	}
-
-	if err = pipeline.Add(input.bin.Element); err != nil {
+	pipeline := gstutil.NewPipeline("pipeline")
+	if err = gstutil.Add(pipeline, input.bin); err != nil {
 		return nil, err
 	}
 
@@ -130,32 +128,22 @@ func New(ctx context.Context, params *params.Params, g *stats.LocalMediaStatsGat
 	return p, nil
 }
 
-func (p *Pipeline) onOutputReady(pad *gst.Pad, kind types.StreamKind) {
-	var err error
-	defer func() {
-		if err != nil {
-			p.fail(err)
-		}
-	}()
-
+func (p *Pipeline) onOutputReady(pad gst.Pad, kind types.StreamKind) {
 	currentCaps := pad.GetCurrentCaps()
 	logger.Debugw("output ready", "kind", kind, "capsAlreadySet", currentCaps != nil)
 
-	_, err = pad.Connect("notify::caps", func(gPad *gst.GhostPad, _ *glib.ParamSpec) {
-		p.onParamsReady(kind, gPad)
+	pad.NotifyProperty("caps", func(obj gobject.Object, _ *gobject.ParamSpec) {
+		p.onParamsReady(kind, obj.(gst.Pad))
 	})
 }
 
-func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
+func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad gst.Pad) {
 	var err error
 
-	// TODO fix go-gst to not create non nil gst.Caps for a NULL native caps pointer?
-	caps, err := gPad.GetProperty("caps")
-	if err != nil || caps == nil || caps.(*gst.Caps) == nil || caps.(*gst.Caps).Unsafe() == nil {
+	newCaps := gPad.GetCurrentCaps()
+	if newCaps == nil {
 		return
 	}
-
-	newCaps := caps.(*gst.Caps)
 
 	// The audio and video pads notify on separate GStreamer streaming threads,
 	// so this map is shared mutable state and every access takes the lock.
@@ -191,7 +179,7 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 		return
 	}
 
-	if err = p.pipeline.Add(bin.Element); err != nil {
+	if err = gstutil.Add(p.pipeline, bin); err != nil {
 		logger.Errorw("could not add bin", err)
 		return
 	}
@@ -200,7 +188,7 @@ func (p *Pipeline) onParamsReady(kind types.StreamKind, gPad *gst.GhostPad) {
 	p.established[kind] = newCaps.String()
 	p.trackLock.Unlock()
 
-	gPad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad *gst.Pad, _ *gst.PadProbeInfo) gst.PadProbeReturn {
+	gPad.AddProbe(gst.PadProbeTypeBlockDownstream, func(pad gst.Pad, _ *gst.PadProbeInfo) gst.PadProbeReturn {
 		// link
 		if linkReturn := pad.Link(bin.GetStaticPad("sink")); linkReturn != gst.PadLinkOK {
 			logger.Errorw("failed to link output bin", err)
@@ -258,11 +246,13 @@ func (p *Pipeline) Run(ctx context.Context) error {
 	var err error
 
 	// add watch
-	p.pipeline.GetPipelineBus().AddWatch(p.messageWatch)
+	p.pipeline.GetBus().AddWatchFull(glib.PRIORITY_DEFAULT, func(_ gst.Bus, msg *gst.Message) bool {
+		return p.messageWatch(msg)
+	})
 
 	// set state to playing (this does not start the pipeline)
-	err = p.pipeline.Start()
-	if err != nil {
+	if ret := p.pipeline.SetState(gst.StatePlaying); ret == gst.StateChangeFailure {
+		err = psrpc.NewErrorf(psrpc.Internal, "could not set pipeline to playing")
 		span.RecordError(err)
 		logger.Errorw("failed to set pipeline state", err)
 		return err
@@ -336,13 +326,14 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 			}
 		}
 
-		_ = p.pipeline.BlockSetState(gst.StateNull)
+		_ = gstutil.SetStateBlocking(p.pipeline, gst.StateNull)
 		p.loop.Quit()
 		return false
 
 	case gst.MessageError:
 		// handle error if possible, otherwise close and return
-		err := psrpc.NewError(psrpc.Internal, msg.ParseError())
+		_, gerr := msg.ParseError()
+		err := psrpc.NewError(psrpc.Internal, gerr)
 		logger.Infow("pipeline failure", "error", msg)
 		select {
 		case p.pipelineErr <- err:
@@ -358,14 +349,12 @@ func (p *Pipeline) messageWatch(msg *gst.Message) bool {
 		p.logPipelineStateChange(msg)
 
 	case gst.MessageAsyncStart:
-		src := msg.Source()
-		if src == p.pipeline.GetName() {
+		if gstutil.SourceName(msg) == p.pipeline.GetName() {
 			logger.Infow("GST ASYNC_START (pipeline)")
 		}
 
 	case gst.MessageAsyncDone:
-		src := msg.Source()
-		if src == p.pipeline.GetName() {
+		if gstutil.SourceName(msg) == p.pipeline.GetName() {
 			logger.Debugw("GST ASYNC_DONE (pipeline)")
 		}
 
@@ -408,12 +397,12 @@ func (p *Pipeline) checkSourceComplete() error {
 		return nil
 	}
 
-	ok, d := p.pipeline.QueryDuration(gst.FormatTime)
+	d, ok := p.pipeline.QueryDuration(gst.FormatTime)
 	if !ok || d <= 0 {
 		return nil
 	}
 
-	ok, pos := p.pipeline.QueryPosition(gst.FormatTime)
+	pos, ok := p.pipeline.QueryPosition(gst.FormatTime)
 	if !ok || pos <= 0 {
 		logger.Debugw("no position at EOS, treating the source as complete",
 			"duration", time.Duration(d))
@@ -438,19 +427,16 @@ func (p *Pipeline) checkSourceComplete() error {
 
 func (p *Pipeline) handleStreamCollectionMessage(msg *gst.Message) {
 	collection := msg.ParseStreamCollection()
-	if collection == nil {
-		return
-	}
 
-	for i := uint(0); i < collection.GetSize(); i++ {
-		stream := collection.GetStreamAt(i)
+	for i := uint32(0); i < collection.GetSize(); i++ {
+		stream := collection.GetStream(i)
 
-		caps := stream.Caps()
+		caps := stream.GetCaps()
 		if caps == nil || caps.GetSize() == 0 {
 			continue
 		}
 
-		gstStruct := stream.Caps().GetStructureAt(0)
+		gstStruct := caps.GetStructure(0)
 
 		kind := getKindFromGstMimeType(gstStruct)
 		switch kind {
@@ -465,9 +451,8 @@ func (p *Pipeline) handleStreamCollectionMessage(msg *gst.Message) {
 }
 
 func (p *Pipeline) logPipelineStateChange(msg *gst.Message) {
-	old, new := msg.ParseStateChanged()
-	src := msg.Source()
-	isPipeline := (src == p.pipeline.GetName())
+	old, new, _ := msg.ParseStateChanged()
+	isPipeline := gstutil.SourceName(msg) == p.pipeline.GetName()
 
 	if isPipeline && new != old {
 		logger.Infow("GST pipeline state changed",
@@ -495,7 +480,7 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 	c := make(chan struct{})
 
 	go func() {
-		err := p.pipeline.BlockSetState(gst.StateNull)
+		err := gstutil.SetStateBlocking(p.pipeline, gst.StateNull)
 		if err != nil {
 			logger.Errorw("failed stopping pipeline", err)
 		}
@@ -525,10 +510,10 @@ func (p *Pipeline) SendEOS(ctx context.Context) {
 // is_running=TRUE on entry and overwrites it. Assumes this is the only main
 // loop on the default context.
 func (p *Pipeline) quitLoop() {
-	if _, err := glib.IdleAdd(p.loop.Quit); err != nil {
-		logger.Errorw("failed to schedule loop quit, quitting directly", err)
+	glib.IdleAddFull(glib.PRIORITY_DEFAULT_IDLE, func() bool {
 		p.loop.Quit()
-	}
+		return false
+	})
 }
 
 func (p *Pipeline) GetGstPipelineDebugDot() string {
@@ -536,7 +521,7 @@ func (p *Pipeline) GetGstPipelineDebugDot() string {
 }
 
 func getKindFromGstMimeType(gstStruct *gst.Structure) types.StreamKind {
-	gstMimeType := gstStruct.Name()
+	gstMimeType := gstStruct.GetName()
 
 	switch {
 	case strings.HasPrefix(gstMimeType, "audio"):
@@ -550,17 +535,12 @@ func getKindFromGstMimeType(gstStruct *gst.Structure) types.StreamKind {
 
 func getAudioState(gstStruct *gst.Structure) *livekit.InputAudioState {
 	mime := ""
-	gstMimeType := gstStruct.Name()
+	gstMimeType := gstStruct.GetName()
 
 	switch strings.ToLower(gstMimeType) {
 	case "audio/mpeg":
 		mime = gstMimeType
-		var version int
-
-		val, err := gstStruct.GetValue("mpegversion")
-		if err == nil {
-			version, _ = val.(int)
-		}
+		version, _ := gstStruct.GetInt("mpegversion")
 
 		if version == 4 {
 			mime = "audio/aac"
@@ -575,15 +555,11 @@ func getAudioState(gstStruct *gst.Structure) *livekit.InputAudioState {
 		MimeType: mime,
 	}
 
-	val, err := gstStruct.GetValue("channels")
-	if err == nil {
-		channels, _ := val.(int)
+	if channels, ok := gstStruct.GetInt("channels"); ok {
 		audioState.Channels = uint32(channels)
 	}
 
-	val, err = gstStruct.GetValue("rate")
-	if err == nil {
-		rate, _ := val.(int)
+	if rate, ok := gstStruct.GetInt("rate"); ok {
 		audioState.SampleRate = uint32(rate)
 	}
 
@@ -593,7 +569,7 @@ func getAudioState(gstStruct *gst.Structure) *livekit.InputAudioState {
 func getVideoState(gstStruct *gst.Structure) *livekit.InputVideoState {
 	mime := ""
 
-	gstMimeType := gstStruct.Name()
+	gstMimeType := gstStruct.GetName()
 
 	switch strings.ToLower(gstMimeType) {
 	case "video/x-h264":
@@ -606,25 +582,16 @@ func getVideoState(gstStruct *gst.Structure) *livekit.InputVideoState {
 		MimeType: mime,
 	}
 
-	val, err := gstStruct.GetValue("width")
-	if err == nil {
-		width, _ := val.(int)
+	if width, ok := gstStruct.GetInt("width"); ok {
 		videoState.Width = uint32(width)
 	}
 
-	val, err = gstStruct.GetValue("height")
-	if err == nil {
-		height, _ := val.(int)
+	if height, ok := gstStruct.GetInt("height"); ok {
 		videoState.Height = uint32(height)
 	}
 
-	val, err = gstStruct.GetValue("framerate")
-	if err == nil {
-		fpsFrac, _ := val.(*gst.FractionValue)
-
-		if fpsFrac.Denom() != 0 {
-			videoState.Framerate = float64(fpsFrac.Num()) / float64(fpsFrac.Denom())
-		}
+	if num, denom, ok := gstStruct.GetFraction("framerate"); ok && denom != 0 {
+		videoState.Framerate = float64(num) / float64(denom)
 	}
 
 	return videoState
