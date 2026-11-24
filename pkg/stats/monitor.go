@@ -86,7 +86,7 @@ type Monitor struct {
 
 	pendingCPUs atomic.Float64
 
-	// capacityChange is called after an ingress is accepted or ends.
+	// capacityChange is called after an ingress is accepted.
 	capacityChange atomic.Pointer[func()]
 
 	usageLock sync.Mutex
@@ -511,9 +511,11 @@ func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 	return accept
 }
 
-// OnCapacityChange sets f to be called after the monitor accepts an ingress or one ends, so a
-// node can publish its available CPU at once rather than at its next poll, before schedulers
-// offer the capacity an accepted ingress took. f must not block.
+// OnCapacityChange sets f to be called after the monitor accepts an ingress, once its pending CPU
+// counts against GetAvailableCPU, so a node can publish its available CPU at once rather than at
+// its next poll, before schedulers offer the capacity the ingress took. An ingress that ends does
+// not call f: available CPU comes from measured idle, which shows the freed CPU only at a later
+// sample, so the next poll publishes it. f must not block.
 func (m *Monitor) OnCapacityChange(f func()) {
 	m.capacityChange.Store(&f)
 }
@@ -545,7 +547,6 @@ func (m *Monitor) IngressEnded(info *livekit.IngressInfo) {
 	case livekit.IngressInput_URL_INPUT:
 		m.requestGauge.With(prometheus.Labels{promLabelType: typeLabelURL, promLabelTranscoding: fmt.Sprintf("%v", *info.EnableTranscoding)}).Sub(1)
 	}
-	m.capacityChanged()
 }
 
 // HandlerStarted attributes the handler process pid to the session in info.

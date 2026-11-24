@@ -234,12 +234,14 @@ func TestOnCapacityChange(t *testing.T) {
 	require.True(t, m.AcceptIngress(url))
 	require.Equal(t, 1, calls, "an accepted ingress takes capacity")
 
-	m.IngressEnded(url)
-	require.Equal(t, 2, calls, "an ended ingress returns it")
-
 	rtmp := &livekit.IngressInfo{InputType: livekit.IngressInput_RTMP_INPUT, EnableTranscoding: proto.Bool(true)}
 	require.False(t, m.AcceptIngress(rtmp))
-	require.Equal(t, 2, calls, "a refused ingress takes nothing")
+	require.Equal(t, 1, calls, "a refused ingress takes nothing")
+
+	// Measured idle shows the CPU an ended ingress frees only at a later sample, so ending one
+	// changes nothing available CPU reads, and the next poll publishes it.
+	m.IngressEnded(url)
+	require.Equal(t, 1, calls, "an ended ingress does not call it")
 }
 
 func TestSessionUsageLabels(t *testing.T) {
