@@ -85,6 +85,11 @@ type ServiceConfig struct {
 	// Empty means fetch directly. When set, those handlers connect to LiveKit without any proxy,
 	// including an HTTP(S)_PROXY inherited from the environment.
 	URLPullProxy string `yaml:"url_pull_proxy,omitempty"`
+	// Refuse srt:// URL pulls whose host is, or resolves to, a loopback, private, link-local or other
+	// internal address, and connect to the checked address rather than letting the SRT element
+	// resolve the host again. Only caller mode and the query options streamid, passphrase, pbkeylen,
+	// latency, rcvlatency, peerlatency, enforcedencryption and conntimeo are accepted.
+	BlockInternalSRTPull bool `yaml:"block_internal_srt_pull,omitempty"`
 
 	// Used for WHIP transport
 	RTCConfig rtcconfig.RTCConfig `yaml:"rtc_config"`
