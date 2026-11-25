@@ -75,6 +75,8 @@ func pinSRTURL(ctx context.Context, rawURL string) (string, error) {
 		}
 	}
 
+	// SRT checks no host name: encryption uses a shared passphrase rather than certificates, and the
+	// handshake carries no server name, so connecting to the IP literal changes nothing for the peer.
 	pinned := addrs[0].Unmap().WithZone("").String()
 	if port := u.Port(); port != "" {
 		pinned = net.JoinHostPort(pinned, port)
