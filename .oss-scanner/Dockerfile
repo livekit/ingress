@@ -14,7 +14,7 @@
 
 # Build image for Anthropic's OSS Scanner. The scanner passes no build args, so the tag is
 # hardcoded: keep it in sync with .gst-version.
-FROM livekit/gstreamer:1.28.7-dev
+FROM livekit/gstreamer:1.28.9-dev
 
 ARG TARGETARCH
 
