@@ -212,8 +212,8 @@ func TestSessionUsageTracks(t *testing.T) {
 	require.Empty(t, u.VideoMimeType)
 }
 
-// The capacity callback runs after an ingress is accepted or ends, so the node can publish its
-// available CPU before schedulers offer what the ingress took; a refused ingress takes nothing.
+// The capacity callback runs after an ingress is accepted, so the node can publish its available
+// CPU before schedulers offer what the ingress took; a refused or ended ingress does not call it.
 func TestOnCapacityChange(t *testing.T) {
 	cpuStats, err := hwstats.NewCPUStats(nil)
 	require.NoError(t, err)
