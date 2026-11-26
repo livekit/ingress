@@ -517,6 +517,10 @@ func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 // not call f: available CPU comes from measured idle, which shows the freed CPU only at a later
 // sample, so the next poll publishes it. f must not block.
 func (m *Monitor) OnCapacityChange(f func()) {
+	if f == nil {
+		m.capacityChange.Store(nil)
+		return
+	}
 	m.capacityChange.Store(&f)
 }
 

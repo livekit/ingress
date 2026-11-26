@@ -242,6 +242,10 @@ func TestOnCapacityChange(t *testing.T) {
 	// changes nothing available CPU reads, and the next poll publishes it.
 	m.IngressEnded(url)
 	require.Equal(t, 1, calls, "an ended ingress does not call it")
+
+	m.OnCapacityChange(nil)
+	require.True(t, m.AcceptIngress(url), "a nil callback clears it rather than panicking")
+	require.Equal(t, 1, calls)
 }
 
 func TestSessionUsageLabels(t *testing.T) {
