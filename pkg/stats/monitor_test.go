@@ -29,6 +29,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/livekit/protocol/livekit"
+	"github.com/livekit/protocol/utils/hwstats"
 	"github.com/livekit/psrpc"
 
 	"github.com/livekit/ingress/pkg/config"
@@ -209,6 +210,42 @@ func TestSessionUsageTracks(t *testing.T) {
 	require.NotNil(t, u)
 	require.Empty(t, u.AudioMimeType)
 	require.Empty(t, u.VideoMimeType)
+}
+
+// The capacity callback runs after an ingress is accepted, so the node can publish its available
+// CPU before schedulers offer what the ingress took; a refused or ended ingress does not call it.
+func TestOnCapacityChange(t *testing.T) {
+	cpuStats, err := hwstats.NewCPUStats(nil)
+	require.NoError(t, err)
+	t.Cleanup(cpuStats.Stop)
+
+	m := NewMonitor()
+	m.cpuStats = cpuStats
+	m.cpuCostConfig = config.CPUCostConfig{URLCpuCost: 1, RTMPCpuCost: 1e6}
+	m.requestGauge = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "test_requests"}, []string{promLabelType, promLabelTranscoding})
+	m.started.Break()
+	// Hold available CPU at 100 cores whatever the machine's idle is: pending CPU counts against it.
+	m.pendingCPUs.Store(-100 - cpuStats.GetCPUIdle())
+
+	calls := 0
+	m.OnCapacityChange(func() { calls++ })
+
+	url := &livekit.IngressInfo{InputType: livekit.IngressInput_URL_INPUT, EnableTranscoding: proto.Bool(true)}
+	require.True(t, m.AcceptIngress(url))
+	require.Equal(t, 1, calls, "an accepted ingress takes capacity")
+
+	rtmp := &livekit.IngressInfo{InputType: livekit.IngressInput_RTMP_INPUT, EnableTranscoding: proto.Bool(true)}
+	require.False(t, m.AcceptIngress(rtmp))
+	require.Equal(t, 1, calls, "a refused ingress takes nothing")
+
+	// Measured idle shows the CPU an ended ingress frees only at a later sample, so ending one
+	// changes nothing available CPU reads, and the next poll publishes it.
+	m.IngressEnded(url)
+	require.Equal(t, 1, calls, "an ended ingress does not call it")
+
+	m.OnCapacityChange(nil)
+	require.True(t, m.AcceptIngress(url), "a nil callback clears it rather than panicking")
+	require.Equal(t, 1, calls)
 }
 
 func TestSessionUsageLabels(t *testing.T) {

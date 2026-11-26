@@ -86,6 +86,9 @@ type Monitor struct {
 
 	pendingCPUs atomic.Float64
 
+	// capacityChange is called after an ingress is accepted.
+	capacityChange atomic.Pointer[func()]
+
 	usageLock sync.Mutex
 	usage     map[string]*SessionUsage // resourceID -> usage
 	handlers  map[int]*handlerRun      // live handler pid -> run
@@ -501,10 +504,30 @@ func (m *Monitor) AcceptIngress(info *livekit.IngressInfo) bool {
 	if accept {
 		m.pendingCPUs.Add(cpuHold)
 		time.AfterFunc(time.Second, func() { m.pendingCPUs.Sub(cpuHold) })
+		m.capacityChanged()
 	}
 
 	logger.Debugw("cpu request", "accepted", accept, "availableCPUs", available, "numCPUs", m.cpuStats.NumCPU())
 	return accept
+}
+
+// OnCapacityChange sets f to be called after the monitor accepts an ingress, once its pending CPU
+// counts against GetAvailableCPU, so a node can publish its available CPU at once rather than at
+// its next poll, before schedulers offer the capacity the ingress took. An ingress that ends does
+// not call f: available CPU comes from measured idle, which shows the freed CPU only at a later
+// sample, so the next poll publishes it. f must not block.
+func (m *Monitor) OnCapacityChange(f func()) {
+	if f == nil {
+		m.capacityChange.Store(nil)
+		return
+	}
+	m.capacityChange.Store(&f)
+}
+
+func (m *Monitor) capacityChanged() {
+	if f := m.capacityChange.Load(); f != nil {
+		(*f)()
+	}
 }
 
 func (m *Monitor) IngressStarted(info *livekit.IngressInfo) {
